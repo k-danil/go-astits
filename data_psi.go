@@ -50,13 +50,13 @@ const (
 // https://en.wikipedia.org/wiki/Program-specific_information
 type PSIData struct {
 	PointerField int // Present at the start of the TS packet payload signaled by the payload_unit_start_indicator bit in the TS header. Used to set packet alignment bytes or content before the start of tabled payload data.
-	Sections     []*PSISection
+	Sections     []PSISection
 }
 
 // PSISection represents a PSI section
 type PSISection struct {
 	CRC32  uint32 // A checksum of the entire table excluding the pointer field, pointer filler bytes and the trailing CRC32.
-	Header *PSISectionHeader
+	Header PSISectionHeader
 	Syntax *PSISectionSyntax
 }
 
@@ -71,8 +71,8 @@ type PSISectionHeader struct {
 
 // PSISectionSyntax represents a PSI section syntax
 type PSISectionSyntax struct {
-	Data   *PSISectionSyntaxData
-	Header *PSISectionSyntaxHeader
+	Data   PSISectionSyntaxData
+	Header PSISectionSyntaxHeader
 }
 
 // PSISectionSyntaxHeader represents a PSI section syntax header
@@ -113,7 +113,7 @@ func parsePSIData(i *astikit.BytesIterator) (d *PSIData, err error) {
 	i.Skip(d.PointerField)
 
 	// Parse sections
-	var s *PSISection
+	var s PSISection
 	var stop bool
 	for i.HasBytesLeft() && !stop {
 		if s, stop, err = parsePSISection(i); err != nil {
@@ -126,9 +126,9 @@ func parsePSIData(i *astikit.BytesIterator) (d *PSIData, err error) {
 }
 
 // parsePSISection parses a PSI section
-func parsePSISection(i *astikit.BytesIterator) (s *PSISection, stop bool, err error) {
+func parsePSISection(i *astikit.BytesIterator) (s PSISection, stop bool, err error) {
 	// Init section
-	s = &PSISection{}
+	s = PSISection{}
 
 	// Parse header
 	var offsetStart, offsetSectionsEnd, offsetEnd int
@@ -204,9 +204,9 @@ func shouldStopPSIParsing(tableID PSITableID) bool {
 }
 
 // parsePSISectionHeader parses a PSI section header
-func parsePSISectionHeader(i *astikit.BytesIterator) (h *PSISectionHeader, offsetStart, offsetSectionsStart, offsetSectionsEnd, offsetEnd int, err error) {
+func parsePSISectionHeader(i *astikit.BytesIterator) (h PSISectionHeader, offsetStart, offsetSectionsStart, offsetSectionsEnd, offsetEnd int, err error) {
 	// Init
-	h = &PSISectionHeader{}
+	h = PSISectionHeader{}
 	offsetStart = i.Offset()
 
 	// Get next byte
@@ -331,7 +331,7 @@ func (t PSITableID) isUnknown() bool {
 }
 
 // parsePSISectionSyntax parses a PSI section syntax
-func parsePSISectionSyntax(i *astikit.BytesIterator, h *PSISectionHeader, offsetSectionsEnd int) (s *PSISectionSyntax, err error) {
+func parsePSISectionSyntax(i *astikit.BytesIterator, h PSISectionHeader, offsetSectionsEnd int) (s *PSISectionSyntax, err error) {
 	// Init
 	s = &PSISectionSyntax{}
 
@@ -352,9 +352,9 @@ func parsePSISectionSyntax(i *astikit.BytesIterator, h *PSISectionHeader, offset
 }
 
 // parsePSISectionSyntaxHeader parses a PSI section syntax header
-func parsePSISectionSyntaxHeader(i *astikit.BytesIterator) (h *PSISectionSyntaxHeader, err error) {
+func parsePSISectionSyntaxHeader(i *astikit.BytesIterator) (h PSISectionSyntaxHeader, err error) {
 	// Init
-	h = &PSISectionSyntaxHeader{}
+	h = PSISectionSyntaxHeader{}
 
 	// Get next 2 bytes
 	var bs []byte
@@ -400,10 +400,7 @@ func parsePSISectionSyntaxHeader(i *astikit.BytesIterator) (h *PSISectionSyntaxH
 }
 
 // parsePSISectionSyntaxData parses a PSI section data
-func parsePSISectionSyntaxData(i *astikit.BytesIterator, h *PSISectionHeader, sh *PSISectionSyntaxHeader, offsetSectionsEnd int) (d *PSISectionSyntaxData, err error) {
-	// Init
-	d = &PSISectionSyntaxData{}
-
+func parsePSISectionSyntaxData(i *astikit.BytesIterator, h PSISectionHeader, sh PSISectionSyntaxHeader, offsetSectionsEnd int) (d PSISectionSyntaxData, err error) {
 	// Switch on table type
 	switch h.TableID {
 	case PSITableIDBAT:
@@ -460,24 +457,42 @@ func (d *PSIData) toData(firstPacket *Packet, pid uint16) (ds []*DemuxerData) {
 	// Loop through sections
 	for _, s := range d.Sections {
 		// No data
-		if s.Syntax == nil || s.Syntax.Data == nil {
+		if s.Syntax == nil {
 			continue
 		}
 
 		// Switch on table type
 		switch s.Header.TableID {
 		case PSITableIDNITVariant1, PSITableIDNITVariant2:
+			if s.Syntax.Data.NIT == nil {
+				continue
+			}
 			ds = append(ds, &DemuxerData{FirstPacket: firstPacket, NIT: s.Syntax.Data.NIT, PID: pid})
 		case PSITableIDPAT:
+			if s.Syntax.Data.PAT == nil {
+				continue
+			}
 			ds = append(ds, &DemuxerData{FirstPacket: firstPacket, PAT: s.Syntax.Data.PAT, PID: pid})
 		case PSITableIDPMT:
+			if s.Syntax.Data.PMT == nil {
+				continue
+			}
 			ds = append(ds, &DemuxerData{FirstPacket: firstPacket, PID: pid, PMT: s.Syntax.Data.PMT})
 		case PSITableIDSDTVariant1, PSITableIDSDTVariant2:
+			if s.Syntax.Data.SDT == nil {
+				continue
+			}
 			ds = append(ds, &DemuxerData{FirstPacket: firstPacket, PID: pid, SDT: s.Syntax.Data.SDT})
 		case PSITableIDTOT:
+			if s.Syntax.Data.TOT == nil {
+				continue
+			}
 			ds = append(ds, &DemuxerData{FirstPacket: firstPacket, PID: pid, TOT: s.Syntax.Data.TOT})
 		}
 		if s.Header.TableID >= PSITableIDEITStart && s.Header.TableID <= PSITableIDEITEnd {
+			if s.Syntax.Data.EIT == nil {
+				continue
+			}
 			ds = append(ds, &DemuxerData{EIT: s.Syntax.Data.EIT, FirstPacket: firstPacket, PID: pid})
 		}
 	}
@@ -508,7 +523,7 @@ func writePSIData(w *astikit.BitsWriter, d *PSIData) (int, error) {
 	return bytesWritten, nil
 }
 
-func calcPSISectionLength(s *PSISection) uint16 {
+func calcPSISectionLength(s PSISection) uint16 {
 	ret := uint16(0)
 	if s.Header.TableID.hasPSISyntaxHeader() {
 		ret += 5 // PSI syntax header length
@@ -528,7 +543,7 @@ func calcPSISectionLength(s *PSISection) uint16 {
 	return ret
 }
 
-func writePSISection(w *astikit.BitsWriter, s *PSISection) (int, error) {
+func writePSISection(w *astikit.BitsWriter, s PSISection) (int, error) {
 	if s.Header.TableID != PSITableIDPAT && s.Header.TableID != PSITableIDPMT {
 		return 0, fmt.Errorf("writePSISection: table %s is not implemented", s.Header.TableID.Type())
 	}
@@ -568,7 +583,7 @@ func writePSISection(w *astikit.BitsWriter, s *PSISection) (int, error) {
 	return bytesWritten, b.Err()
 }
 
-func writePSISectionSyntax(w *astikit.BitsWriter, s *PSISection) (int, error) {
+func writePSISectionSyntax(w *astikit.BitsWriter, s PSISection) (int, error) {
 	bytesWritten := 0
 	if s.Header.TableID.hasPSISyntaxHeader() {
 		n, err := writePSISectionSyntaxHeader(w, s.Syntax.Header)
@@ -587,7 +602,7 @@ func writePSISectionSyntax(w *astikit.BitsWriter, s *PSISection) (int, error) {
 	return bytesWritten, nil
 }
 
-func writePSISectionSyntaxHeader(w *astikit.BitsWriter, h *PSISectionSyntaxHeader) (int, error) {
+func writePSISectionSyntaxHeader(w *astikit.BitsWriter, h PSISectionSyntaxHeader) (int, error) {
 	b := astikit.NewBitsWriterBatch(w)
 
 	b.Write(h.TableIDExtension)
@@ -600,7 +615,7 @@ func writePSISectionSyntaxHeader(w *astikit.BitsWriter, h *PSISectionSyntaxHeade
 	return 5, b.Err()
 }
 
-func writePSISectionSyntaxData(w *astikit.BitsWriter, d *PSISectionSyntaxData, tableID PSITableID) (int, error) {
+func writePSISectionSyntaxData(w *astikit.BitsWriter, d PSISectionSyntaxData, tableID PSITableID) (int, error) {
 	switch tableID {
 	// TODO write other table types
 	case PSITableIDPAT:

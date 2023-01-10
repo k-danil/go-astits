@@ -39,17 +39,17 @@ const (
 // PMTData represents a PMT data
 // https://en.wikipedia.org/wiki/Program-specific_information
 type PMTData struct {
-	ElementaryStreams  []*PMTElementaryStream
-	PCRPID             uint16        // The packet identifier that contains the program clock reference used to improve the random access accuracy of the stream's timing that is derived from the program timestamp. If this is unused. then it is set to 0x1FFF (all bits on).
-	ProgramDescriptors []*Descriptor // Program descriptors
+	ElementaryStreams  []PMTElementaryStream
+	PCRPID             uint16       // The packet identifier that contains the program clock reference used to improve the random access accuracy of the stream's timing that is derived from the program timestamp. If this is unused. then it is set to 0x1FFF (all bits on).
+	ProgramDescriptors []Descriptor // Program descriptors
 	ProgramNumber      uint16
 }
 
 // PMTElementaryStream represents a PMT elementary stream
 type PMTElementaryStream struct {
-	ElementaryPID               uint16        // The packet identifier that contains the stream type data.
-	ElementaryStreamDescriptors []*Descriptor // Elementary stream descriptors
-	StreamType                  StreamType    // This defines the structure of the data contained within the elementary packet identifier.
+	ElementaryStreamDescriptors []Descriptor // Elementary stream descriptors
+	ElementaryPID               uint16       // The packet identifier that contains the stream type data.
+	StreamType                  StreamType   // This defines the structure of the data contained within the elementary packet identifier.
 }
 
 // parsePMTSection parses a PMT section
@@ -76,7 +76,7 @@ func parsePMTSection(i *astikit.BytesIterator, offsetSectionsEnd int, tableIDExt
 	// Loop until end of section data is reached
 	for i.Offset() < offsetSectionsEnd {
 		// Create stream
-		e := &PMTElementaryStream{}
+		e := PMTElementaryStream{}
 
 		// Get next byte
 		var b byte

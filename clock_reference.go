@@ -11,8 +11,8 @@ type ClockReference struct {
 }
 
 // newClockReference builds a new clock reference
-func newClockReference(base, extension int64) *ClockReference {
-	return &ClockReference{
+func newClockReference(base, extension int64) ClockReference {
+	return ClockReference{
 		Base:      base,
 		Extension: extension,
 	}

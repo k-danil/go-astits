@@ -18,7 +18,7 @@ func TestHasPESOptionalHeader(t *testing.T) {
 	assert.Equal(t, []int{StreamIDPaddingStream, StreamIDPrivateStream2}, a)
 }
 
-var dsmTrickModeSlow = &DSMTrickMode{
+var dsmTrickModeSlow = DSMTrickMode{
 	RepeatControl:    21,
 	TrickModeControl: TrickModeControlSlowMotion,
 }
@@ -34,7 +34,7 @@ func dsmTrickModeSlowBytes() []byte {
 type dsmTrickModeTestCase struct {
 	name      string
 	bytesFunc func(w *astikit.BitsWriter)
-	trickMode *DSMTrickMode
+	trickMode DSMTrickMode
 }
 
 var dsmTrickModeTestCases = []dsmTrickModeTestCase{
@@ -46,7 +46,7 @@ var dsmTrickModeTestCases = []dsmTrickModeTestCase{
 			w.Write("1")   // Intra slice refresh
 			w.Write("11")  // Frequency truncation
 		},
-		&DSMTrickMode{
+		DSMTrickMode{
 			FieldID:             2,
 			FrequencyTruncation: 3,
 			IntraSliceRefresh:   1,
@@ -59,7 +59,7 @@ var dsmTrickModeTestCases = []dsmTrickModeTestCase{
 			w.Write("001")
 			w.Write("10101")
 		},
-		&DSMTrickMode{
+		DSMTrickMode{
 			RepeatControl:    0b10101,
 			TrickModeControl: TrickModeControlSlowMotion,
 		},
@@ -71,7 +71,7 @@ var dsmTrickModeTestCases = []dsmTrickModeTestCase{
 			w.Write("10")  // Field ID
 			w.Write("111") // Reserved
 		},
-		&DSMTrickMode{
+		DSMTrickMode{
 			FieldID:          2,
 			TrickModeControl: TrickModeControlFreezeFrame,
 		},
@@ -84,7 +84,7 @@ var dsmTrickModeTestCases = []dsmTrickModeTestCase{
 			w.Write("1")   // Intra slice refresh
 			w.Write("11")  // Frequency truncation
 		},
-		&DSMTrickMode{
+		DSMTrickMode{
 			FieldID:             2,
 			FrequencyTruncation: 3,
 			IntraSliceRefresh:   1,
@@ -97,7 +97,7 @@ var dsmTrickModeTestCases = []dsmTrickModeTestCase{
 			w.Write("100")
 			w.Write("01010")
 		},
-		&DSMTrickMode{
+		DSMTrickMode{
 			RepeatControl:    0b01010,
 			TrickModeControl: TrickModeControlSlowReverse,
 		},
@@ -108,7 +108,7 @@ var dsmTrickModeTestCases = []dsmTrickModeTestCase{
 			w.Write("101")
 			w.Write("11111")
 		},
-		&DSMTrickMode{
+		DSMTrickMode{
 			TrickModeControl: 5, // reserved
 		},
 	},
@@ -144,7 +144,7 @@ func TestWriteDSMTrickMode(t *testing.T) {
 	}
 }
 
-var ptsClockReference = &ClockReference{Base: 5726623061}
+var ptsClockReference = ClockReference{Base: 5726623061}
 
 func ptsBytes(flag string) []byte {
 	buf := &bytes.Buffer{}
@@ -159,7 +159,7 @@ func ptsBytes(flag string) []byte {
 	return buf.Bytes()
 }
 
-var dtsClockReference = &ClockReference{Base: 5726623060}
+var dtsClockReference = ClockReference{Base: 5726623060}
 
 func dtsBytes(flag string) []byte {
 	buf := &bytes.Buffer{}
@@ -245,7 +245,7 @@ var pesTestCases = []pesTestCase{
 		},
 		&PESData{
 			Data: []byte("data"),
-			Header: &PESHeader{
+			Header: PESHeader{
 				PacketLength: 4,
 				StreamID:     StreamIDPaddingStream,
 			},
@@ -331,7 +331,7 @@ var pesTestCases = []pesTestCase{
 		},
 		&PESData{
 			Data: []byte("data"),
-			Header: &PESHeader{
+			Header: PESHeader{
 				OptionalHeader: &PESOptionalHeader{
 					AdditionalCopyInfo:              127,
 					CRC:                             4,

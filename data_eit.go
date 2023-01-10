@@ -11,17 +11,17 @@ import (
 // Page: 36 | Chapter: 5.2.4 | Link: https://www.dvb.org/resources/public/standards/a38_dvb-si_specification.pdf
 // (barbashov) the link above can be broken, alternative: https://dvb.org/wp-content/uploads/2019/12/a038_tm1217r37_en300468v1_17_1_-_rev-134_-_si_specification.pdf
 type EITData struct {
-	Events                   []*EITDataEvent
-	LastTableID              uint8
+	Events                   []EITDataEvent
 	OriginalNetworkID        uint16
-	SegmentLastSectionNumber uint8
 	ServiceID                uint16
 	TransportStreamID        uint16
+	LastTableID              uint8
+	SegmentLastSectionNumber uint8
 }
 
 // EITDataEvent represents an EIT data event
 type EITDataEvent struct {
-	Descriptors    []*Descriptor
+	Descriptors    []Descriptor
 	Duration       time.Duration
 	EventID        uint16
 	HasFreeCSAMode bool // When true indicates that access to one or more streams may be controlled by a CA system.
@@ -81,7 +81,7 @@ func parseEITSection(i *astikit.BytesIterator, offsetSectionsEnd int, tableIDExt
 		}
 
 		// Event ID
-		var e = &EITDataEvent{}
+		var e = EITDataEvent{}
 		e.EventID = uint16(bs[0])<<8 | uint16(bs[1])
 
 		// Start time

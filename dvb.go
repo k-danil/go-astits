@@ -33,15 +33,18 @@ func parseDVBTime(i *astikit.BytesIterator) (t time.Time, err error) {
 	}
 	var y = yt + k
 	var m = mt - 1 - k*12
-	t, _ = time.Parse("06-01-02", fmt.Sprintf("%d-%d-%d", y, m, d))
 
-	// Time
-	var s time.Duration
-	if s, err = parseDVBDurationSeconds(i); err != nil {
-		err = fmt.Errorf("astits: parsing DVB duration seconds failed: %w", err)
+	if bs, err = i.NextBytesNoCopy(3); err != nil {
+		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return
 	}
-	t = t.Add(s)
+
+	dur := func(i uint8) int {
+		return int(i>>4*10 + i&0xf)
+	}
+
+	t = time.Date(1900+y, time.Month(m), d, dur(bs[0]), dur(bs[1]), dur(bs[2]), 0, time.UTC)
+
 	return
 }
 

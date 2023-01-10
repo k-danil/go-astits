@@ -287,15 +287,15 @@ func TestMuxer_WritePayload(t *testing.T) {
 		PID: 0x1234,
 		AdaptationField: &PacketAdaptationField{
 			HasPCR:                true,
-			PCR:                   &pcr,
+			PCR:                   pcr,
 			RandomAccessIndicator: true,
 		},
 		PES: &PESData{
 			Data: payload,
-			Header: &PESHeader{
+			Header: PESHeader{
 				OptionalHeader: &PESOptionalHeader{
-					DTS:             &pts,
-					PTS:             &pts,
+					DTS:             pts,
+					PTS:             pts,
 					PTSDTSIndicator: PTSDTSIndicatorBothPresent,
 				},
 			},
@@ -311,15 +311,15 @@ func TestMuxer_WritePayload(t *testing.T) {
 		PID: 0x0234,
 		AdaptationField: &PacketAdaptationField{
 			HasPCR:                true,
-			PCR:                   &pcr,
+			PCR:                   pcr,
 			RandomAccessIndicator: true,
 		},
 		PES: &PESData{
 			Data: payload,
-			Header: &PESHeader{
+			Header: PESHeader{
 				OptionalHeader: &PESOptionalHeader{
-					DTS:             &pts,
-					PTS:             &pts,
+					DTS:             pts,
+					PTS:             pts,
 					PTSDTSIndicator: PTSDTSIndicatorBothPresent,
 				},
 			},

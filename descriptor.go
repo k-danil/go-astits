@@ -89,33 +89,33 @@ const (
 // Descriptor represents a descriptor
 // TODO Handle UTF8
 type Descriptor struct {
-	AC3                        *DescriptorAC3
-	AVCVideo                   *DescriptorAVCVideo
-	Component                  *DescriptorComponent
+	UserDefined                []byte
+	NetworkName                *DescriptorNetworkName
 	Content                    *DescriptorContent
-	DataStreamAlignment        *DescriptorDataStreamAlignment
+	PrivateDataIndicator       *DescriptorPrivateDataIndicator
+	PrivateDataSpecifier       *DescriptorPrivateDataSpecifier
 	EnhancedAC3                *DescriptorEnhancedAC3
 	ExtendedEvent              *DescriptorExtendedEvent
 	Extension                  *DescriptorExtension
 	ISO639LanguageAndAudioType *DescriptorISO639LanguageAndAudioType
-	Length                     uint8
+	ParentalRating             *DescriptorParentalRating
 	LocalTimeOffset            *DescriptorLocalTimeOffset
 	MaximumBitrate             *DescriptorMaximumBitrate
-	NetworkName                *DescriptorNetworkName
-	ParentalRating             *DescriptorParentalRating
-	PrivateDataIndicator       *DescriptorPrivateDataIndicator
-	PrivateDataSpecifier       *DescriptorPrivateDataSpecifier
+	AC3                        *DescriptorAC3
+	VBITeletext                *DescriptorTeletext
+	Component                  *DescriptorComponent
+	DataStreamAlignment        *DescriptorDataStreamAlignment
 	Registration               *DescriptorRegistration
 	Service                    *DescriptorService
 	ShortEvent                 *DescriptorShortEvent
 	StreamIdentifier           *DescriptorStreamIdentifier
 	Subtitling                 *DescriptorSubtitling
-	Tag                        uint8 // the tag defines the structure of the contained data following the descriptor length.
+	VBIData                    *DescriptorVBIData
 	Teletext                   *DescriptorTeletext
 	Unknown                    *DescriptorUnknown
-	UserDefined                []byte
-	VBIData                    *DescriptorVBIData
-	VBITeletext                *DescriptorTeletext
+	AVCVideo                   *DescriptorAVCVideo
+	Tag                        uint8 // the tag defines the structure of the contained data following the descriptor length.
+	Length                     uint8
 }
 
 // DescriptorAC3 represents an AC3 descriptor
@@ -1056,9 +1056,9 @@ type DescriptorSubtitling struct {
 // DescriptorSubtitlingItem represents subtitling descriptor item
 // Chapter: 6.2.41 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type DescriptorSubtitlingItem struct {
+	Language          []byte
 	AncillaryPageID   uint16
 	CompositionPageID uint16
-	Language          []byte
 	Type              uint8
 }
 
@@ -1266,7 +1266,7 @@ func newDescriptorVBIData(i *astikit.BytesIterator, offsetEnd int) (d *Descripto
 }
 
 // parseDescriptors parses descriptors
-func parseDescriptors(i *astikit.BytesIterator) (o []*Descriptor, err error) {
+func parseDescriptors(i *astikit.BytesIterator) (o []Descriptor, err error) {
 	// Get next 2 bytes
 	var bs []byte
 	if bs, err = i.NextBytesNoCopy(2); err != nil {
@@ -1288,7 +1288,7 @@ func parseDescriptors(i *astikit.BytesIterator) (o []*Descriptor, err error) {
 			}
 
 			// Create descriptor
-			d := &Descriptor{
+			d := Descriptor{
 				Length: uint8(bs[1]),
 				Tag:    uint8(bs[0]),
 			}
@@ -1997,7 +1997,7 @@ func writeDescriptorUnknown(w *astikit.BitsWriter, d *DescriptorUnknown) error {
 	return b.Err()
 }
 
-func calcDescriptorLength(d *Descriptor) uint8 {
+func calcDescriptorLength(d Descriptor) uint8 {
 	if d.Tag >= 0x80 && d.Tag <= 0xfe {
 		return calcDescriptorUserDefinedLength(d.UserDefined)
 	}
@@ -2055,7 +2055,7 @@ func calcDescriptorLength(d *Descriptor) uint8 {
 	return calcDescriptorUnknownLength(d.Unknown)
 }
 
-func writeDescriptor(w *astikit.BitsWriter, d *Descriptor) (int, error) {
+func writeDescriptor(w *astikit.BitsWriter, d Descriptor) (int, error) {
 	b := astikit.NewBitsWriterBatch(w)
 	length := calcDescriptorLength(d)
 
@@ -2124,7 +2124,7 @@ func writeDescriptor(w *astikit.BitsWriter, d *Descriptor) (int, error) {
 	return written, writeDescriptorUnknown(w, d.Unknown)
 }
 
-func calcDescriptorsLength(ds []*Descriptor) uint16 {
+func calcDescriptorsLength(ds []Descriptor) uint16 {
 	length := uint16(0)
 	for _, d := range ds {
 		length += 2 // tag and length
@@ -2133,7 +2133,7 @@ func calcDescriptorsLength(ds []*Descriptor) uint16 {
 	return length
 }
 
-func writeDescriptors(w *astikit.BitsWriter, ds []*Descriptor) (int, error) {
+func writeDescriptors(w *astikit.BitsWriter, ds []Descriptor) (int, error) {
 	written := 0
 
 	for _, d := range ds {
@@ -2147,7 +2147,7 @@ func writeDescriptors(w *astikit.BitsWriter, ds []*Descriptor) (int, error) {
 	return written, nil
 }
 
-func writeDescriptorsWithLength(w *astikit.BitsWriter, ds []*Descriptor) (int, error) {
+func writeDescriptorsWithLength(w *astikit.BitsWriter, ds []Descriptor) (int, error) {
 	length := calcDescriptorsLength(ds)
 	b := astikit.NewBitsWriterBatch(w)
 

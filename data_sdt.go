@@ -20,14 +20,14 @@ const (
 // Page: 33 | Chapter: 5.2.3 | Link: https://www.dvb.org/resources/public/standards/a38_dvb-si_specification.pdf
 // (barbashov) the link above can be broken, alternative: https://dvb.org/wp-content/uploads/2019/12/a038_tm1217r37_en300468v1_17_1_-_rev-134_-_si_specification.pdf
 type SDTData struct {
+	Services          []SDTDataService
 	OriginalNetworkID uint16
-	Services          []*SDTDataService
 	TransportStreamID uint16
 }
 
 // SDTDataService represents an SDT data service
 type SDTDataService struct {
-	Descriptors            []*Descriptor
+	Descriptors            []Descriptor
 	HasEITPresentFollowing bool // When true indicates that EIT present/following information for the service is present in the current TS
 	HasEITSchedule         bool // When true indicates that EIT schedule information for the service is present in the current TS
 	HasFreeCSAMode         bool // When true indicates that access to one or more streams may be controlled by a CA system.
@@ -56,7 +56,7 @@ func parseSDTSection(i *astikit.BytesIterator, offsetSectionsEnd int, tableIDExt
 	// Loop until end of section data is reached
 	for i.Offset() < offsetSectionsEnd {
 		// Create service
-		s := &SDTDataService{}
+		s := SDTDataService{}
 
 		// Get next bytes
 		if bs, err = i.NextBytesNoCopy(2); err != nil {

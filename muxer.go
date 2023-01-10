@@ -79,7 +79,7 @@ func NewMuxer(ctx context.Context, w io.Writer, opts ...func(*Muxer)) *Muxer {
 
 		pm: newProgramMap(),
 		pmt: PMTData{
-			ElementaryStreams: []*PMTElementaryStream{},
+			ElementaryStreams: []PMTElementaryStream{},
 			ProgramNumber:     programNumberStart,
 		},
 
@@ -123,7 +123,7 @@ func (m *Muxer) AddElementaryStream(es PMTElementaryStream) error {
 		m.nextPID++
 	}
 
-	m.pmt.ElementaryStreams = append(m.pmt.ElementaryStreams, &es)
+	m.pmt.ElementaryStreams = append(m.pmt.ElementaryStreams, es)
 
 	m.esContexts[es.ElementaryPID] = newEsContext(&es)
 	// invalidate pmt cache
@@ -186,7 +186,7 @@ func (m *Muxer) WriteData(d *MuxerData) (int, error) {
 	for payloadBytesWritten < len(d.PES.Data) {
 		pktLen := 1 + mpegTsPacketHeaderSize // sync byte + header
 		pkt := Packet{
-			Header: &PacketHeader{
+			Header: PacketHeader{
 				ContinuityCounter:         uint8(ctx.cc.inc()),
 				HasAdaptationField:        writeAf,
 				HasPayload:                false,
@@ -328,8 +328,8 @@ func (m *Muxer) generatePAT() error {
 	}
 
 	syntax := &PSISectionSyntax{
-		Data: &PSISectionSyntaxData{PAT: d},
-		Header: &PSISectionSyntaxHeader{
+		Data: PSISectionSyntaxData{PAT: d},
+		Header: PSISectionSyntaxHeader{
 			CurrentNextIndicator: true,
 			// TODO support for PAT tables longer than 1 TS packet
 			//LastSectionNumber:    0,
@@ -339,7 +339,7 @@ func (m *Muxer) generatePAT() error {
 		},
 	}
 	section := PSISection{
-		Header: &PSISectionHeader{
+		Header: PSISectionHeader{
 			SectionLength:          calcPATSectionLength(d),
 			SectionSyntaxIndicator: true,
 			TableID:                PSITableID(d.TransportStreamID),
@@ -347,7 +347,7 @@ func (m *Muxer) generatePAT() error {
 		Syntax: syntax,
 	}
 	psiData := PSIData{
-		Sections: []*PSISection{&section},
+		Sections: []PSISection{section},
 	}
 
 	m.buf.Reset()
@@ -360,7 +360,7 @@ func (m *Muxer) generatePAT() error {
 	wPacket := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: &m.patBytes})
 
 	pkt := Packet{
-		Header: &PacketHeader{
+		Header: PacketHeader{
 			HasPayload:                true,
 			PayloadUnitStartIndicator: true,
 			PID:                       PIDPAT,
@@ -396,8 +396,8 @@ func (m *Muxer) generatePMT() error {
 	}
 
 	syntax := &PSISectionSyntax{
-		Data: &PSISectionSyntaxData{PMT: &m.pmt},
-		Header: &PSISectionSyntaxHeader{
+		Data: PSISectionSyntaxData{PMT: &m.pmt},
+		Header: PSISectionSyntaxHeader{
 			CurrentNextIndicator: true,
 			// TODO support for PMT tables longer than 1 TS packet
 			//LastSectionNumber:    0,
@@ -407,7 +407,7 @@ func (m *Muxer) generatePMT() error {
 		},
 	}
 	section := PSISection{
-		Header: &PSISectionHeader{
+		Header: PSISectionHeader{
 			SectionLength:          calcPMTSectionLength(&m.pmt),
 			SectionSyntaxIndicator: true,
 			TableID:                PSITableIDPMT,
@@ -415,7 +415,7 @@ func (m *Muxer) generatePMT() error {
 		Syntax: syntax,
 	}
 	psiData := PSIData{
-		Sections: []*PSISection{&section},
+		Sections: []PSISection{section},
 	}
 
 	m.buf.Reset()
@@ -428,7 +428,7 @@ func (m *Muxer) generatePMT() error {
 	wPacket := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: &m.pmtBytes})
 
 	pkt := Packet{
-		Header: &PacketHeader{
+		Header: PacketHeader{
 			HasPayload:                true,
 			PayloadUnitStartIndicator: true,
 			PID:                       pmtStartPID, // FIXME multiple programs support

@@ -10,10 +10,10 @@ import (
 
 var psi = &PSIData{
 	PointerField: 4,
-	Sections: []*PSISection{
+	Sections: []PSISection{
 		{
 			CRC32: uint32(0x7ffc6102),
-			Header: &PSISectionHeader{
+			Header: PSISectionHeader{
 				PrivateBit:             true,
 				SectionLength:          30,
 				SectionSyntaxIndicator: true,
@@ -21,13 +21,13 @@ var psi = &PSIData{
 				TableType:              PSITableTypeEIT,
 			},
 			Syntax: &PSISectionSyntax{
-				Data:   &PSISectionSyntaxData{EIT: eit},
+				Data:   PSISectionSyntaxData{EIT: eit},
 				Header: psiSectionSyntaxHeader,
 			},
 		},
 		{
 			CRC32: uint32(0xfebaa941),
-			Header: &PSISectionHeader{
+			Header: PSISectionHeader{
 				PrivateBit:             true,
 				SectionLength:          25,
 				SectionSyntaxIndicator: true,
@@ -35,13 +35,13 @@ var psi = &PSIData{
 				TableType:              PSITableTypeNIT,
 			},
 			Syntax: &PSISectionSyntax{
-				Data:   &PSISectionSyntaxData{NIT: nit},
+				Data:   PSISectionSyntaxData{NIT: nit},
 				Header: psiSectionSyntaxHeader,
 			},
 		},
 		{
 			CRC32: uint32(0x60739f61),
-			Header: &PSISectionHeader{
+			Header: PSISectionHeader{
 				PrivateBit:             true,
 				SectionLength:          17,
 				SectionSyntaxIndicator: true,
@@ -49,13 +49,13 @@ var psi = &PSIData{
 				TableType:              PSITableTypePAT,
 			},
 			Syntax: &PSISectionSyntax{
-				Data:   &PSISectionSyntaxData{PAT: pat},
+				Data:   PSISectionSyntaxData{PAT: pat},
 				Header: psiSectionSyntaxHeader,
 			},
 		},
 		{
 			CRC32: uint32(0xc68442e8),
-			Header: &PSISectionHeader{
+			Header: PSISectionHeader{
 				PrivateBit:             true,
 				SectionLength:          24,
 				SectionSyntaxIndicator: true,
@@ -63,13 +63,13 @@ var psi = &PSIData{
 				TableType:              PSITableTypePMT,
 			},
 			Syntax: &PSISectionSyntax{
-				Data:   &PSISectionSyntaxData{PMT: pmt},
+				Data:   PSISectionSyntaxData{PMT: pmt},
 				Header: psiSectionSyntaxHeader,
 			},
 		},
 		{
 			CRC32: uint32(0xef3751d6),
-			Header: &PSISectionHeader{
+			Header: PSISectionHeader{
 				PrivateBit:             true,
 				SectionLength:          20,
 				SectionSyntaxIndicator: true,
@@ -77,13 +77,13 @@ var psi = &PSIData{
 				TableType:              PSITableTypeSDT,
 			},
 			Syntax: &PSISectionSyntax{
-				Data:   &PSISectionSyntaxData{SDT: sdt},
+				Data:   PSISectionSyntaxData{SDT: sdt},
 				Header: psiSectionSyntaxHeader,
 			},
 		},
 		{
 			CRC32: uint32(0x6969b13),
-			Header: &PSISectionHeader{
+			Header: PSISectionHeader{
 				PrivateBit:             true,
 				SectionLength:          14,
 				SectionSyntaxIndicator: true,
@@ -91,10 +91,10 @@ var psi = &PSIData{
 				TableType:              PSITableTypeTOT,
 			},
 			Syntax: &PSISectionSyntax{
-				Data: &PSISectionSyntaxData{TOT: tot},
+				Data: PSISectionSyntaxData{TOT: tot},
 			},
 		},
-		{Header: &PSISectionHeader{TableID: 254, TableType: PSITableTypeUnknown}},
+		{Header: PSISectionHeader{TableID: 254, TableType: PSITableTypeUnknown}},
 	},
 }
 
@@ -176,7 +176,7 @@ func TestParsePSIData(t *testing.T) {
 	assert.Equal(t, d, psi)
 }
 
-var psiSectionHeader = &PSISectionHeader{
+var psiSectionHeader = PSISectionHeader{
 	PrivateBit:             true,
 	SectionLength:          2730,
 	SectionSyntaxIndicator: true,
@@ -203,7 +203,7 @@ func TestParsePSISectionHeader(t *testing.T) {
 	w.Write("1")        // Syntax section indicator
 	w.Write("0000000")  // Finish the byte
 	d, _, _, _, _, err := parsePSISectionHeader(astikit.NewBytesIterator(buf.Bytes()))
-	assert.Equal(t, d, &PSISectionHeader{
+	assert.Equal(t, d, PSISectionHeader{
 		TableID:   254,
 		TableType: PSITableTypeUnknown,
 	})
@@ -241,7 +241,7 @@ func TestPSITableType(t *testing.T) {
 	assert.Equal(t, PSITableTypeUnknown, PSITableID(1).Type())
 }
 
-var psiSectionSyntaxHeader = &PSISectionSyntaxHeader{
+var psiSectionSyntaxHeader = PSISectionSyntaxHeader{
 	CurrentNextIndicator: true,
 	LastSectionNumber:    3,
 	SectionNumber:        2,
@@ -302,10 +302,10 @@ var psiDataTestCases = []psiDataTestCase{
 		},
 		&PSIData{
 			PointerField: 4,
-			Sections: []*PSISection{
+			Sections: []PSISection{
 				{
 					CRC32: uint32(0x60739f61),
-					Header: &PSISectionHeader{
+					Header: PSISectionHeader{
 						PrivateBit:             true,
 						SectionLength:          17,
 						SectionSyntaxIndicator: true,
@@ -313,7 +313,7 @@ var psiDataTestCases = []psiDataTestCase{
 						TableType:              PSITableTypePAT,
 					},
 					Syntax: &PSISectionSyntax{
-						Data:   &PSISectionSyntaxData{PAT: pat},
+						Data:   PSISectionSyntaxData{PAT: pat},
 						Header: psiSectionSyntaxHeader,
 					},
 				},
@@ -336,10 +336,10 @@ var psiDataTestCases = []psiDataTestCase{
 		},
 		&PSIData{
 			PointerField: 4,
-			Sections: []*PSISection{
+			Sections: []PSISection{
 				{
 					CRC32: uint32(0xc68442e8),
-					Header: &PSISectionHeader{
+					Header: PSISectionHeader{
 						PrivateBit:             true,
 						SectionLength:          24,
 						SectionSyntaxIndicator: true,
@@ -347,7 +347,7 @@ var psiDataTestCases = []psiDataTestCase{
 						TableType:              PSITableTypePMT,
 					},
 					Syntax: &PSISectionSyntax{
-						Data:   &PSISectionSyntaxData{PMT: pmt},
+						Data:   PSISectionSyntaxData{PMT: pmt},
 						Header: psiSectionSyntaxHeader,
 					},
 				},

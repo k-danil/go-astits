@@ -42,12 +42,12 @@ func (m programMap) toPATData() *PATData {
 	defer m.m.Unlock()
 
 	d := &PATData{
-		Programs:          []*PATProgram{},
+		Programs:          []PATProgram{},
 		TransportStreamID: uint16(PSITableIDPAT),
 	}
 
 	for pid, pnr := range m.p {
-		d.Programs = append(d.Programs, &PATProgram{
+		d.Programs = append(d.Programs, PATProgram{
 			ProgramMapID:  pid,
 			ProgramNumber: pnr,
 		})

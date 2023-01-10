@@ -23,7 +23,7 @@ const (
 // https://en.wikipedia.org/wiki/MPEG_transport_stream
 type Packet struct {
 	AdaptationField *PacketAdaptationField
-	Header          *PacketHeader
+	Header          PacketHeader
 	Payload         []byte // This is only the payload content
 }
 
@@ -41,28 +41,28 @@ type PacketHeader struct {
 
 // PacketAdaptationField represents a packet adaptation field
 type PacketAdaptationField struct {
-	AdaptationExtensionField          *PacketAdaptationExtensionField
-	DiscontinuityIndicator            bool // Set if current TS packet is in a discontinuity state with respect to either the continuity counter or the program clock reference
-	ElementaryStreamPriorityIndicator bool // Set when this stream should be considered "high priority"
-	HasAdaptationExtensionField       bool
-	HasOPCR                           bool
-	HasPCR                            bool
-	HasTransportPrivateData           bool
-	HasSplicingCountdown              bool
-	Length                            int
-	IsOneByteStuffing                 bool            // Only used for one byte stuffing - if true, adaptation field will be written as one uint8(0). Not part of TS format
-	StuffingLength                    int             // Only used in writePacketAdaptationField to request stuffing
-	OPCR                              *ClockReference // Original Program clock reference. Helps when one TS is copied into another
-	PCR                               *ClockReference // Program clock reference
-	RandomAccessIndicator             bool            // Set when the stream may be decoded without errors from this point
-	SpliceCountdown                   int             // Indicates how many TS packets from this one a splicing point occurs (Two's complement signed; may be negative)
-	TransportPrivateDataLength        int
 	TransportPrivateData              []byte
+	PCR                               ClockReference // Program clock reference
+	StuffingLength                    int            // Only used in writePacketAdaptationField to request stuffing
+	TransportPrivateDataLength        int
+	SpliceCountdown                   int // Indicates how many TS packets from this one a splicing point occurs (Two's complement signed; may be negative)
+	Length                            int
+	AdaptationExtensionField          PacketAdaptationExtensionField
+	OPCR                              ClockReference // Original Program clock reference. Helps when one TS is copied into another
+	IsOneByteStuffing                 bool           // Only used for one byte stuffing - if true, adaptation field will be written as one uint8(0). Not part of TS format
+	HasPCR                            bool
+	HasSplicingCountdown              bool
+	ElementaryStreamPriorityIndicator bool // Set when this stream should be considered "high priority"
+	HasTransportPrivateData           bool
+	RandomAccessIndicator             bool // Set when the stream may be decoded without errors from this point
+	HasOPCR                           bool
+	HasAdaptationExtensionField       bool
+	DiscontinuityIndicator            bool // Set if current TS packet is in a discontinuity state with respect to either the continuity counter or the program clock reference
 }
 
 // PacketAdaptationExtensionField represents a packet adaptation extension field
 type PacketAdaptationExtensionField struct {
-	DTSNextAccessUnit      *ClockReference // The PES DTS of the splice point. Split up as 3 bits, 1 marker bit (0x1), 15 bits, 1 marker bit, 15 bits, and 1 marker bit, for 33 data bits total.
+	DTSNextAccessUnit      ClockReference // The PES DTS of the splice point. Split up as 3 bits, 1 marker bit (0x1), 15 bits, 1 marker bit, 15 bits, and 1 marker bit, for 33 data bits total.
 	HasLegalTimeWindow     bool
 	HasPiecewiseRate       bool
 	HasSeamlessSplice      bool
@@ -118,7 +118,7 @@ func parsePacket(i *astikit.BytesIterator) (p *Packet, err error) {
 }
 
 // payloadOffset returns the payload offset
-func payloadOffset(offsetStart int, h *PacketHeader, a *PacketAdaptationField) (offset int) {
+func payloadOffset(offsetStart int, h PacketHeader, a *PacketAdaptationField) (offset int) {
 	offset = offsetStart + 3
 	if h.HasAdaptationField {
 		offset += 1 + a.Length
@@ -127,7 +127,7 @@ func payloadOffset(offsetStart int, h *PacketHeader, a *PacketAdaptationField) (
 }
 
 // parsePacketHeader parses the packet header
-func parsePacketHeader(i *astikit.BytesIterator) (h *PacketHeader, err error) {
+func parsePacketHeader(i *astikit.BytesIterator) (h PacketHeader, err error) {
 	// Get next bytes
 	var bs []byte
 	if bs, err = i.NextBytesNoCopy(3); err != nil {
@@ -136,7 +136,7 @@ func parsePacketHeader(i *astikit.BytesIterator) (h *PacketHeader, err error) {
 	}
 
 	// Create header
-	h = &PacketHeader{
+	h = PacketHeader{
 		ContinuityCounter:          uint8(bs[2] & 0xf),
 		HasAdaptationField:         bs[2]&0x20 > 0,
 		HasPayload:                 bs[2]&0x10 > 0,
@@ -229,9 +229,6 @@ func parsePacketAdaptationField(i *astikit.BytesIterator) (a *PacketAdaptationFi
 
 		// Adaptation extension
 		if a.HasAdaptationExtensionField {
-			// Create extension field
-			a.AdaptationExtensionField = &PacketAdaptationExtensionField{}
-
 			// Get next byte
 			if b, err = i.NextByte(); err != nil {
 				err = fmt.Errorf("astits: fetching next byte failed: %w", err)
@@ -304,7 +301,7 @@ func parsePacketAdaptationField(i *astikit.BytesIterator) (a *PacketAdaptationFi
 
 // parsePCR parses a Program Clock Reference
 // Program clock reference, stored as 33 bits base, 6 bits reserved, 9 bits extension.
-func parsePCR(i *astikit.BytesIterator) (cr *ClockReference, err error) {
+func parsePCR(i *astikit.BytesIterator) (cr ClockReference, err error) {
 	var bs []byte
 	if bs, err = i.NextBytesNoCopy(6); err != nil {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
@@ -361,7 +358,7 @@ func writePacket(w *astikit.BitsWriter, p *Packet, targetPacketSize int) (writte
 	return written, nil
 }
 
-func writePacketHeader(w *astikit.BitsWriter, h *PacketHeader) (written int, retErr error) {
+func writePacketHeader(w *astikit.BitsWriter, h PacketHeader) (written int, retErr error) {
 	b := astikit.NewBitsWriterBatch(w)
 
 	b.Write(h.TransportErrorIndicator)
@@ -376,7 +373,7 @@ func writePacketHeader(w *astikit.BitsWriter, h *PacketHeader) (written int, ret
 	return mpegTsPacketHeaderSize, b.Err()
 }
 
-func writePCR(w *astikit.BitsWriter, cr *ClockReference) (int, error) {
+func writePCR(w *astikit.BitsWriter, cr ClockReference) (int, error) {
 	b := astikit.NewBitsWriterBatch(w)
 
 	b.WriteN(uint64(cr.Base), 33)
@@ -478,7 +475,7 @@ func writePacketAdaptationField(w *astikit.BitsWriter, af *PacketAdaptationField
 	return
 }
 
-func calcPacketAdaptationFieldExtensionLength(afe *PacketAdaptationExtensionField) (length uint8) {
+func calcPacketAdaptationFieldExtensionLength(afe PacketAdaptationExtensionField) (length uint8) {
 	length++
 	if afe.HasLegalTimeWindow {
 		length += 2
@@ -492,7 +489,7 @@ func calcPacketAdaptationFieldExtensionLength(afe *PacketAdaptationExtensionFiel
 	return length
 }
 
-func writePacketAdaptationFieldExtension(w *astikit.BitsWriter, afe *PacketAdaptationExtensionField) (bytesWritten int, retErr error) {
+func writePacketAdaptationFieldExtension(w *astikit.BitsWriter, afe PacketAdaptationExtensionField) (bytesWritten int, retErr error) {
 	b := astikit.NewBitsWriterBatch(w)
 
 	length := calcPacketAdaptationFieldExtensionLength(afe)

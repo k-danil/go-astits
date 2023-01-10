@@ -118,7 +118,7 @@ func main() {
 
 					bufWriter := bufio.NewWriterSize(outfile, ioBufSize)
 					mux := astits.NewMuxer(context.Background(), bufWriter)
-					err = mux.AddElementaryStream(*es)
+					err = mux.AddElementaryStream(es)
 					if err != nil {
 						log.Fatalf("%v", err)
 					}
@@ -163,14 +163,14 @@ func main() {
 			af.HasPCR = false
 		}
 
-		var pcr *astits.ClockReference
+		var pcr astits.ClockReference
 		if d.PES.Header.OptionalHeader.PTSDTSIndicator == astits.PTSDTSIndicatorBothPresent {
 			pcr = d.PES.Header.OptionalHeader.DTS
 		} else if d.PES.Header.OptionalHeader.PTSDTSIndicator == astits.PTSDTSIndicatorOnlyPTS {
 			pcr = d.PES.Header.OptionalHeader.PTS
 		}
 
-		if pcr != nil {
+		if d.PES.Header.OptionalHeader.PTSDTSIndicator > 1 {
 			if af == nil {
 				af = &astits.PacketAdaptationField{}
 			}

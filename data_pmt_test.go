@@ -9,7 +9,7 @@ import (
 )
 
 var pmt = &PMTData{
-	ElementaryStreams: []*PMTElementaryStream{{
+	ElementaryStreams: []PMTElementaryStream{{
 		ElementaryPID:               2730,
 		ElementaryStreamDescriptors: descriptors,
 		StreamType:                  StreamTypeMPEG1Audio,

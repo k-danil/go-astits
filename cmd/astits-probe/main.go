@@ -407,7 +407,7 @@ func (s Stream) String() (o string) {
 	return
 }
 
-func eventsToString(es []*astits.EITDataEvent) string {
+func eventsToString(es []astits.EITDataEvent) string {
 	var os []string
 	for idx, e := range es {
 		os = append(os, eventToString(idx, e))
@@ -415,7 +415,7 @@ func eventsToString(es []*astits.EITDataEvent) string {
 	return strings.Join(os, "\n")
 }
 
-func eventToString(idx int, e *astits.EITDataEvent) (s string) {
+func eventToString(idx int, e astits.EITDataEvent) (s string) {
 	s += fmt.Sprintf("- #%d | id: %d | start: %s | duration: %s | status: %s\n", idx+1, e.EventID, e.StartTime.Format("15:04:05"), e.Duration, runningStatusToString(e.RunningStatus))
 	var os []string
 	for _, d := range e.Descriptors {
@@ -436,7 +436,7 @@ func runningStatusToString(s uint8) string {
 	return "unknown"
 }
 
-func descriptorToString(d *astits.Descriptor) string {
+func descriptorToString(d astits.Descriptor) string {
 	switch d.Tag {
 	case astits.DescriptorTagAC3:
 		return fmt.Sprintf("[AC3] ac3 asvc: %d | bsid: %d | component type: %d | mainid: %d | info: %s", d.AC3.ASVC, d.AC3.BSID, d.AC3.ComponentType, d.AC3.MainID, d.AC3.AdditionalInfo)
