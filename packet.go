@@ -29,13 +29,13 @@ type Packet struct {
 
 // PacketHeader represents a packet header
 type PacketHeader struct {
-	ContinuityCounter          uint8 // Sequence number of payload packets (0x00 to 0x0F) within each stream (except PID 8191)
+	PID                        uint16 // Packet Identifier, describing the payload data.
+	ContinuityCounter          uint8  // Sequence number of payload packets (0x00 to 0x0F) within each stream (except PID 8191)
 	HasAdaptationField         bool
 	HasPayload                 bool
-	PayloadUnitStartIndicator  bool   // Set when a PES, PSI, or DVB-MIP packet begins immediately following the header.
-	PID                        uint16 // Packet Identifier, describing the payload data.
-	TransportErrorIndicator    bool   // Set when a demodulator can't correct errors from FEC data; indicating the packet is corrupt.
-	TransportPriority          bool   // Set when the current packet has a higher priority than other packets with the same PID.
+	PayloadUnitStartIndicator  bool // Set when a PES, PSI, or DVB-MIP packet begins immediately following the header.
+	TransportErrorIndicator    bool // Set when a demodulator can't correct errors from FEC data; indicating the packet is corrupt.
+	TransportPriority          bool // Set when the current packet has a higher priority than other packets with the same PID.
 	TransportScramblingControl uint8
 }
 
@@ -43,13 +43,9 @@ type PacketHeader struct {
 type PacketAdaptationField struct {
 	TransportPrivateData              []byte
 	PCR                               ClockReference // Program clock reference
-	StuffingLength                    int            // Only used in writePacketAdaptationField to request stuffing
-	TransportPrivateDataLength        int
-	SpliceCountdown                   int // Indicates how many TS packets from this one a splicing point occurs (Two's complement signed; may be negative)
-	Length                            int
-	AdaptationExtensionField          PacketAdaptationExtensionField
 	OPCR                              ClockReference // Original Program clock reference. Helps when one TS is copied into another
-	IsOneByteStuffing                 bool           // Only used for one byte stuffing - if true, adaptation field will be written as one uint8(0). Not part of TS format
+	AdaptationExtensionField          PacketAdaptationExtensionField
+	IsOneByteStuffing                 bool // Only used for one byte stuffing - if true, adaptation field will be written as one uint8(0). Not part of TS format
 	HasPCR                            bool
 	HasSplicingCountdown              bool
 	ElementaryStreamPriorityIndicator bool // Set when this stream should be considered "high priority"
@@ -58,19 +54,23 @@ type PacketAdaptationField struct {
 	HasOPCR                           bool
 	HasAdaptationExtensionField       bool
 	DiscontinuityIndicator            bool // Set if current TS packet is in a discontinuity state with respect to either the continuity counter or the program clock reference
+	TransportPrivateDataLength        uint8
+	StuffingLength                    uint8 // Only used in writePacketAdaptationField to request stuffing
+	SpliceCountdown                   int8  // Indicates how many TS packets from this one a splicing point occurs (Two's complement signed; may be negative)
+	Length                            uint8
 }
 
 // PacketAdaptationExtensionField represents a packet adaptation extension field
 type PacketAdaptationExtensionField struct {
 	DTSNextAccessUnit      ClockReference // The PES DTS of the splice point. Split up as 3 bits, 1 marker bit (0x1), 15 bits, 1 marker bit, 15 bits, and 1 marker bit, for 33 data bits total.
+	PiecewiseRate          uint32         // The rate of the stream, measured in 188-byte packets, to define the end-time of the LTW.
+	LegalTimeWindowOffset  uint16         // Extra information for rebroadcasters to determine the state of buffers when packets may be missing.
+	LegalTimeWindowIsValid bool
 	HasLegalTimeWindow     bool
 	HasPiecewiseRate       bool
 	HasSeamlessSplice      bool
-	LegalTimeWindowIsValid bool
-	LegalTimeWindowOffset  uint16 // Extra information for rebroadcasters to determine the state of buffers when packets may be missing.
-	Length                 int
-	PiecewiseRate          uint32 // The rate of the stream, measured in 188-byte packets, to define the end-time of the LTW.
-	SpliceType             uint8  // Indicates the parameters of the H.262 splice.
+	Length                 uint8
+	SpliceType             uint8 // Indicates the parameters of the H.262 splice.
 }
 
 // parsePacket parses a packet
@@ -121,7 +121,7 @@ func parsePacket(i *astikit.BytesIterator) (p *Packet, err error) {
 func payloadOffset(offsetStart int, h PacketHeader, a *PacketAdaptationField) (offset int) {
 	offset = offsetStart + 3
 	if h.HasAdaptationField {
-		offset += 1 + a.Length
+		offset += 1 + int(a.Length)
 	}
 	return
 }
@@ -162,7 +162,7 @@ func parsePacketAdaptationField(i *astikit.BytesIterator) (a *PacketAdaptationFi
 	}
 
 	// Length
-	a.Length = int(b)
+	a.Length = b
 
 	afStartOffset := i.Offset()
 
@@ -206,7 +206,7 @@ func parsePacketAdaptationField(i *astikit.BytesIterator) (a *PacketAdaptationFi
 				err = fmt.Errorf("astits: fetching next byte failed: %w", err)
 				return
 			}
-			a.SpliceCountdown = int(b)
+			a.SpliceCountdown = int8(b)
 		}
 
 		// Transport private data
@@ -216,11 +216,11 @@ func parsePacketAdaptationField(i *astikit.BytesIterator) (a *PacketAdaptationFi
 				err = fmt.Errorf("astits: fetching next byte failed: %w", err)
 				return
 			}
-			a.TransportPrivateDataLength = int(b)
+			a.TransportPrivateDataLength = b
 
 			// Data
 			if a.TransportPrivateDataLength > 0 {
-				if a.TransportPrivateData, err = i.NextBytes(a.TransportPrivateDataLength); err != nil {
+				if a.TransportPrivateData, err = i.NextBytes(int(a.TransportPrivateDataLength)); err != nil {
 					err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 					return
 				}
@@ -236,7 +236,7 @@ func parsePacketAdaptationField(i *astikit.BytesIterator) (a *PacketAdaptationFi
 			}
 
 			// Length
-			a.AdaptationExtensionField.Length = int(b)
+			a.AdaptationExtensionField.Length = b
 			if a.AdaptationExtensionField.Length > 0 {
 				// Get next byte
 				if b, err = i.NextByte(); err != nil {
@@ -294,7 +294,7 @@ func parsePacketAdaptationField(i *astikit.BytesIterator) (a *PacketAdaptationFi
 		}
 	}
 
-	a.StuffingLength = a.Length - (i.Offset() - afStartOffset)
+	a.StuffingLength = a.Length - uint8(i.Offset()-afStartOffset)
 
 	return
 }
@@ -466,7 +466,7 @@ func writePacketAdaptationField(w *astikit.BitsWriter, af *PacketAdaptationField
 	}
 
 	// stuffing
-	for i := 0; i < af.StuffingLength; i++ {
+	for i := uint8(0); i < af.StuffingLength; i++ {
 		b.Write(uint8(0xff))
 		bytesWritten++
 	}
@@ -535,6 +535,6 @@ func newStuffingAdaptationField(bytesToStuff int) *PacketAdaptationField {
 
 	return &PacketAdaptationField{
 		// one byte for length and one for flags
-		StuffingLength: bytesToStuff - 2,
+		StuffingLength: uint8(bytesToStuff) - 2,
 	}
 }

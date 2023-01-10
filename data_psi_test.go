@@ -377,7 +377,8 @@ func TestWritePSIData(t *testing.T) {
 
 func BenchmarkParsePSIData(b *testing.B) {
 	b.ReportAllocs()
+	data := psiBytes()
 	for i := 0; i < b.N; i++ {
-		parsePSIData(astikit.NewBytesIterator(psiBytes()))
+		parsePSIData(astikit.NewBytesIterator(data))
 	}
 }

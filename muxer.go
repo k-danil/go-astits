@@ -211,7 +211,7 @@ func (m *Muxer) WriteData(d *MuxerData) (int, error) {
 				if pkt.AdaptationField == nil {
 					pkt.AdaptationField = newStuffingAdaptationField(bytesAvailable)
 				} else {
-					pkt.AdaptationField.StuffingLength = bytesAvailable
+					pkt.AdaptationField.StuffingLength = uint8(bytesAvailable)
 				}
 			} else {
 				pkt.Header.HasPayload = true
@@ -250,7 +250,7 @@ func (m *Muxer) WriteData(d *MuxerData) (int, error) {
 				if pkt.AdaptationField == nil {
 					pkt.AdaptationField = newStuffingAdaptationField(bytesAvailable)
 				} else {
-					pkt.AdaptationField.StuffingLength = bytesAvailable
+					pkt.AdaptationField.StuffingLength = uint8(bytesAvailable)
 				}
 			}
 

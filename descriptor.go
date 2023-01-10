@@ -321,7 +321,7 @@ func newDescriptorComponent(i *astikit.BytesIterator, offsetEnd int) (d *Descrip
 // DescriptorContent represents a content descriptor
 // Chapter: 6.2.9 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type DescriptorContent struct {
-	Items []*DescriptorContentItem
+	Items []DescriptorContentItem
 }
 
 // DescriptorContentItem represents a content item descriptor
@@ -334,7 +334,9 @@ type DescriptorContentItem struct {
 
 func newDescriptorContent(i *astikit.BytesIterator, offsetEnd int) (d *DescriptorContent, err error) {
 	// Init
-	d = &DescriptorContent{}
+	d = &DescriptorContent{
+		Items: make([]DescriptorContentItem, 0, (offsetEnd-i.Offset())/2),
+	}
 
 	// Add items
 	for i.Offset() < offsetEnd {
@@ -346,7 +348,7 @@ func newDescriptorContent(i *astikit.BytesIterator, offsetEnd int) (d *Descripto
 		}
 
 		// Append item
-		d.Items = append(d.Items, &DescriptorContentItem{
+		d.Items = append(d.Items, DescriptorContentItem{
 			ContentNibbleLevel1: uint8(bs[0] >> 4),
 			ContentNibbleLevel2: uint8(bs[0] & 0xf),
 			UserByte:            uint8(bs[1]),
@@ -495,7 +497,7 @@ func newDescriptorEnhancedAC3(i *astikit.BytesIterator, offsetEnd int) (d *Descr
 // Chapter: 6.2.15 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type DescriptorExtendedEvent struct {
 	ISO639LanguageCode   []byte
-	Items                []*DescriptorExtendedEventItem
+	Items                []DescriptorExtendedEventItem
 	LastDescriptorNumber uint8
 	Number               uint8
 	Text                 []byte
@@ -544,7 +546,7 @@ func newDescriptorExtendedEvent(i *astikit.BytesIterator) (d *DescriptorExtended
 	offsetEnd := i.Offset() + itemsLength
 	for i.Offset() < offsetEnd {
 		// Create item
-		var item *DescriptorExtendedEventItem
+		var item DescriptorExtendedEventItem
 		if item, err = newDescriptorExtendedEventItem(i); err != nil {
 			err = fmt.Errorf("astits: creating extended event item failed: %w", err)
 			return
@@ -571,10 +573,7 @@ func newDescriptorExtendedEvent(i *astikit.BytesIterator) (d *DescriptorExtended
 	return
 }
 
-func newDescriptorExtendedEventItem(i *astikit.BytesIterator) (d *DescriptorExtendedEventItem, err error) {
-	// Init
-	d = &DescriptorExtendedEventItem{}
-
+func newDescriptorExtendedEventItem(i *astikit.BytesIterator) (d DescriptorExtendedEventItem, err error) {
 	// Get next byte
 	var b byte
 	if b, err = i.NextByte(); err != nil {
@@ -719,7 +718,7 @@ func newDescriptorISO639LanguageAndAudioType(i *astikit.BytesIterator, offsetEnd
 // DescriptorLocalTimeOffset represents a local time offset descriptor
 // Chapter: 6.2.20 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type DescriptorLocalTimeOffset struct {
-	Items []*DescriptorLocalTimeOffsetItem
+	Items []DescriptorLocalTimeOffsetItem
 }
 
 // DescriptorLocalTimeOffsetItem represents a local time offset item descriptor
@@ -740,7 +739,7 @@ func newDescriptorLocalTimeOffset(i *astikit.BytesIterator, offsetEnd int) (d *D
 	// Add items
 	for i.Offset() < offsetEnd {
 		// Create item
-		itm := &DescriptorLocalTimeOffsetItem{}
+		itm := DescriptorLocalTimeOffsetItem{}
 
 		// Country code
 		if itm.CountryCode, err = i.NextBytes(3); err != nil {
@@ -824,7 +823,7 @@ func newDescriptorNetworkName(i *astikit.BytesIterator, offsetEnd int) (d *Descr
 // DescriptorParentalRating represents a parental rating descriptor
 // Chapter: 6.2.28 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type DescriptorParentalRating struct {
-	Items []*DescriptorParentalRatingItem
+	Items []DescriptorParentalRatingItem
 }
 
 // DescriptorParentalRatingItem represents a parental rating item descriptor
@@ -845,7 +844,9 @@ func (d DescriptorParentalRatingItem) MinimumAge() int {
 
 func newDescriptorParentalRating(i *astikit.BytesIterator, offsetEnd int) (d *DescriptorParentalRating, err error) {
 	// Create descriptor
-	d = &DescriptorParentalRating{}
+	d = &DescriptorParentalRating{
+		Items: make([]DescriptorParentalRatingItem, 0, (offsetEnd-i.Offset())/4),
+	}
 
 	// Add items
 	for i.Offset() < offsetEnd {
@@ -857,7 +858,7 @@ func newDescriptorParentalRating(i *astikit.BytesIterator, offsetEnd int) (d *De
 		}
 
 		// Append item
-		d.Items = append(d.Items, &DescriptorParentalRatingItem{
+		d.Items = append(d.Items, DescriptorParentalRatingItem{
 			CountryCode: bs[:3],
 			Rating:      uint8(bs[3]),
 		})
@@ -1050,7 +1051,7 @@ func newDescriptorStreamIdentifier(i *astikit.BytesIterator) (d *DescriptorStrea
 // DescriptorSubtitling represents a subtitling descriptor
 // Chapter: 6.2.41 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type DescriptorSubtitling struct {
-	Items []*DescriptorSubtitlingItem
+	Items []DescriptorSubtitlingItem
 }
 
 // DescriptorSubtitlingItem represents subtitling descriptor item
@@ -1069,7 +1070,7 @@ func newDescriptorSubtitling(i *astikit.BytesIterator, offsetEnd int) (d *Descri
 	// Loop
 	for i.Offset() < offsetEnd {
 		// Create item
-		itm := &DescriptorSubtitlingItem{}
+		itm := DescriptorSubtitlingItem{}
 
 		// Language
 		if itm.Language, err = i.NextBytes(3); err != nil {
@@ -1115,7 +1116,7 @@ func newDescriptorSubtitling(i *astikit.BytesIterator, offsetEnd int) (d *Descri
 // DescriptorTeletext represents a teletext descriptor
 // Chapter: 6.2.43 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type DescriptorTeletext struct {
-	Items []*DescriptorTeletextItem
+	Items []DescriptorTeletextItem
 }
 
 // DescriptorTeletextItem represents a teletext descriptor item
@@ -1134,7 +1135,7 @@ func newDescriptorTeletext(i *astikit.BytesIterator, offsetEnd int) (d *Descript
 	// Loop
 	for i.Offset() < offsetEnd {
 		// Create item
-		itm := &DescriptorTeletextItem{}
+		itm := DescriptorTeletextItem{}
 
 		// Language
 		if itm.Language, err = i.NextBytes(3); err != nil {
@@ -1190,14 +1191,14 @@ func newDescriptorUnknown(i *astikit.BytesIterator, tag, length uint8) (d *Descr
 // DescriptorVBIData represents a VBI data descriptor
 // Chapter: 6.2.47 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type DescriptorVBIData struct {
-	Services []*DescriptorVBIDataService
+	Services []DescriptorVBIDataService
 }
 
 // DescriptorVBIDataService represents a vbi data service descriptor
 // Chapter: 6.2.47 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type DescriptorVBIDataService struct {
 	DataServiceID uint8
-	Descriptors   []*DescriptorVBIDataDescriptor
+	Descriptors   []DescriptorVBIDataDescriptor
 }
 
 // DescriptorVBIDataItem represents a vbi data descriptor item
@@ -1214,7 +1215,7 @@ func newDescriptorVBIData(i *astikit.BytesIterator, offsetEnd int) (d *Descripto
 	// Loop
 	for i.Offset() < offsetEnd {
 		// Create service
-		srv := &DescriptorVBIDataService{}
+		srv := DescriptorVBIDataService{}
 
 		// Get next byte
 		var b byte
@@ -1252,7 +1253,7 @@ func newDescriptorVBIData(i *astikit.BytesIterator, offsetEnd int) (d *Descripto
 				srv.DataServiceID == VBIDataServiceIDWSS {
 
 				// Append data
-				srv.Descriptors = append(srv.Descriptors, &DescriptorVBIDataDescriptor{
+				srv.Descriptors = append(srv.Descriptors, DescriptorVBIDataDescriptor{
 					FieldParity: b&0x20 > 0,
 					LineOffset:  uint8(b & 0x1f),
 				})

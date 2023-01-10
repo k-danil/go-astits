@@ -167,7 +167,7 @@ var descriptorTestTable = []descriptorTest{
 		Descriptor{
 			Tag:    DescriptorTagSubtitling,
 			Length: 16,
-			Subtitling: &DescriptorSubtitling{Items: []*DescriptorSubtitlingItem{
+			Subtitling: &DescriptorSubtitling{Items: []DescriptorSubtitlingItem{
 				{
 					AncillaryPageID:   3,
 					CompositionPageID: 2,
@@ -199,7 +199,7 @@ var descriptorTestTable = []descriptorTest{
 		Descriptor{
 			Tag:    DescriptorTagTeletext,
 			Length: 10,
-			Teletext: &DescriptorTeletext{Items: []*DescriptorTeletextItem{
+			Teletext: &DescriptorTeletext{Items: []DescriptorTeletextItem{
 				{
 					Language: []byte("lg1"),
 					Magazine: uint8(2),
@@ -235,7 +235,7 @@ var descriptorTestTable = []descriptorTest{
 			Length: 30,
 			ExtendedEvent: &DescriptorExtendedEvent{
 				ISO639LanguageCode: []byte("lan"),
-				Items: []*DescriptorExtendedEventItem{{
+				Items: []DescriptorExtendedEventItem{{
 					Content:     []byte("content"),
 					Description: []byte("description"),
 				}},
@@ -352,7 +352,7 @@ var descriptorTestTable = []descriptorTest{
 		Descriptor{
 			Tag:    DescriptorTagContent,
 			Length: 2,
-			Content: &DescriptorContent{Items: []*DescriptorContentItem{{
+			Content: &DescriptorContent{Items: []DescriptorContentItem{{
 				ContentNibbleLevel1: 1,
 				ContentNibbleLevel2: 2,
 				UserByte:            3,
@@ -369,7 +369,7 @@ var descriptorTestTable = []descriptorTest{
 		Descriptor{
 			Tag:    DescriptorTagParentalRating,
 			Length: 4,
-			ParentalRating: &DescriptorParentalRating{Items: []*DescriptorParentalRatingItem{{
+			ParentalRating: &DescriptorParentalRating{Items: []DescriptorParentalRatingItem{{
 				CountryCode: []byte("cou"),
 				Rating:      2,
 			}}}},
@@ -390,7 +390,7 @@ var descriptorTestTable = []descriptorTest{
 		Descriptor{
 			Tag:    DescriptorTagLocalTimeOffset,
 			Length: 13,
-			LocalTimeOffset: &DescriptorLocalTimeOffset{Items: []*DescriptorLocalTimeOffsetItem{{
+			LocalTimeOffset: &DescriptorLocalTimeOffset{Items: []DescriptorLocalTimeOffsetItem{{
 				CountryCode:             []byte("cou"),
 				CountryRegionID:         42,
 				LocalTimeOffset:         dvbDurationMinutes,
@@ -413,9 +413,9 @@ var descriptorTestTable = []descriptorTest{
 		Descriptor{
 			Tag:    DescriptorTagVBIData,
 			Length: 3,
-			VBIData: &DescriptorVBIData{Services: []*DescriptorVBIDataService{{
+			VBIData: &DescriptorVBIData{Services: []DescriptorVBIDataService{{
 				DataServiceID: VBIDataServiceIDEBUTeletext,
-				Descriptors: []*DescriptorVBIDataDescriptor{{
+				Descriptors: []DescriptorVBIDataDescriptor{{
 					FieldParity: true,
 					LineOffset:  21,
 				}},
@@ -434,7 +434,7 @@ var descriptorTestTable = []descriptorTest{
 		Descriptor{
 			Tag:    DescriptorTagVBITeletext,
 			Length: 5,
-			VBITeletext: &DescriptorTeletext{Items: []*DescriptorTeletextItem{{
+			VBITeletext: &DescriptorTeletext{Items: []DescriptorTeletextItem{{
 				Language: []byte("lan"),
 				Magazine: uint8(2),
 				Page:     uint8(12),

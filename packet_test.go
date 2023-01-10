@@ -255,9 +255,9 @@ func BenchmarkWritePCR(b *testing.B) {
 
 func BenchmarkParsePacket(b *testing.B) {
 	bs, _ := packet(packetHeader, *packetAdaptationField, []byte("payload"), true)
+	b.ReportAllocs()
 
 	for i := 0; i < b.N; i++ {
-		b.ReportAllocs()
 		parsePacket(astikit.NewBytesIterator(bs))
 	}
 }
