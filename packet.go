@@ -74,7 +74,7 @@ type PacketAdaptationExtensionField struct {
 }
 
 // parsePacket parses a packet
-func parsePacket(i *astikit.BytesIterator) (p *Packet, err error) {
+func parsePacket(i *astikit.BytesIterator, filter map[uint16]struct{}) (p *Packet, err error) {
 	// Get next byte
 	var b byte
 	if b, err = i.NextByte(); err != nil {
@@ -89,7 +89,7 @@ func parsePacket(i *astikit.BytesIterator) (p *Packet, err error) {
 	}
 
 	// Create packet
-	p = &Packet{}
+	p = GetPacket()
 
 	// In case packet size is bigger than 188 bytes, we don't care for the first bytes
 	i.Seek(i.Len() - MpegTsPacketSize + 1)
@@ -99,6 +99,13 @@ func parsePacket(i *astikit.BytesIterator) (p *Packet, err error) {
 	if p.Header, err = parsePacketHeader(i); err != nil {
 		err = fmt.Errorf("astits: parsing packet header failed: %w", err)
 		return
+	}
+
+	if filter != nil {
+		if _, ok := filter[p.Header.PID]; !ok {
+			FlushPacket(p)
+			return nil, nil
+		}
 	}
 
 	// Parse adaptation field
@@ -112,9 +119,38 @@ func parsePacket(i *astikit.BytesIterator) (p *Packet, err error) {
 	// Build payload
 	if p.Header.HasPayload {
 		i.Seek(payloadOffset(offsetStart, p.Header, p.AdaptationField))
-		p.Payload = i.Dump()
+		if cap(p.Payload) > i.Len()-i.Offset() {
+			i.DumpTo(&p.Payload)
+		} else {
+			p.Payload = i.Dump()
+		}
 	}
 	return
+}
+
+func GetPacket() (p *Packet) {
+	if syncPacketPool != nil {
+		p = syncPacketPool.Get().(*Packet)
+	} else {
+		p = &Packet{}
+	}
+	return
+}
+
+func FlushPacket(p *Packet) {
+	if syncPacketPool != nil {
+		*p = Packet{Payload: p.Payload[:0]}
+		syncPacketPool.Put(p)
+	}
+}
+
+func FlushPackets(ps []*Packet) {
+	if syncPacketPool != nil {
+		for _, p := range ps {
+			*p = Packet{Payload: p.Payload[:0]}
+			syncPacketPool.Put(p)
+		}
+	}
 }
 
 // payloadOffset returns the payload offset

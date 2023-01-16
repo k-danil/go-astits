@@ -28,6 +28,11 @@ type DemuxerData struct {
 	TOT         *TOTData
 }
 
+func (d *DemuxerData) Close() error {
+	FlushPacket(d.FirstPacket)
+	return nil
+}
+
 // MuxerData represents a data to be written by Muxer
 type MuxerData struct {
 	PID             uint16
@@ -38,6 +43,15 @@ type MuxerData struct {
 // parseData parses a payload spanning over multiple packets and returns a set of data
 func parseData(ps []*Packet, prs PacketsParser, pm *programMap) (ds []*DemuxerData, err error) {
 	// Use custom parser first
+	defer syncPoolPool.Put(&ps)
+	defer func() {
+		if len(ds) < 1 || err != nil {
+			FlushPackets(ps)
+		} else {
+			FlushPackets(ps[1:])
+		}
+	}()
+
 	if prs != nil {
 		var skip bool
 		if ds, skip, err = prs(ps); err != nil {
@@ -55,10 +69,15 @@ func parseData(ps []*Packet, prs PacketsParser, pm *programMap) (ds []*DemuxerDa
 	}
 
 	// Append payload
-	var payload = make([]byte, l)
-	var c int
-	for _, p := range ps {
-		c += copy(payload[c:], p.Payload)
+	var payload []byte
+	if len(ps) > 1 {
+		payload = make([]byte, l)
+		var c int
+		for _, p := range ps {
+			c += copy(payload[c:], p.Payload)
+		}
+	} else {
+		payload = ps[0].Payload
 	}
 
 	// Create reader
@@ -135,10 +154,15 @@ func isPSIComplete(ps []*Packet, prs PacketsParser) bool {
 	}
 
 	// Append payload
-	var payload = make([]byte, l)
-	var c int
-	for _, p := range ps {
-		c += copy(payload[c:], p.Payload)
+	var payload []byte
+	if len(ps) > 1 {
+		payload = make([]byte, l)
+		var c int
+		for _, p := range ps {
+			c += copy(payload[c:], p.Payload)
+		}
+	} else {
+		payload = ps[0].Payload
 	}
 
 	// Create reader

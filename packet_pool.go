@@ -5,6 +5,13 @@ import (
 	"sync"
 )
 
+var syncPoolPool = sync.Pool{
+	New: func() interface{} {
+		s := make([]*Packet, 0, 1)
+		return &s
+	},
+}
+
 // packetAccumulator keeps track of packets for a single PID and decides when to flush them
 type packetAccumulator struct {
 	parser     PacketsParser
@@ -28,7 +35,11 @@ func (b *packetAccumulator) add(p *Packet) (ps []*Packet) {
 
 	// Empty buffer if we detect a discontinuity
 	if hasDiscontinuity(mps, p) {
-		mps = make([]*Packet, 0, cap(mps))
+		if len(mps) > 0 {
+			mps = mps[:0]
+		} else {
+			mps = (*(syncPoolPool.Get().(*[]*Packet)))[:0]
+		}
 	}
 
 	// Throw away packet if it's the same as the previous one
@@ -39,7 +50,7 @@ func (b *packetAccumulator) add(p *Packet) (ps []*Packet) {
 	// Flush buffer if new payload starts here
 	if p.Header.PayloadUnitStartIndicator {
 		ps = mps
-		mps = make([]*Packet, 0, cap(mps))
+		mps = (*(syncPoolPool.Get().(*[]*Packet)))[:0]
 	}
 
 	mps = append(mps, p)
@@ -59,7 +70,6 @@ func (b *packetAccumulator) add(p *Packet) (ps []*Packet) {
 // packetPool represents a queue of packets for each PID in the stream
 type packetPool struct {
 	b map[uint16]*packetAccumulator // Indexed by PID
-	m *sync.Mutex
 
 	parser     PacketsParser
 	programMap *programMap
@@ -69,7 +79,6 @@ type packetPool struct {
 func newPacketPool(parser PacketsParser, programMap *programMap) *packetPool {
 	return &packetPool{
 		b: make(map[uint16]*packetAccumulator),
-		m: &sync.Mutex{},
 
 		parser:     parser,
 		programMap: programMap,
@@ -89,10 +98,6 @@ func (b *packetPool) add(p *Packet) (ps []*Packet) {
 		return
 	}
 
-	// Lock
-	b.m.Lock()
-	defer b.m.Unlock()
-
 	// Make sure accumulator exists
 	acc, ok := b.b[p.Header.PID]
 	if !ok {
@@ -106,9 +111,7 @@ func (b *packetPool) add(p *Packet) (ps []*Packet) {
 
 // dump dumps the packet pool by looking for the first item with packets inside
 func (b *packetPool) dump() (ps []*Packet) {
-	b.m.Lock()
-	defer b.m.Unlock()
-	var keys []int
+	keys := make([]int, 0, len(b.b))
 	for k := range b.b {
 		keys = append(keys, int(k))
 	}

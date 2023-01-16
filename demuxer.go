@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sync"
 
 	"github.com/asticode/go-astikit"
 )
@@ -17,6 +18,8 @@ var (
 	ErrNoMorePackets                = errors.New("astits: no more packets")
 	ErrPacketMustStartWithASyncByte = errors.New("astits: packet must start with a sync byte")
 )
+
+var syncPacketPool *sync.Pool
 
 // Demuxer represents a demuxer
 // https://en.wikipedia.org/wiki/MPEG_transport_stream
@@ -31,6 +34,7 @@ type Demuxer struct {
 	packetBuffer     *packetBuffer
 	packetPool       *packetPool
 	programMap       *programMap
+	packetFilter     map[uint16]struct{}
 	r                io.Reader
 }
 
@@ -78,6 +82,20 @@ func DemuxerOptPacketsParser(p PacketsParser) func(*Demuxer) {
 	}
 }
 
+func DemuxerOptSyncPool(pool *sync.Pool) func(*Demuxer) {
+	return func(_ *Demuxer) {
+		if syncPacketPool == nil {
+			syncPacketPool = pool
+		}
+	}
+}
+
+func DemuxerOptFilter(filter map[uint16]struct{}) func(*Demuxer) {
+	return func(d *Demuxer) {
+		d.packetFilter = filter
+	}
+}
+
 // NextPacket retrieves the next packet
 func (dmx *Demuxer) NextPacket() (p *Packet, err error) {
 	// Check ctx error
@@ -89,18 +107,20 @@ func (dmx *Demuxer) NextPacket() (p *Packet, err error) {
 
 	// Create packet buffer if not exists
 	if dmx.packetBuffer == nil {
-		if dmx.packetBuffer, err = newPacketBuffer(dmx.r, dmx.optPacketSize); err != nil {
+		if dmx.packetBuffer, err = newPacketBuffer(dmx.r, dmx.optPacketSize, dmx.packetFilter); err != nil {
 			err = fmt.Errorf("astits: creating packet buffer failed: %w", err)
 			return
 		}
 	}
 
-	// Fetch next packet from buffer
-	if p, err = dmx.packetBuffer.next(); err != nil {
-		if err != ErrNoMorePackets {
-			err = fmt.Errorf("astits: fetching next packet from buffer failed: %w", err)
+	for p == nil {
+		// Fetch next packet from buffer
+		if p, err = dmx.packetBuffer.next(); err != nil {
+			if err != ErrNoMorePackets {
+				err = fmt.Errorf("astits: fetching next packet from buffer failed: %w", err)
+			}
+			return
 		}
-		return
 	}
 	return
 }

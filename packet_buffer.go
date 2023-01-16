@@ -11,15 +11,17 @@ import (
 // packetBuffer represents a packet buffer
 type packetBuffer struct {
 	packetSize       int
+	filter           map[uint16]struct{}
 	r                io.Reader
 	packetReadBuffer []byte
 }
 
 // newPacketBuffer creates a new packet buffer
-func newPacketBuffer(r io.Reader, packetSize int) (pb *packetBuffer, err error) {
+func newPacketBuffer(r io.Reader, packetSize int, filter map[uint16]struct{}) (pb *packetBuffer, err error) {
 	// Init
 	pb = &packetBuffer{
 		packetSize: packetSize,
+		filter:     filter,
 		r:          r,
 	}
 
@@ -131,7 +133,7 @@ func (pb *packetBuffer) next() (p *Packet, err error) {
 	}
 
 	// Parse packet
-	if p, err = parsePacket(astikit.NewBytesIterator(pb.packetReadBuffer)); err != nil {
+	if p, err = parsePacket(astikit.NewBytesIterator(pb.packetReadBuffer), pb.filter); err != nil {
 		err = fmt.Errorf("astits: building packet failed: %w", err)
 		return
 	}
