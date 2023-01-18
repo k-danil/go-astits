@@ -26,21 +26,27 @@ var syncPacketPool *sync.Pool
 // http://seidl.cs.vsb.cz/download/dvb/DVB_Poster.pdf
 // http://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.13.01_40/en_300468v011301o.pdf
 type Demuxer struct {
-	ctx              context.Context
-	dataBuffer       []*DemuxerData
-	l                astikit.CompleteLogger
+	ctx        context.Context
+	dataBuffer []*DemuxerData
+	l          astikit.CompleteLogger
+
 	optPacketSize    int
 	optPacketsParser PacketsParser
-	packetBuffer     *packetBuffer
-	packetPool       *packetPool
-	programMap       *programMap
-	packetFilter     map[uint16]struct{}
-	r                io.Reader
+	optPacketFilter  PacketFilter
+
+	packetBuffer *packetBuffer
+	packetPool   *packetPool
+	programMap   *programMap
+	r            io.Reader
 }
 
 // PacketsParser represents an object capable of parsing a set of packets containing a unique payload spanning over those packets
 // Use the skip returned argument to indicate whether the default process should still be executed on the set of packets
 type PacketsParser func(ps []*Packet) (ds []*DemuxerData, skip bool, err error)
+
+// PacketFilter executed right before pushing payload to Packet-object. PacketHeader and PacketAdaptationField still be present
+// Use skip to filter-out unwanted packets from pipeline
+type PacketFilter func(p *Packet) (skip bool, err error)
 
 // NewDemuxer creates a new transport stream based on a reader
 func NewDemuxer(ctx context.Context, r io.Reader, opts ...func(*Demuxer)) (d *Demuxer) {
@@ -90,9 +96,10 @@ func DemuxerOptSyncPool(pool *sync.Pool) func(*Demuxer) {
 	}
 }
 
-func DemuxerOptFilter(filter map[uint16]struct{}) func(*Demuxer) {
+// DemuxerOptPacketFilter returns the option to set the packet filter
+func DemuxerOptPacketFilter(p PacketFilter) func(*Demuxer) {
 	return func(d *Demuxer) {
-		d.packetFilter = filter
+		d.optPacketFilter = p
 	}
 }
 
@@ -107,21 +114,25 @@ func (dmx *Demuxer) NextPacket() (p *Packet, err error) {
 
 	// Create packet buffer if not exists
 	if dmx.packetBuffer == nil {
-		if dmx.packetBuffer, err = newPacketBuffer(dmx.r, dmx.optPacketSize, dmx.packetFilter); err != nil {
+		if dmx.packetBuffer, err = newPacketBuffer(dmx.r, dmx.optPacketSize, dmx.optPacketFilter); err != nil {
 			err = fmt.Errorf("astits: creating packet buffer failed: %w", err)
 			return
 		}
 	}
 
-	for p == nil {
-		// Fetch next packet from buffer
-		if p, err = dmx.packetBuffer.next(); err != nil {
-			if err != ErrNoMorePackets {
-				err = fmt.Errorf("astits: fetching next packet from buffer failed: %w", err)
-			}
-			return
+	// Fetch next packet from buffer
+	if p, err = dmx.packetBuffer.next(); err != nil {
+		if err != ErrNoMorePackets {
+			err = fmt.Errorf("astits: fetching next packet from buffer failed: %w", err)
 		}
+		return
 	}
+
+	// If packet been filtered we still want to return some result to end user
+	if p == nil && err == nil {
+		p, err = dmx.NextPacket()
+	}
+
 	return
 }
 

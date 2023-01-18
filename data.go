@@ -42,16 +42,16 @@ type MuxerData struct {
 
 // parseData parses a payload spanning over multiple packets and returns a set of data
 func parseData(ps []*Packet, prs PacketsParser, pm *programMap) (ds []*DemuxerData, err error) {
-	// Use custom parser first
 	defer syncPoolPool.Put(&ps)
 	defer func() {
 		if len(ds) < 1 || err != nil {
 			FlushPackets(ps)
-		} else {
+		} else if len(ps) > 1 {
 			FlushPackets(ps[1:])
 		}
 	}()
 
+	// Use custom parser first
 	if prs != nil {
 		var skip bool
 		if ds, skip, err = prs(ps); err != nil {

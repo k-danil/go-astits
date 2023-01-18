@@ -74,7 +74,7 @@ type PacketAdaptationExtensionField struct {
 }
 
 // parsePacket parses a packet
-func parsePacket(i *astikit.BytesIterator, filter map[uint16]struct{}) (p *Packet, err error) {
+func parsePacket(i *astikit.BytesIterator, filter PacketFilter) (p *Packet, err error) {
 	// Get next byte
 	var b byte
 	if b, err = i.NextByte(); err != nil {
@@ -101,17 +101,20 @@ func parsePacket(i *astikit.BytesIterator, filter map[uint16]struct{}) (p *Packe
 		return
 	}
 
-	if filter != nil {
-		if _, ok := filter[p.Header.PID]; !ok {
-			FlushPacket(p)
-			return nil, nil
-		}
-	}
-
 	// Parse adaptation field
 	if p.Header.HasAdaptationField {
 		if p.AdaptationField, err = parsePacketAdaptationField(i); err != nil {
 			err = fmt.Errorf("astits: parsing packet adaptation field failed: %w", err)
+			return
+		}
+	}
+
+	// Custom packet filter execution
+	if filter != nil {
+		var skip bool
+		skip, err = filter(p)
+		if skip || err != nil {
+			FlushPacket(p)
 			return
 		}
 	}

@@ -11,13 +11,13 @@ import (
 // packetBuffer represents a packet buffer
 type packetBuffer struct {
 	packetSize       int
-	filter           map[uint16]struct{}
+	filter           PacketFilter
 	r                io.Reader
 	packetReadBuffer []byte
 }
 
 // newPacketBuffer creates a new packet buffer
-func newPacketBuffer(r io.Reader, packetSize int, filter map[uint16]struct{}) (pb *packetBuffer, err error) {
+func newPacketBuffer(r io.Reader, packetSize int, filter PacketFilter) (pb *packetBuffer, err error) {
 	// Init
 	pb = &packetBuffer{
 		packetSize: packetSize,
