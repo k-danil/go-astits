@@ -74,7 +74,7 @@ type PacketAdaptationExtensionField struct {
 }
 
 // parsePacket parses a packet
-func parsePacket(i *astikit.BytesIterator, filter PacketFilter) (p *Packet, err error) {
+func parsePacket(i *astikit.BytesIterator, flt PacketFilter) (p *Packet, err error) {
 	// Get next byte
 	var b byte
 	if b, err = i.NextByte(); err != nil {
@@ -110,13 +110,9 @@ func parsePacket(i *astikit.BytesIterator, filter PacketFilter) (p *Packet, err 
 	}
 
 	// Custom packet filter execution
-	if filter != nil {
-		var skip bool
-		skip, err = filter(p)
-		if skip || err != nil {
-			FlushPacket(p)
-			return
-		}
+	if flt != nil && flt(p) {
+		FlushPacket(p)
+		return
 	}
 
 	// Build payload
