@@ -54,3 +54,62 @@ func (tdp *tempDataPool) get(size int) (payload []byte) {
 func (tdp *tempDataPool) put(payload []byte) {
 	tdp.sp.Put(&payload)
 }
+
+var poolOfPackets = &packetPoolS{}
+
+type packetPoolS struct {
+	sp *sync.Pool
+}
+
+func (pps *packetPoolS) get() (p *Packet) {
+	if pps.sp != nil {
+		if p = pps.sp.Get().(*Packet); p != nil {
+			if p.Payload != nil {
+				*p = Packet{Payload: p.Payload[:0]}
+			} else {
+				*p = Packet{}
+			}
+		}
+	}
+	if p == nil {
+		p = &Packet{}
+	}
+	return
+}
+
+func (pps *packetPoolS) put(p *Packet) {
+	if pps.sp != nil {
+		pps.sp.Put(p)
+	}
+}
+
+func (pps *packetPoolS) putSlice(ps []*Packet) {
+	if pps.sp != nil {
+		for i := range ps {
+			pps.sp.Put(ps[i])
+		}
+	}
+	poolOfPacketSlices.put(ps)
+}
+
+var poolOfPESData = pesPool{}
+
+type pesPool struct {
+	sp *sync.Pool
+}
+
+func (pp *pesPool) get() (pd *PESData) {
+	if pp.sp != nil {
+		if pd = pp.sp.Get().(*PESData); pd != nil {
+			if pd.Data != nil {
+				*pd = PESData{Data: pd.Data[:0]}
+			} else {
+				*pd = PESData{}
+			}
+		}
+	}
+	if pd == nil {
+		pd = &PESData{}
+	}
+	return
+}

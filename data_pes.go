@@ -117,7 +117,7 @@ func (h *PESHeader) IsVideoStream() bool {
 // parsePESData parses a PES data
 func parsePESData(i *astikit.BytesIterator) (d *PESData, err error) {
 	// Create data
-	d = &PESData{}
+	d = poolOfPESData.get()
 
 	// Skip first 3 bytes that are there to identify the PES payload
 	i.Seek(3)
@@ -139,10 +139,20 @@ func parsePESData(i *astikit.BytesIterator) (d *PESData, err error) {
 	i.Seek(dataStart)
 
 	// Extract data
-	if d.Data, err = i.NextBytes(dataEnd - dataStart); err != nil {
-		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
-		return
+	if d.Data != nil {
+		var data []byte
+		if data, err = i.NextBytesNoCopy(dataEnd - dataStart); err != nil {
+			err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
+			return
+		}
+		d.Data = append(d.Data, data...)
+	} else {
+		if d.Data, err = i.NextBytes(dataEnd - dataStart); err != nil {
+			err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
+			return
+		}
 	}
+
 	return
 }
 

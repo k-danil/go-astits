@@ -92,7 +92,12 @@ func parsePacket(i *astikit.BytesIterator, s PacketSkipper) (p *Packet, err erro
 	}
 
 	// Create packet
-	p = &Packet{}
+	p = poolOfPackets.get()
+	defer func() {
+		if err != nil {
+			poolOfPackets.put(p)
+		}
+	}()
 
 	// In case packet size is bigger than 188 bytes, we don't care for the first bytes
 	i.Seek(i.Len() - MpegTsPacketSize + 1)
@@ -120,7 +125,15 @@ func parsePacket(i *astikit.BytesIterator, s PacketSkipper) (p *Packet, err erro
 	// Build payload
 	if p.Header.HasPayload {
 		i.Seek(payloadOffset(offsetStart, p.Header, p.AdaptationField))
-		p.Payload = i.Dump()
+		if p.Payload != nil {
+			var payload []byte
+			if payload, err = i.NextBytesNoCopy(i.Len() - i.Offset()); err != nil {
+				err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
+			}
+			p.Payload = append(p.Payload, payload...)
+		} else {
+			p.Payload = i.Dump()
+		}
 	}
 	return
 }

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sync"
 
 	"github.com/asticode/go-astikit"
 )
@@ -89,6 +90,17 @@ func DemuxerOptPacketsParser(p PacketsParser) func(*Demuxer) {
 func DemuxerOptPacketSkipper(s PacketSkipper) func(*Demuxer) {
 	return func(d *Demuxer) {
 		d.optPacketSkipper = s
+	}
+}
+
+func DemuxerOptPools(pp *sync.Pool, dp *sync.Pool) func(*Demuxer) {
+	return func(_ *Demuxer) {
+		if poolOfPackets.sp == nil {
+			poolOfPackets.sp = pp
+		}
+		if poolOfPESData.sp == nil {
+			poolOfPESData.sp = dp
+		}
 	}
 }
 
