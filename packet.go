@@ -92,10 +92,10 @@ func parsePacket(i *astikit.BytesIterator, s PacketSkipper) (p *Packet, err erro
 	}
 
 	// Create packet
-	p = poolOfPackets.get()
+	p = poolOfPacket.get()
 	defer func() {
 		if err != nil {
-			poolOfPackets.put(p)
+			poolOfPacket.put(p)
 		}
 	}()
 
@@ -119,7 +119,8 @@ func parsePacket(i *astikit.BytesIterator, s PacketSkipper) (p *Packet, err erro
 
 	// Skip packet
 	if s != nil && s(p) {
-		return nil, errSkippedPacket
+		err = errSkippedPacket
+		return nil, err
 	}
 
 	// Build payload
