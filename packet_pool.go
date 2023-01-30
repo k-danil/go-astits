@@ -27,10 +27,9 @@ func (b *packetAccumulator) add(p *Packet) (ps []*Packet) {
 	if hasDiscontinuity(mps, p) {
 		// Reset current slice or get new from pool
 		if cap(mps) > 0 {
-			mps = mps[:0]
-		} else {
-			mps = poolOfPacketSlice.get()
+			poolOfPacket.putSlice(mps)
 		}
+		mps = poolOfPacketSlice.get()
 	}
 
 	// Throw away packet if it's the same as the previous one

@@ -3,6 +3,7 @@ package astits
 import (
 	"bytes"
 	"fmt"
+	"sync"
 	"testing"
 
 	"github.com/asticode/go-astikit"
@@ -260,8 +261,24 @@ func BenchmarkWritePCR(b *testing.B) {
 func BenchmarkParsePacket(b *testing.B) {
 	bs, _ := packet(packetHeader, *packetAdaptationField, []byte("payload"), true)
 
-	for i := 0; i < b.N; i++ {
+	b.Run("ParsePacket", func(b *testing.B) {
 		b.ReportAllocs()
-		parsePacket(astikit.NewBytesIterator(bs), nil)
-	}
+		for i := 0; i < b.N; i++ {
+			parsePacket(astikit.NewBytesIterator(bs), nil)
+		}
+	})
+	b.Run("ParsePacket with pool", func(b *testing.B) {
+		poolOfPacket.sp = &sync.Pool{
+			New: func() interface{} {
+				return &Packet{
+					Payload: make([]byte, 0, MpegTsPacketSize),
+				}
+			},
+		}
+		b.ReportAllocs()
+		for i := 0; i < b.N; i++ {
+			p, _ := parsePacket(astikit.NewBytesIterator(bs), nil)
+			poolOfPacket.put(p)
+		}
+	})
 }

@@ -105,15 +105,15 @@ func (pp *poolPacket) put(p *Packet) {
 	}
 }
 
-// putSlice returns every Packet in slice to pool then return the slice itself to poolPacketSlice
+// putSlice returns every Packet in the slice to pool then return the slice itself to poolPacketSlice
 // Don't use this objects after a call to putSlice
 func (pp *poolPacket) putSlice(ps []*Packet) {
+	defer poolOfPacketSlice.put(ps)
 	if pp.sp != nil {
 		for i := range ps {
 			pp.sp.Put(ps[i])
 		}
 	}
-	poolOfPacketSlice.put(ps)
 }
 
 // poolPESData represent fabric class for the PESData objects

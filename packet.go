@@ -126,15 +126,11 @@ func parsePacket(i *astikit.BytesIterator, s PacketSkipper) (p *Packet, err erro
 	// Build payload
 	if p.Header.HasPayload {
 		i.Seek(payloadOffset(offsetStart, p.Header, p.AdaptationField))
-		if p.Payload != nil {
-			var payload []byte
-			if payload, err = i.NextBytesNoCopy(i.Len() - i.Offset()); err != nil {
-				err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
-			}
-			p.Payload = append(p.Payload, payload...)
-		} else {
-			p.Payload = i.Dump()
+		var payload []byte
+		if payload, err = i.NextBytesNoCopy(i.Len() - i.Offset()); err != nil {
+			err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		}
+		p.Payload = append(p.Payload, payload...)
 	}
 	return
 }
