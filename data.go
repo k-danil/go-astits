@@ -63,11 +63,11 @@ func parseData(ps []*Packet, prs PacketsParser, pm *programMap) (ds []*DemuxerDa
 	// Append payload
 	var c int
 	for _, p := range ps {
-		c += copy(payload[c:], p.Payload)
+		c += copy(payload.s[c:], p.Payload)
 	}
 
 	// Create reader
-	i := astikit.NewBytesIterator(payload)
+	i := astikit.NewBytesIterator(payload.s)
 
 	// Parse PID
 	pid := ps[0].Header.PID
@@ -92,7 +92,7 @@ func parseData(ps []*Packet, prs PacketsParser, pm *programMap) (ds []*DemuxerDa
 
 		// Append data
 		ds = psiData.toData(fp, pid)
-	} else if isPESPayload(payload) {
+	} else if isPESPayload(payload.s) {
 		// Parse PES data
 		var pesData *PESData
 		if pesData, err = parsePESData(i); err != nil {
@@ -145,11 +145,11 @@ func isPSIComplete(ps []*Packet) bool {
 	// Append payload
 	var o int
 	for _, p := range ps {
-		o += copy(payload[o:], p.Payload)
+		o += copy(payload.s[o:], p.Payload)
 	}
 
 	// Create reader
-	i := astikit.NewBytesIterator(payload)
+	i := astikit.NewBytesIterator(payload.s)
 
 	// Get next byte
 	b, err := i.NextByte()
