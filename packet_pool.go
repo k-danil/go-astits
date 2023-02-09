@@ -27,6 +27,7 @@ func (b *packetAccumulator) add(p *Packet) (ps []*Packet) {
 	if hasDiscontinuity(mps, p) {
 		// Reset current slice or make new
 		if cap(mps) > 0 {
+			PoolOfPacket.PutSlice(mps)
 			mps = mps[:0]
 		} else {
 			mps = make([]*Packet, 0, 10)

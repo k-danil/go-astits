@@ -3,7 +3,6 @@ package astits
 import (
 	"bytes"
 	"fmt"
-	"sync"
 	"testing"
 
 	"github.com/asticode/go-astikit"
@@ -264,21 +263,8 @@ func BenchmarkParsePacket(b *testing.B) {
 	b.Run("ParsePacket", func(b *testing.B) {
 		b.ReportAllocs()
 		for i := 0; i < b.N; i++ {
-			parsePacket(astikit.NewBytesIterator(bs), nil)
-		}
-	})
-	b.Run("ParsePacket with pool", func(b *testing.B) {
-		poolOfPacket.sp = &sync.Pool{
-			New: func() interface{} {
-				return &Packet{
-					Payload: make([]byte, 0, MpegTsPacketSize),
-				}
-			},
-		}
-		b.ReportAllocs()
-		for i := 0; i < b.N; i++ {
 			p, _ := parsePacket(astikit.NewBytesIterator(bs), nil)
-			poolOfPacket.put(p)
+			PoolOfPacket.Put(p)
 		}
 	})
 }

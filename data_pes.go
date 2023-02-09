@@ -117,10 +117,10 @@ func (h *PESHeader) IsVideoStream() bool {
 // parsePESData parses a PES data
 func parsePESData(i *astikit.BytesIterator) (d *PESData, err error) {
 	// Create data
-	d = poolOfPESData.get()
+	d = PoolOfPESData.get()
 	defer func() {
 		if err != nil {
-			poolOfPESData.put(d)
+			PoolOfPESData.Put(d)
 		}
 	}()
 

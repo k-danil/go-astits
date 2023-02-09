@@ -14,11 +14,23 @@ var poolOfTempPayload = &poolTempPayload{
 	},
 }
 
-// poolOfPacket global variable is used to ease access to pool from any place of the code
-var poolOfPacket = &poolPacket{}
+// PoolOfPacket global variable is used to ease access to pool from any place of the code
+var PoolOfPacket = &poolPacket{
+	sp: sync.Pool{
+		New: func() interface{} {
+			return &Packet{Payload: make([]byte, 0, MpegTsPacketSize)}
+		},
+	},
+}
 
-// poolOfPESData global variable is used to ease access to pool from any place of the code
-var poolOfPESData = &poolPESData{}
+// PoolOfPESData global variable is used to ease access to pool from any place of the code
+var PoolOfPESData = &poolPESData{
+	sp: sync.Pool{
+		New: func() interface{} {
+			return &PESData{Data: make([]byte, 0, 1024)}
+		},
+	},
+}
 
 // tempPayload is an object containing payload slice
 type tempPayload struct {
@@ -53,19 +65,17 @@ func (ptp *poolTempPayload) put(payload *tempPayload) {
 // poolPESData represent fabric class for the Packet objects
 // If sync.Pool is used and Packet received via Demuxer.NextPacket() than you should dispose it yourself
 type poolPacket struct {
-	sp *sync.Pool
+	sp sync.Pool
 }
 
 // get returns empty Packet
 // If sync.Pool is used than Packet may contain Payload slice, this slice will be reset to zero length
 func (pp *poolPacket) get() (p *Packet) {
-	if pp.sp != nil {
-		if p = pp.sp.Get().(*Packet); p != nil {
-			if p.Payload != nil {
-				*p = Packet{Payload: p.Payload[:0]}
-			} else {
-				*p = Packet{}
-			}
+	if p = pp.sp.Get().(*Packet); p != nil {
+		if p.Payload != nil {
+			*p = Packet{Payload: p.Payload[:0]}
+		} else {
+			*p = Packet{}
 		}
 	}
 	if p == nil {
@@ -74,40 +84,34 @@ func (pp *poolPacket) get() (p *Packet) {
 	return
 }
 
-// put returns Packet back to pool
-// Don't use the Packet and Packet.Payload after a call to put
-func (pp *poolPacket) put(p *Packet) {
-	if pp.sp != nil {
-		pp.sp.Put(p)
-	}
+// Put returns Packet back to pool
+// Don't use the Packet and Packet.Payload after a call to Put
+func (pp *poolPacket) Put(p *Packet) {
+	pp.sp.Put(p)
 }
 
-// putSlice returns every Packet in the slice to pool then return the slice itself to poolPacketSlice
-// Don't use this objects after a call to putSlice
-func (pp *poolPacket) putSlice(ps []*Packet) {
-	if pp.sp != nil {
-		for i := range ps {
-			pp.sp.Put(ps[i])
-		}
+// PutSlice returns every Packet in the slice to pool then return the slice itself to poolPacketSlice
+// Don't use this objects after a call to PutSlice
+func (pp *poolPacket) PutSlice(ps []*Packet) {
+	for i := range ps {
+		pp.sp.Put(ps[i])
 	}
 }
 
 // poolPESData represent fabric class for the PESData objects
 // If sync.Pool is used and PESData received via Demuxer.NextData() than you should dispose it yourself
 type poolPESData struct {
-	sp *sync.Pool
+	sp sync.Pool
 }
 
 // get returns empty PESData
 // If sync.Pool is used than PESData may contain Data slice, this slice will be reset to zero length
 func (ppd *poolPESData) get() (pd *PESData) {
-	if ppd.sp != nil {
-		if pd = ppd.sp.Get().(*PESData); pd != nil {
-			if pd.Data != nil {
-				*pd = PESData{Data: pd.Data[:0]}
-			} else {
-				*pd = PESData{}
-			}
+	if pd = ppd.sp.Get().(*PESData); pd != nil {
+		if pd.Data != nil {
+			*pd = PESData{Data: pd.Data[:0]}
+		} else {
+			*pd = PESData{}
 		}
 	}
 	if pd == nil {
@@ -116,10 +120,16 @@ func (ppd *poolPESData) get() (pd *PESData) {
 	return
 }
 
-// put returns PESData back to pool
-// Don't use the PESData and PESData.Data after a call to put
-func (ppd *poolPESData) put(pd *PESData) {
-	if ppd.sp != nil {
-		ppd.sp.Put(pd)
+// Put returns PESData back to pool
+// Don't use the PESData and PESData.Data after a call to Put
+func (ppd *poolPESData) Put(pd *PESData) {
+	ppd.sp.Put(pd)
+}
+
+// PutSlice returns every Packet in the slice to pool then return the slice itself to poolPacketSlice
+// Don't use this objects after a call to PutSlice
+func (ppd *poolPESData) PutSlice(pd []*PESData) {
+	for i := range pd {
+		ppd.sp.Put(pd[i])
 	}
 }

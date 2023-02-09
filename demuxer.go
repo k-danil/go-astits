@@ -4,10 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
-	"sync"
-
 	"github.com/asticode/go-astikit"
+	"io"
 )
 
 // Sync byte
@@ -90,21 +88,6 @@ func DemuxerOptPacketsParser(p PacketsParser) func(*Demuxer) {
 func DemuxerOptPacketSkipper(s PacketSkipper) func(*Demuxer) {
 	return func(d *Demuxer) {
 		d.optPacketSkipper = s
-	}
-}
-
-// DemuxerOptPools returns the option to set pools for Packet and PESData objects
-// If you only need one of them - set another to nil
-// Users of the Demuxer.NextPacket should dispose Packet's to packetPool
-// Users of the Demuxer.NextData should dispose PESData's to pesPool
-func DemuxerOptPools(packetPool *sync.Pool, pesPool *sync.Pool) func(*Demuxer) {
-	return func(_ *Demuxer) {
-		if poolOfPacket.sp == nil {
-			poolOfPacket.sp = packetPool
-		}
-		if poolOfPESData.sp == nil {
-			poolOfPESData.sp = pesPool
-		}
 	}
 }
 
