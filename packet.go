@@ -145,14 +145,14 @@ func parsePacketHeader(i *astikit.BytesIterator) (h PacketHeader, err error) {
 
 	// Create header
 	return PacketHeader{
-		ContinuityCounter:          uint8(bs[2] & 0xf),
+		ContinuityCounter:          bs[2] & 0xf,
 		HasAdaptationField:         bs[2]&0x20 > 0,
 		HasPayload:                 bs[2]&0x10 > 0,
 		PayloadUnitStartIndicator:  bs[0]&0x40 > 0,
 		PID:                        uint16(bs[0]&0x1f)<<8 | uint16(bs[1]),
 		TransportErrorIndicator:    bs[0]&0x80 > 0,
 		TransportPriority:          bs[0]&0x20 > 0,
-		TransportScramblingControl: uint8(bs[2]) >> 6 & 0x3,
+		TransportScramblingControl: bs[2] >> 6,
 	}, nil
 }
 
@@ -266,8 +266,8 @@ func parsePacketAdaptationField(i *astikit.BytesIterator) (a *PacketAdaptationFi
 						err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 						return
 					}
+					a.AdaptationExtensionField.LegalTimeWindowOffset = uint16(bs[1]) | uint16(bs[0]&0x7f)<<8
 					a.AdaptationExtensionField.LegalTimeWindowIsValid = bs[0]&0x80 > 0
-					a.AdaptationExtensionField.LegalTimeWindowOffset = uint16(bs[0]&0x7f)<<8 | uint16(bs[1])
 				}
 
 				// Piecewise rate
@@ -277,7 +277,7 @@ func parsePacketAdaptationField(i *astikit.BytesIterator) (a *PacketAdaptationFi
 						err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 						return
 					}
-					a.AdaptationExtensionField.PiecewiseRate = uint32(bs[0]&0x3f)<<16 | uint32(bs[1])<<8 | uint32(bs[2])
+					a.AdaptationExtensionField.PiecewiseRate = uint32(bs[2]) | uint32(bs[1])<<8 | uint32(bs[0]&0x3f)<<16
 				}
 
 				// Seamless splice
@@ -289,7 +289,7 @@ func parsePacketAdaptationField(i *astikit.BytesIterator) (a *PacketAdaptationFi
 					}
 
 					// Splice type
-					a.AdaptationExtensionField.SpliceType = uint8(b&0xf0) >> 4
+					a.AdaptationExtensionField.SpliceType = b & 0xf0 >> 4
 
 					// We need to rewind since the current byte is used by the DTS next access unit as well
 					i.Skip(-1)
@@ -317,7 +317,7 @@ func parsePCR(i *astikit.BytesIterator) (cr *ClockReference, err error) {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return
 	}
-	pcr := uint64(bs[0])<<40 | uint64(bs[1])<<32 | uint64(bs[2])<<24 | uint64(bs[3])<<16 | uint64(bs[4])<<8 | uint64(bs[5])
+	pcr := uint64(bs[5]) | uint64(bs[4])<<8 | uint64(bs[3])<<16 | uint64(bs[2])<<24 | uint64(bs[1])<<32 | uint64(bs[0])<<40
 	cr = newClockReference(int64(pcr>>15), int64(pcr&0x1ff))
 	return
 }

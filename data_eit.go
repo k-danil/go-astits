@@ -42,7 +42,7 @@ func parseEITSection(i *astikit.BytesIterator, offsetSectionsEnd int, tableIDExt
 	}
 
 	// Transport stream ID
-	d.TransportStreamID = uint16(bs[0])<<8 | uint16(bs[1])
+	d.TransportStreamID = uint16(bs[1]) | uint16(bs[0])<<8
 
 	// Get next 2 bytes
 	if bs, err = i.NextBytesNoCopy(2); err != nil {
@@ -51,7 +51,7 @@ func parseEITSection(i *astikit.BytesIterator, offsetSectionsEnd int, tableIDExt
 	}
 
 	// Original network ID
-	d.OriginalNetworkID = uint16(bs[0])<<8 | uint16(bs[1])
+	d.OriginalNetworkID = uint16(bs[1]) | uint16(bs[0])<<8
 
 	// Get next byte
 	var b byte
@@ -61,7 +61,7 @@ func parseEITSection(i *astikit.BytesIterator, offsetSectionsEnd int, tableIDExt
 	}
 
 	// Segment last section number
-	d.SegmentLastSectionNumber = uint8(b)
+	d.SegmentLastSectionNumber = b
 
 	// Get next byte
 	if b, err = i.NextByte(); err != nil {
@@ -70,7 +70,7 @@ func parseEITSection(i *astikit.BytesIterator, offsetSectionsEnd int, tableIDExt
 	}
 
 	// Last table ID
-	d.LastTableID = uint8(b)
+	d.LastTableID = b
 
 	// Loop until end of section data is reached
 	for i.Offset() < offsetSectionsEnd {
@@ -82,7 +82,7 @@ func parseEITSection(i *astikit.BytesIterator, offsetSectionsEnd int, tableIDExt
 
 		// Event ID
 		var e = &EITDataEvent{}
-		e.EventID = uint16(bs[0])<<8 | uint16(bs[1])
+		e.EventID = uint16(bs[1]) | uint16(bs[0])<<8
 
 		// Start time
 		if e.StartTime, err = parseDVBTime(i); err != nil {
@@ -103,10 +103,10 @@ func parseEITSection(i *astikit.BytesIterator, offsetSectionsEnd int, tableIDExt
 		}
 
 		// Running status
-		e.RunningStatus = uint8(b) >> 5
+		e.RunningStatus = b >> 5
 
 		// Free CA mode
-		e.HasFreeCSAMode = uint8(b&0x10) > 0
+		e.HasFreeCSAMode = b&0x10 > 0
 
 		// We need to rewind since the current byte is used by the descriptor as well
 		i.Skip(-1)

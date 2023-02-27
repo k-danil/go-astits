@@ -39,7 +39,7 @@ func parsePATSection(i *astikit.BytesIterator, offsetSectionsEnd int, tableIDExt
 
 		// Append program
 		d.Programs = append(d.Programs, &PATProgram{
-			ProgramMapID:  uint16(bs[2]&0x1f)<<8 | uint16(bs[3]),
+			ProgramMapID:  uint16(bs[3]) | uint16(bs[2]&0x1f)<<8,
 			ProgramNumber: uint16(bs[0])<<8 | uint16(bs[1]),
 		})
 	}

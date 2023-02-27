@@ -65,7 +65,7 @@ func parsePMTSection(i *astikit.BytesIterator, offsetSectionsEnd int, tableIDExt
 	}
 
 	// PCR PID
-	d.PCRPID = uint16(bs[0]&0x1f)<<8 | uint16(bs[1])
+	d.PCRPID = uint16(bs[1]) | uint16(bs[0]&0x1f)<<8
 
 	// Program descriptors
 	if d.ProgramDescriptors, err = parseDescriptors(i); err != nil {
@@ -95,7 +95,7 @@ func parsePMTSection(i *astikit.BytesIterator, offsetSectionsEnd int, tableIDExt
 		}
 
 		// Elementary PID
-		e.ElementaryPID = uint16(bs[0]&0x1f)<<8 | uint16(bs[1])
+		e.ElementaryPID = uint16(bs[1]) | uint16(bs[0]&0x1f)<<8
 
 		// Elementary descriptors
 		if e.ElementaryStreamDescriptors, err = parseDescriptors(i); err != nil {

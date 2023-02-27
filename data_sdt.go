@@ -48,7 +48,7 @@ func parseSDTSection(i *astikit.BytesIterator, offsetSectionsEnd int, tableIDExt
 	}
 
 	// Original network ID
-	d.OriginalNetworkID = uint16(bs[0])<<8 | uint16(bs[1])
+	d.OriginalNetworkID = uint16(bs[1]) | uint16(bs[0])<<8
 
 	// Reserved for future use
 	i.Skip(1)
@@ -65,7 +65,7 @@ func parseSDTSection(i *astikit.BytesIterator, offsetSectionsEnd int, tableIDExt
 		}
 
 		// Service ID
-		s.ServiceID = uint16(bs[0])<<8 | uint16(bs[1])
+		s.ServiceID = uint16(bs[1]) | uint16(bs[0])<<8
 
 		// Get next byte
 		var b byte
@@ -75,10 +75,10 @@ func parseSDTSection(i *astikit.BytesIterator, offsetSectionsEnd int, tableIDExt
 		}
 
 		// EIT schedule flag
-		s.HasEITSchedule = uint8(b&0x2) > 0
+		s.HasEITSchedule = b&0x2 > 0
 
 		// EIT present/following flag
-		s.HasEITPresentFollowing = uint8(b&0x1) > 0
+		s.HasEITPresentFollowing = b&0x1 > 0
 
 		// Get next byte
 		if b, err = i.NextByte(); err != nil {
@@ -87,10 +87,10 @@ func parseSDTSection(i *astikit.BytesIterator, offsetSectionsEnd int, tableIDExt
 		}
 
 		// Running status
-		s.RunningStatus = uint8(b) >> 5
+		s.RunningStatus = b >> 5
 
 		// Free CA mode
-		s.HasFreeCSAMode = uint8(b&0x10) > 0
+		s.HasFreeCSAMode = b&0x10 > 0
 
 		// We need to rewind since the current byte is used by the descriptor as well
 		i.Skip(-1)

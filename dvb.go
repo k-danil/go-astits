@@ -23,7 +23,7 @@ func parseDVBTime(i *astikit.BytesIterator) (t time.Time, err error) {
 	}
 
 	// Date
-	var mjd = uint16(bs[0])<<8 | uint16(bs[1])
+	var mjd = uint16(bs[1]) | uint16(bs[0])<<8
 	var yt = int((float64(mjd) - 15078.2) / 365.25)
 	var mt = int((float64(mjd) - 14956.1 - float64(int(float64(yt)*365.25))) / 30.6001)
 	var d = int(float64(mjd) - 14956 - float64(int(float64(yt)*365.25)) - float64(int(float64(mt)*30.6001)))
@@ -53,7 +53,7 @@ func parseDVBDurationMinutes(i *astikit.BytesIterator) (d time.Duration, err err
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return
 	}
-	d = parseDVBDurationByte(bs[0])*time.Hour + parseDVBDurationByte(bs[1])*time.Minute
+	d = parseDVBDurationByte(bs[1])*time.Minute + parseDVBDurationByte(bs[0])*time.Hour
 	return
 }
 
@@ -65,13 +65,13 @@ func parseDVBDurationSeconds(i *astikit.BytesIterator) (d time.Duration, err err
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return
 	}
-	d = parseDVBDurationByte(bs[0])*time.Hour + parseDVBDurationByte(bs[1])*time.Minute + parseDVBDurationByte(bs[2])*time.Second
+	d = parseDVBDurationByte(bs[2])*time.Second + parseDVBDurationByte(bs[1])*time.Minute + parseDVBDurationByte(bs[0])*time.Hour
 	return
 }
 
 // parseDVBDurationByte parses a duration byte
 func parseDVBDurationByte(i byte) time.Duration {
-	return time.Duration(uint8(i)>>4*10 + uint8(i)&0xf)
+	return time.Duration(i>>4*10 + i&0xf)
 }
 
 func writeDVBTime(w *astikit.BitsWriter, t time.Time) (int, error) {

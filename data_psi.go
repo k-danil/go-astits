@@ -193,7 +193,7 @@ func parseCRC32(i *astikit.BytesIterator) (c uint32, err error) {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return
 	}
-	c = uint32(bs[0])<<24 | uint32(bs[1])<<16 | uint32(bs[2])<<8 | uint32(bs[3])
+	c = uint32(bs[3]) | uint32(bs[2])<<8 | uint32(bs[1])<<16 | uint32(bs[0])<<24
 	return
 }
 
@@ -234,14 +234,14 @@ func parsePSISectionHeader(i *astikit.BytesIterator) (h *PSISectionHeader, offse
 		return
 	}
 
+	// Section length
+	h.SectionLength = uint16(bs[1]) | uint16(bs[0]&0xf)<<8
+
 	// Section syntax indicator
 	h.SectionSyntaxIndicator = bs[0]&0x80 > 0
 
 	// Private bit
 	h.PrivateBit = bs[0]&0x40 > 0
-
-	// Section length
-	h.SectionLength = uint16(bs[0]&0xf)<<8 | uint16(bs[1])
 
 	// Offsets
 	offsetSectionsStart = i.Offset()
@@ -364,7 +364,7 @@ func parsePSISectionSyntaxHeader(i *astikit.BytesIterator) (h *PSISectionSyntaxH
 	}
 
 	// Table ID extension
-	h.TableIDExtension = uint16(bs[0])<<8 | uint16(bs[1])
+	h.TableIDExtension = uint16(bs[1]) | uint16(bs[0])<<8
 
 	// Get next byte
 	var b byte
@@ -374,7 +374,7 @@ func parsePSISectionSyntaxHeader(i *astikit.BytesIterator) (h *PSISectionSyntaxH
 	}
 
 	// Version number
-	h.VersionNumber = uint8(b&0x3f) >> 1
+	h.VersionNumber = b & 0x3f >> 1
 
 	// Current/Next indicator
 	h.CurrentNextIndicator = b&0x1 > 0
@@ -386,7 +386,7 @@ func parsePSISectionSyntaxHeader(i *astikit.BytesIterator) (h *PSISectionSyntaxH
 	}
 
 	// Section number
-	h.SectionNumber = uint8(b)
+	h.SectionNumber = b
 
 	// Get next byte
 	if b, err = i.NextByte(); err != nil {
@@ -395,7 +395,7 @@ func parsePSISectionSyntaxHeader(i *astikit.BytesIterator) (h *PSISectionSyntaxH
 	}
 
 	// Last section number
-	h.LastSectionNumber = uint8(b)
+	h.LastSectionNumber = b
 	return
 }
 

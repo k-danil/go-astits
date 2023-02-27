@@ -41,7 +41,7 @@ func parseNITSection(i *astikit.BytesIterator, tableIDExtension uint16) (d *NITD
 	}
 
 	// Transport stream loop length
-	transportStreamLoopLength := int(uint16(bs[0]&0xf)<<8 | uint16(bs[1]))
+	transportStreamLoopLength := int(uint16(bs[1]) | uint16(bs[0]&0xf)<<8)
 
 	// Transport stream loop
 	offsetEnd := i.Offset() + transportStreamLoopLength
@@ -56,7 +56,7 @@ func parseNITSection(i *astikit.BytesIterator, tableIDExtension uint16) (d *NITD
 		}
 
 		// Transport stream ID
-		ts.TransportStreamID = uint16(bs[0])<<8 | uint16(bs[1])
+		ts.TransportStreamID = uint16(bs[1]) | uint16(bs[0])<<8
 
 		// Get next bytes
 		if bs, err = i.NextBytesNoCopy(2); err != nil {
@@ -65,7 +65,7 @@ func parseNITSection(i *astikit.BytesIterator, tableIDExtension uint16) (d *NITD
 		}
 
 		// Original network ID
-		ts.OriginalNetworkID = uint16(bs[0])<<8 | uint16(bs[1])
+		ts.OriginalNetworkID = uint16(bs[1]) | uint16(bs[0])<<8
 
 		// Transport descriptors
 		if ts.TransportDescriptors, err = parseDescriptors(i); err != nil {

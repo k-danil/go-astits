@@ -142,10 +142,10 @@ func newDescriptorAC3(i *astikit.BytesIterator, offsetEnd int) (d *DescriptorAC3
 
 	// Create descriptor
 	d = &DescriptorAC3{
-		HasASVC:          uint8(b&0x10) > 0,
-		HasBSID:          uint8(b&0x40) > 0,
-		HasComponentType: uint8(b&0x80) > 0,
-		HasMainID:        uint8(b&0x20) > 0,
+		HasASVC:          b&0x10 > 0,
+		HasBSID:          b&0x40 > 0,
+		HasComponentType: b&0x80 > 0,
+		HasMainID:        b&0x20 > 0,
 	}
 
 	// Component type
@@ -154,7 +154,7 @@ func newDescriptorAC3(i *astikit.BytesIterator, offsetEnd int) (d *DescriptorAC3
 			err = fmt.Errorf("astits: fetching next byte failed: %w", err)
 			return
 		}
-		d.ComponentType = uint8(b)
+		d.ComponentType = b
 	}
 
 	// BSID
@@ -163,7 +163,7 @@ func newDescriptorAC3(i *astikit.BytesIterator, offsetEnd int) (d *DescriptorAC3
 			err = fmt.Errorf("astits: fetching next byte failed: %w", err)
 			return
 		}
-		d.BSID = uint8(b)
+		d.BSID = b
 	}
 
 	// Main ID
@@ -172,7 +172,7 @@ func newDescriptorAC3(i *astikit.BytesIterator, offsetEnd int) (d *DescriptorAC3
 			err = fmt.Errorf("astits: fetching next byte failed: %w", err)
 			return
 		}
-		d.MainID = uint8(b)
+		d.MainID = b
 	}
 
 	// ASVC
@@ -181,7 +181,7 @@ func newDescriptorAC3(i *astikit.BytesIterator, offsetEnd int) (d *DescriptorAC3
 			err = fmt.Errorf("astits: fetching next byte failed: %w", err)
 			return
 		}
-		d.ASVC = uint8(b)
+		d.ASVC = b
 	}
 
 	// Additional info
@@ -219,7 +219,7 @@ func newDescriptorAVCVideo(i *astikit.BytesIterator) (d *DescriptorAVCVideo, err
 	}
 
 	// Profile idc
-	d.ProfileIDC = uint8(b)
+	d.ProfileIDC = b
 
 	// Get next byte
 	if b, err = i.NextByte(); err != nil {
@@ -240,7 +240,7 @@ func newDescriptorAVCVideo(i *astikit.BytesIterator) (d *DescriptorAVCVideo, err
 	}
 
 	// Level idc
-	d.LevelIDC = uint8(b)
+	d.LevelIDC = b
 
 	// Get next byte
 	if b, err = i.NextByte(); err != nil {
@@ -279,10 +279,10 @@ func newDescriptorComponent(i *astikit.BytesIterator, offsetEnd int) (d *Descrip
 	}
 
 	// Stream content ext
-	d.StreamContentExt = uint8(b >> 4)
+	d.StreamContentExt = b >> 4
 
 	// Stream content
-	d.StreamContent = uint8(b & 0xf)
+	d.StreamContent = b & 0xf
 
 	// Get next byte
 	if b, err = i.NextByte(); err != nil {
@@ -291,7 +291,7 @@ func newDescriptorComponent(i *astikit.BytesIterator, offsetEnd int) (d *Descrip
 	}
 
 	// Component type
-	d.ComponentType = uint8(b)
+	d.ComponentType = b
 
 	// Get next byte
 	if b, err = i.NextByte(); err != nil {
@@ -300,7 +300,7 @@ func newDescriptorComponent(i *astikit.BytesIterator, offsetEnd int) (d *Descrip
 	}
 
 	// Component tag
-	d.ComponentTag = uint8(b)
+	d.ComponentTag = b
 
 	// ISO639 language code
 	if d.ISO639LanguageCode, err = i.NextBytes(3); err != nil {
@@ -347,9 +347,9 @@ func newDescriptorContent(i *astikit.BytesIterator, offsetEnd int) (d *Descripto
 
 		// Append item
 		d.Items = append(d.Items, &DescriptorContentItem{
-			ContentNibbleLevel1: uint8(bs[0] >> 4),
-			ContentNibbleLevel2: uint8(bs[0] & 0xf),
-			UserByte:            uint8(bs[1]),
+			UserByte:            bs[1],
+			ContentNibbleLevel1: bs[0] >> 4,
+			ContentNibbleLevel2: bs[0] & 0xf,
 		})
 	}
 	return
@@ -366,7 +366,7 @@ func newDescriptorDataStreamAlignment(i *astikit.BytesIterator) (d *DescriptorDa
 		err = fmt.Errorf("astits: fetching next byte failed: %w", err)
 		return
 	}
-	d = &DescriptorDataStreamAlignment{Type: uint8(b)}
+	d = &DescriptorDataStreamAlignment{Type: b}
 	return
 }
 
@@ -401,14 +401,14 @@ func newDescriptorEnhancedAC3(i *astikit.BytesIterator, offsetEnd int) (d *Descr
 
 	// Create descriptor
 	d = &DescriptorEnhancedAC3{
-		HasASVC:          uint8(b&0x10) > 0,
-		HasBSID:          uint8(b&0x40) > 0,
-		HasComponentType: uint8(b&0x80) > 0,
-		HasMainID:        uint8(b&0x20) > 0,
-		HasSubStream1:    uint8(b&0x4) > 0,
-		HasSubStream2:    uint8(b&0x2) > 0,
-		HasSubStream3:    uint8(b&0x1) > 0,
-		MixInfoExists:    uint8(b&0x8) > 0,
+		HasASVC:          b&0x10 > 0,
+		HasBSID:          b&0x40 > 0,
+		HasComponentType: b&0x80 > 0,
+		HasMainID:        b&0x20 > 0,
+		HasSubStream1:    b&0x4 > 0,
+		HasSubStream2:    b&0x2 > 0,
+		HasSubStream3:    b&0x1 > 0,
+		MixInfoExists:    b&0x8 > 0,
 	}
 
 	// Component type
@@ -418,7 +418,7 @@ func newDescriptorEnhancedAC3(i *astikit.BytesIterator, offsetEnd int) (d *Descr
 			err = fmt.Errorf("astits: fetching next byte failed: %w", err)
 			return
 		}
-		d.ComponentType = uint8(b)
+		d.ComponentType = b
 	}
 
 	// BSID
@@ -428,7 +428,7 @@ func newDescriptorEnhancedAC3(i *astikit.BytesIterator, offsetEnd int) (d *Descr
 			err = fmt.Errorf("astits: fetching next byte failed: %w", err)
 			return
 		}
-		d.BSID = uint8(b)
+		d.BSID = b
 	}
 
 	// Main ID
@@ -438,7 +438,7 @@ func newDescriptorEnhancedAC3(i *astikit.BytesIterator, offsetEnd int) (d *Descr
 			err = fmt.Errorf("astits: fetching next byte failed: %w", err)
 			return
 		}
-		d.MainID = uint8(b)
+		d.MainID = b
 	}
 
 	// ASVC
@@ -448,7 +448,7 @@ func newDescriptorEnhancedAC3(i *astikit.BytesIterator, offsetEnd int) (d *Descr
 			err = fmt.Errorf("astits: fetching next byte failed: %w", err)
 			return
 		}
-		d.ASVC = uint8(b)
+		d.ASVC = b
 	}
 
 	// Substream 1
@@ -458,7 +458,7 @@ func newDescriptorEnhancedAC3(i *astikit.BytesIterator, offsetEnd int) (d *Descr
 			err = fmt.Errorf("astits: fetching next byte failed: %w", err)
 			return
 		}
-		d.SubStream1 = uint8(b)
+		d.SubStream1 = b
 	}
 
 	// Substream 2
@@ -468,7 +468,7 @@ func newDescriptorEnhancedAC3(i *astikit.BytesIterator, offsetEnd int) (d *Descr
 			err = fmt.Errorf("astits: fetching next byte failed: %w", err)
 			return
 		}
-		d.SubStream2 = uint8(b)
+		d.SubStream2 = b
 	}
 
 	// Substream 3
@@ -478,7 +478,7 @@ func newDescriptorEnhancedAC3(i *astikit.BytesIterator, offsetEnd int) (d *Descr
 			err = fmt.Errorf("astits: fetching next byte failed: %w", err)
 			return
 		}
-		d.SubStream3 = uint8(b)
+		d.SubStream3 = b
 	}
 
 	// Additional info
@@ -520,10 +520,10 @@ func newDescriptorExtendedEvent(i *astikit.BytesIterator) (d *DescriptorExtended
 	}
 
 	// Number
-	d.Number = uint8(b >> 4)
+	d.Number = b >> 4
 
 	// Last descriptor number
-	d.LastDescriptorNumber = uint8(b & 0xf)
+	d.LastDescriptorNumber = b & 0xf
 
 	// ISO639 language code
 	if d.ISO639LanguageCode, err = i.NextBytes(3); err != nil {
@@ -625,7 +625,7 @@ func newDescriptorExtension(i *astikit.BytesIterator, offsetEnd int) (d *Descrip
 	}
 
 	// Create descriptor
-	d = &DescriptorExtension{Tag: uint8(b)}
+	d = &DescriptorExtension{Tag: b}
 
 	// Switch on tag
 	switch d.Tag {
@@ -668,7 +668,7 @@ func newDescriptorExtensionSupplementaryAudio(i *astikit.BytesIterator, offsetEn
 
 	// Init
 	d = &DescriptorExtensionSupplementaryAudio{
-		EditorialClassification: uint8(b >> 2 & 0x1f),
+		EditorialClassification: b >> 2 & 0x1f,
 		HasLanguageCode:         b&0x1 > 0,
 		MixType:                 b&0x80 > 0,
 	}
@@ -711,7 +711,7 @@ func newDescriptorISO639LanguageAndAudioType(i *astikit.BytesIterator, offsetEnd
 	// Create descriptor
 	d = &DescriptorISO639LanguageAndAudioType{
 		Language: bs[0 : len(bs)-1],
-		Type:     uint8(bs[len(bs)-1]),
+		Type:     bs[len(bs)-1],
 	}
 	return
 }
@@ -756,7 +756,7 @@ func newDescriptorLocalTimeOffset(i *astikit.BytesIterator, offsetEnd int) (d *D
 		}
 
 		// Country region ID
-		itm.CountryRegionID = uint8(b >> 2)
+		itm.CountryRegionID = b >> 2
 
 		// Local time offset polarity
 		itm.LocalTimeOffsetPolarity = b&0x1 > 0
@@ -799,7 +799,7 @@ func newDescriptorMaximumBitrate(i *astikit.BytesIterator) (d *DescriptorMaximum
 	}
 
 	// Create descriptor
-	d = &DescriptorMaximumBitrate{Bitrate: (uint32(bs[0]&0x3f)<<16 | uint32(bs[1])<<8 | uint32(bs[2])) * 50}
+	d = &DescriptorMaximumBitrate{Bitrate: (uint32(bs[2]) | uint32(bs[1])<<8 | uint32(bs[0]&0x3f)<<16) * 50}
 	return
 }
 
@@ -858,8 +858,8 @@ func newDescriptorParentalRating(i *astikit.BytesIterator, offsetEnd int) (d *De
 
 		// Append item
 		d.Items = append(d.Items, &DescriptorParentalRatingItem{
-			CountryCode: bs[:3],
-			Rating:      uint8(bs[3]),
+			CountryCode: bs[:len(bs)-1],
+			Rating:      bs[len(bs)-1],
 		})
 	}
 	return
@@ -879,7 +879,7 @@ func newDescriptorPrivateDataIndicator(i *astikit.BytesIterator) (d *DescriptorP
 	}
 
 	// Create descriptor
-	d = &DescriptorPrivateDataIndicator{Indicator: uint32(bs[0])<<24 | uint32(bs[1])<<16 | uint32(bs[2])<<8 | uint32(bs[3])}
+	d = &DescriptorPrivateDataIndicator{Indicator: uint32(bs[3]) | uint32(bs[2])<<8 | uint32(bs[1])<<16 | uint32(bs[0])<<24}
 	return
 }
 
@@ -897,7 +897,7 @@ func newDescriptorPrivateDataSpecifier(i *astikit.BytesIterator) (d *DescriptorP
 	}
 
 	// Create descriptor
-	d = &DescriptorPrivateDataSpecifier{Specifier: uint32(bs[0])<<24 | uint32(bs[1])<<16 | uint32(bs[2])<<8 | uint32(bs[3])}
+	d = &DescriptorPrivateDataSpecifier{Specifier: uint32(bs[3]) | uint32(bs[2])<<8 | uint32(bs[1])<<16 | uint32(bs[0])<<24}
 	return
 }
 
@@ -917,7 +917,7 @@ func newDescriptorRegistration(i *astikit.BytesIterator, offsetEnd int) (d *Desc
 	}
 
 	// Create descriptor
-	d = &DescriptorRegistration{FormatIdentifier: uint32(bs[0])<<24 | uint32(bs[1])<<16 | uint32(bs[2])<<8 | uint32(bs[3])}
+	d = &DescriptorRegistration{FormatIdentifier: uint32(bs[3]) | uint32(bs[2])<<8 | uint32(bs[1])<<16 | uint32(bs[0])<<24}
 
 	// Additional identification info
 	if i.Offset() < offsetEnd {
@@ -946,7 +946,7 @@ func newDescriptorService(i *astikit.BytesIterator) (d *DescriptorService, err e
 	}
 
 	// Create descriptor
-	d = &DescriptorService{Type: uint8(b)}
+	d = &DescriptorService{Type: b}
 
 	// Get next byte
 	if b, err = i.NextByte(); err != nil {
@@ -1043,7 +1043,7 @@ func newDescriptorStreamIdentifier(i *astikit.BytesIterator) (d *DescriptorStrea
 		err = fmt.Errorf("astits: fetching next byte failed: %w", err)
 		return
 	}
-	d = &DescriptorStreamIdentifier{ComponentTag: uint8(b)}
+	d = &DescriptorStreamIdentifier{ComponentTag: b}
 	return
 }
 
@@ -1085,7 +1085,7 @@ func newDescriptorSubtitling(i *astikit.BytesIterator, offsetEnd int) (d *Descri
 		}
 
 		// Type
-		itm.Type = uint8(b)
+		itm.Type = b
 
 		// Get next bytes
 		var bs []byte
@@ -1095,7 +1095,7 @@ func newDescriptorSubtitling(i *astikit.BytesIterator, offsetEnd int) (d *Descri
 		}
 
 		// Composition page ID
-		itm.CompositionPageID = uint16(bs[0])<<8 | uint16(bs[1])
+		itm.CompositionPageID = uint16(bs[1]) | uint16(bs[0])<<8
 
 		// Get next bytes
 		if bs, err = i.NextBytesNoCopy(2); err != nil {
@@ -1104,7 +1104,7 @@ func newDescriptorSubtitling(i *astikit.BytesIterator, offsetEnd int) (d *Descri
 		}
 
 		// Ancillary page ID
-		itm.AncillaryPageID = uint16(bs[0])<<8 | uint16(bs[1])
+		itm.AncillaryPageID = uint16(bs[1]) | uint16(bs[0])<<8
 
 		// Append item
 		d.Items = append(d.Items, itm)
@@ -1150,10 +1150,10 @@ func newDescriptorTeletext(i *astikit.BytesIterator, offsetEnd int) (d *Descript
 		}
 
 		// Type
-		itm.Type = uint8(b) >> 3
+		itm.Type = b >> 3
 
 		// Magazine
-		itm.Magazine = uint8(b & 0x7)
+		itm.Magazine = b & 0x7
 
 		// Get next byte
 		if b, err = i.NextByte(); err != nil {
@@ -1162,7 +1162,7 @@ func newDescriptorTeletext(i *astikit.BytesIterator, offsetEnd int) (d *Descript
 		}
 
 		// Page
-		itm.Page = uint8(b)>>4*10 + uint8(b&0xf)
+		itm.Page = b>>4*10 + b&0xf
 
 		// Append item
 		d.Items = append(d.Items, itm)
@@ -1224,7 +1224,7 @@ func newDescriptorVBIData(i *astikit.BytesIterator, offsetEnd int) (d *Descripto
 		}
 
 		// Data service ID
-		srv.DataServiceID = uint8(b)
+		srv.DataServiceID = b
 
 		// Get next byte
 		if b, err = i.NextByte(); err != nil {
@@ -1254,7 +1254,7 @@ func newDescriptorVBIData(i *astikit.BytesIterator, offsetEnd int) (d *Descripto
 				// Append data
 				srv.Descriptors = append(srv.Descriptors, &DescriptorVBIDataDescriptor{
 					FieldParity: b&0x20 > 0,
-					LineOffset:  uint8(b & 0x1f),
+					LineOffset:  b & 0x1f,
 				})
 			}
 		}
@@ -1275,7 +1275,7 @@ func parseDescriptors(i *astikit.BytesIterator) (o []*Descriptor, err error) {
 	}
 
 	// Get length
-	length := int(uint16(bs[0]&0xf)<<8 | uint16(bs[1]))
+	length := int(uint16(bs[1]) | uint16(bs[0]&0xf)<<8)
 
 	// Loop
 	if length > 0 {
@@ -1289,8 +1289,8 @@ func parseDescriptors(i *astikit.BytesIterator) (o []*Descriptor, err error) {
 
 			// Create descriptor
 			d := &Descriptor{
-				Length: uint8(bs[1]),
-				Tag:    uint8(bs[0]),
+				Length: bs[1],
+				Tag:    bs[0],
 			}
 
 			// Parse data
@@ -1501,7 +1501,7 @@ func writeDescriptorAC3(w *astikit.BitsWriter, d *DescriptorAC3) error {
 	return b.Err()
 }
 
-func calcDescriptorAVCVideoLength(d *DescriptorAVCVideo) uint8 {
+func calcDescriptorAVCVideoLength(_ *DescriptorAVCVideo) uint8 {
 	return 4
 }
 
@@ -1560,7 +1560,7 @@ func writeDescriptorContent(w *astikit.BitsWriter, d *DescriptorContent) error {
 	return b.Err()
 }
 
-func calcDescriptorDataStreamAlignmentLength(d *DescriptorDataStreamAlignment) uint8 {
+func calcDescriptorDataStreamAlignmentLength(_ *DescriptorDataStreamAlignment) uint8 {
 	return 1
 }
 
@@ -1788,7 +1788,7 @@ func writeDescriptorLocalTimeOffset(w *astikit.BitsWriter, d *DescriptorLocalTim
 	return b.Err()
 }
 
-func calcDescriptorMaximumBitrateLength(d *DescriptorMaximumBitrate) uint8 {
+func calcDescriptorMaximumBitrateLength(_ *DescriptorMaximumBitrate) uint8 {
 	return 3
 }
 
@@ -1796,7 +1796,7 @@ func writeDescriptorMaximumBitrate(w *astikit.BitsWriter, d *DescriptorMaximumBi
 	b := astikit.NewBitsWriterBatch(w)
 
 	b.WriteN(uint8(0xff), 2)
-	b.WriteN(uint32(d.Bitrate/50), 22)
+	b.WriteN(d.Bitrate/50, 22)
 
 	return b.Err()
 }
@@ -1828,7 +1828,7 @@ func writeDescriptorParentalRating(w *astikit.BitsWriter, d *DescriptorParentalR
 	return b.Err()
 }
 
-func calcDescriptorPrivateDataIndicatorLength(d *DescriptorPrivateDataIndicator) uint8 {
+func calcDescriptorPrivateDataIndicatorLength(_ *DescriptorPrivateDataIndicator) uint8 {
 	return 4
 }
 
@@ -1840,7 +1840,7 @@ func writeDescriptorPrivateDataIndicator(w *astikit.BitsWriter, d *DescriptorPri
 	return b.Err()
 }
 
-func calcDescriptorPrivateDataSpecifierLength(d *DescriptorPrivateDataSpecifier) uint8 {
+func calcDescriptorPrivateDataSpecifierLength(_ *DescriptorPrivateDataSpecifier) uint8 {
 	return 4
 }
 
@@ -1905,7 +1905,7 @@ func writeDescriptorShortEvent(w *astikit.BitsWriter, d *DescriptorShortEvent) e
 	return b.Err()
 }
 
-func calcDescriptorStreamIdentifierLength(d *DescriptorStreamIdentifier) uint8 {
+func calcDescriptorStreamIdentifierLength(_ *DescriptorStreamIdentifier) uint8 {
 	return 1
 }
 
