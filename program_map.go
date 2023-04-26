@@ -14,7 +14,9 @@ func newProgramMap() *programMap {
 
 // existsUnlocked checks whether the program with this pid exists
 func (m programMap) existsUnlocked(pid uint16) (ok bool) {
-	_, ok = m.p[uint32(pid)]
+	if len(m.p) > 0 {
+		_, ok = m.p[uint32(pid)]
+	}
 	return
 }
 

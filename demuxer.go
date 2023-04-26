@@ -38,7 +38,7 @@ type Demuxer struct {
 
 // PacketsParser represents an object capable of parsing a set of packets containing a unique payload spanning over those packets
 // Use the skip returned argument to indicate whether the default process should still be executed on the set of packets
-type PacketsParser func(ps []*Packet) (ds []*DemuxerData, skip bool, err error)
+type PacketsParser func(pl *PacketList) (ds []*DemuxerData, skip bool, err error)
 
 // PacketSkipper represents an object capable of skipping a packet before parsing its payload. Its header and adaptation field is parsed and provided to the object.
 // Use this option if you need to filter out unwanted packets from your pipeline. NextPacket() will return the next unskipped packet if any.
@@ -136,7 +136,7 @@ func (dmx *Demuxer) nextData() (d *DemuxerData, err error) {
 
 	// Loop through packets
 	var p *Packet
-	var ps []*Packet
+	var pl *PacketList
 	for {
 		// Get next packet
 		if p, err = dmx.nextPacket(); err != nil {
@@ -144,13 +144,12 @@ func (dmx *Demuxer) nextData() (d *DemuxerData, err error) {
 			if err == ErrNoMorePackets {
 				for {
 					// Dump packet pool
-					if ps = dmx.packetPool.dumpUnlocked(); len(ps) == 0 {
+					if pl = dmx.packetPool.dumpUnlocked(); pl.IsEmpty() {
 						break
 					}
 
 					// Parse data
-					ds, errParseData := parseData(ps, dmx.optPacketsParser, dmx.programMap)
-					clearPacketSlice(ps)
+					ds, errParseData := parseData(pl, dmx.optPacketsParser, dmx.programMap)
 					if errParseData != nil {
 						// Log error as there may be some incomplete data here
 						// We still want to try to parse all packets, in case final data is complete
@@ -171,14 +170,13 @@ func (dmx *Demuxer) nextData() (d *DemuxerData, err error) {
 		}
 
 		// Add packet to the pool
-		if ps = dmx.packetPool.addUnlocked(p); len(ps) == 0 {
+		if pl = dmx.packetPool.addUnlocked(p); pl.IsEmpty() {
 			continue
 		}
 
 		// Parse data
 		var ds []*DemuxerData
-		ds, err = parseData(ps, dmx.optPacketsParser, dmx.programMap)
-		clearPacketSlice(ps)
+		ds, err = parseData(pl, dmx.optPacketsParser, dmx.programMap)
 		if err != nil {
 			err = fmt.Errorf("astits: building new data failed: %w", err)
 			return

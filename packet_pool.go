@@ -8,7 +8,7 @@ import (
 type packetAccumulator struct {
 	pid        uint16
 	programMap *programMap
-	q          []*Packet
+	q          *PacketList
 }
 
 // newPacketAccumulator creates a new packet queue for a single PID
@@ -20,40 +20,31 @@ func newPacketAccumulator(pid uint16, programMap *programMap) *packetAccumulator
 }
 
 // add adds a new packet for this PID to the queue
-func (b *packetAccumulator) add(p *Packet) (ps []*Packet) {
+func (b *packetAccumulator) add(p *Packet) (pl *PacketList) {
 	mps := b.q
 
-	// Empty buffer if we detect a discontinuity
-	if hasDiscontinuity(mps, p) {
-		// Reset current slice or make new
-		if cap(mps) > 0 {
-			for _, tp := range mps {
-				tp.Close()
-			}
-			mps = mps[:0]
-		} else {
-			mps = make([]*Packet, 0, 10)
+	if !mps.IsEmpty() {
+		if isSameAsPrevious(mps.GetTail(), p) {
+			return
 		}
+		if hasDiscontinuity(mps.GetTail(), p) {
+			mps.Clear()
+		}
+		if p.Header.PayloadUnitStartIndicator {
+			pl = mps
+			mps = MakePacketList()
+		}
+	} else {
+		mps = MakePacketList()
 	}
 
-	// Throw away packet if it's the same as the previous one
-	if isSameAsPrevious(mps, p) {
-		return
-	}
-
-	// Flush buffer if new payload starts here
-	if p.Header.PayloadUnitStartIndicator {
-		ps = mps
-		mps = make([]*Packet, 0, cap(mps))
-	}
-
-	mps = append(mps, p)
+	mps.Add(p)
 
 	// Check if PSI payload is complete
 	if b.programMap != nil &&
 		(b.pid == PIDPAT || b.programMap.existsUnlocked(b.pid)) &&
 		isPSIComplete(mps) {
-		ps = mps
+		pl = mps
 		mps = nil
 	}
 
@@ -78,7 +69,7 @@ func newPacketPool(programMap *programMap) *packetPool {
 }
 
 // addUnlocked adds a new packet to the pool
-func (b *packetPool) addUnlocked(p *Packet) (ps []*Packet) {
+func (b *packetPool) addUnlocked(p *Packet) (pl *PacketList) {
 	// Throw away packet if error indicator
 	if p.Header.TransportErrorIndicator {
 		return
@@ -102,16 +93,16 @@ func (b *packetPool) addUnlocked(p *Packet) (ps []*Packet) {
 }
 
 // dumpUnlocked dumps the packet pool by looking for the first item with packets inside
-func (b *packetPool) dumpUnlocked() (ps []*Packet) {
+func (b *packetPool) dumpUnlocked() (pl *PacketList) {
 	var keys []int
 	for k := range b.b {
 		keys = append(keys, int(k))
 	}
 	sort.Ints(keys)
 	for _, k := range keys {
-		ps = b.b[uint32(k)].q
+		pl = b.b[uint32(k)].q
 		delete(b.b, uint32(k))
-		if len(ps) > 0 {
+		if !pl.IsEmpty() {
 			return
 		}
 	}
@@ -119,14 +110,13 @@ func (b *packetPool) dumpUnlocked() (ps []*Packet) {
 }
 
 // hasDiscontinuity checks whether a packet is discontinuous with a set of packets
-func hasDiscontinuity(ps []*Packet, p *Packet) bool {
-	l := len(ps)
-	return (p.Header.HasAdaptationField && p.AdaptationField.DiscontinuityIndicator) || (l > 0 && ((p.Header.HasPayload && p.Header.ContinuityCounter != (ps[l-1].Header.ContinuityCounter+1)%16) ||
-		(!p.Header.HasPayload && p.Header.ContinuityCounter != ps[l-1].Header.ContinuityCounter)))
+func hasDiscontinuity(pl *Packet, p *Packet) bool {
+	return (p.Header.HasAdaptationField && p.AdaptationField.DiscontinuityIndicator) || ((p.Header.HasPayload && p.Header.ContinuityCounter != (pl.Header.ContinuityCounter+1)%16) ||
+		(!p.Header.HasPayload && p.Header.ContinuityCounter != pl.Header.ContinuityCounter))
+
 }
 
 // isSameAsPrevious checks whether a packet is the same as the last packet of a set of packets
-func isSameAsPrevious(ps []*Packet, p *Packet) bool {
-	l := len(ps)
-	return l > 0 && p.Header.HasPayload && p.Header.ContinuityCounter == ps[l-1].Header.ContinuityCounter
+func isSameAsPrevious(pl *Packet, p *Packet) bool {
+	return p.Header.HasPayload && p.Header.ContinuityCounter == pl.Header.ContinuityCounter
 }

@@ -36,6 +36,8 @@ type Packet struct {
 	Header          PacketHeader
 	Payload         []byte // This is only the payload content
 
+	bs []byte
+
 	next *Packet
 	prev *Packet
 }
@@ -91,14 +93,12 @@ func NewPacket() *Packet {
 }
 
 func (p *Packet) Close() {
-	*p = Packet{Payload: p.Payload[:0]}
+	p.Reset()
 	PoolOfPacket.Put(p)
 }
 
-func clearPacketSlice(ps []*Packet) {
-	for _, p := range ps {
-		p.Close()
-	}
+func (p *Packet) Reset() {
+	*p = Packet{Payload: p.Payload[:0]}
 }
 
 // parsePacket parses a packet

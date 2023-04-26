@@ -3,42 +3,63 @@ package astits
 type PacketList struct {
 	head *Packet
 	tail *Packet
-	next *Packet
-	size int
+
+	it *Packet
+	s  int
 }
 
-func MakePacketList(p *Packet) *PacketList {
-	return &PacketList{
-		head: p,
-		tail: p,
-		size: len(p.Payload),
-	}
+func MakePacketList() *PacketList {
+	return &PacketList{}
 }
 
 func (pl *PacketList) Add(p *Packet) {
-	pl.tail.next = p
-	p.prev = pl.tail
-	pl.size += len(p.Payload)
+	if pl.head != nil {
+		pl.tail.next = p
+		p.prev = pl.tail
+	} else {
+		pl.head = p
+		pl.it = p
+	}
+	pl.s += len(p.Payload)
 	pl.tail = p
 }
 
-func (pl *PacketList) GetNext() *Packet {
-	ret := pl.next
-	pl.next = pl.next.next
-	return ret
+func (pl *PacketList) GetTail() *Packet {
+	return pl.tail
+}
+
+func (pl *PacketList) GetHead() *Packet {
+	return pl.head
+}
+
+func (pl *PacketList) IteratorNext() *Packet {
+	pl.it = pl.it.next
+	return pl.it
+}
+
+func (pl *PacketList) IteratorPrev() *Packet {
+	pl.it = pl.it.prev
+	return pl.it
+}
+
+func (pl *PacketList) IteratorReset() {
+	pl.it = pl.head
+}
+
+func (pl *PacketList) IsEmpty() bool {
+	return pl == nil || pl.head == nil
 }
 
 func (pl *PacketList) GetSize() int {
-	return pl.size
+	return pl.s
 }
 
 func (pl *PacketList) Clear() {
-	if pl.tail != nil {
-		for p := pl.tail; p != nil; {
-			cur := p
-			p = p.prev
-			*cur = Packet{Payload: cur.Payload[:0]}
-			PoolOfPacket.Put(cur)
-		}
+	for pl.tail != nil {
+		cur := pl.tail
+		pl.tail = cur.prev
+		*cur = Packet{Payload: cur.Payload[:0]}
+		PoolOfPacket.Put(cur)
 	}
+	*pl = PacketList{}
 }

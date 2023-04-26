@@ -25,6 +25,14 @@ type DemuxerData struct {
 	PMT         *PMTData
 	SDT         *SDTData
 	TOT         *TOTData
+
+	internalData *tempPayload
+}
+
+func (d *DemuxerData) Close() {
+	if d.internalData != nil {
+		poolOfTempPayload.put(d.internalData)
+	}
 }
 
 // MuxerData represents a data to be written by Muxer
@@ -35,31 +43,26 @@ type MuxerData struct {
 }
 
 // parseData parses a payload spanning over multiple packets and returns a set of data
-func parseData(ps []*Packet, prs PacketsParser, pm *programMap) (ds []*DemuxerData, err error) {
+func parseData(pl *PacketList, prs PacketsParser, pm *programMap) (ds []*DemuxerData, err error) {
+	defer pl.Clear()
 	// Use custom parser first
 	if prs != nil {
 		var skip bool
-		if ds, skip, err = prs(ps); err != nil {
+		if ds, skip, err = prs(pl); err != nil {
 			err = fmt.Errorf("astits: custom packets parsing failed: %w", err)
 			return
 		} else if skip {
 			return
 		}
-	}
-
-	// Get payload length
-	var l int
-	for _, p := range ps {
-		l += len(p.Payload)
+		pl.IteratorReset()
 	}
 
 	// Get the slice for payload from pool
-	payload := poolOfTempPayload.get(l)
-	defer poolOfTempPayload.put(payload)
+	payload := poolOfTempPayload.get(pl.GetSize())
 
 	// Append payload
 	var c int
-	for _, p := range ps {
+	for p := pl.GetHead(); p != nil; p = pl.IteratorNext() {
 		c += copy(payload.s[c:], p.Payload)
 	}
 
@@ -67,12 +70,12 @@ func parseData(ps []*Packet, prs PacketsParser, pm *programMap) (ds []*DemuxerDa
 	i := astikit.NewBytesIterator(payload.s)
 
 	// Parse PID
-	pid := ps[0].Header.PID
+	pid := pl.GetHead().Header.PID
 
 	// Copy first packet headers, so we can safely deallocate original payload
 	fp := &Packet{
-		Header:          ps[0].Header,
-		AdaptationField: ps[0].AdaptationField,
+		Header:          pl.GetHead().Header,
+		AdaptationField: pl.GetHead().AdaptationField,
 	}
 
 	// Parse payload
@@ -100,9 +103,10 @@ func parseData(ps []*Packet, prs PacketsParser, pm *programMap) (ds []*DemuxerDa
 		// Append data
 		ds = []*DemuxerData{
 			{
-				FirstPacket: fp,
-				PES:         pesData,
-				PID:         pid,
+				FirstPacket:  fp,
+				PES:          pesData,
+				PID:          pid,
+				internalData: payload,
 			},
 		}
 	}
@@ -128,20 +132,15 @@ func isPESPayload(i []byte) bool {
 }
 
 // isPSIComplete checks whether we have sufficient amount of packets to parse PSI
-func isPSIComplete(ps []*Packet) bool {
-	// Get payload length
-	var l int
-	for _, p := range ps {
-		l += len(p.Payload)
-	}
-
+func isPSIComplete(pl *PacketList) bool {
+	defer pl.IteratorReset()
 	// Get the slice for payload from pool
-	payload := poolOfTempPayload.get(l)
+	payload := poolOfTempPayload.get(pl.GetSize())
 	defer poolOfTempPayload.put(payload)
 
 	// Append payload
 	var o int
-	for _, p := range ps {
+	for p := pl.GetHead(); p != nil; p = pl.IteratorNext() {
 		o += copy(payload.s[o:], p.Payload)
 	}
 
