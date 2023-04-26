@@ -2,7 +2,6 @@ package astits
 
 import (
 	"bufio"
-	"errors"
 	"fmt"
 	"io"
 
@@ -136,8 +135,11 @@ func (pb *packetBuffer) next() (p *Packet, err error) {
 		}
 
 		// Parse packet
-		if p, err = parsePacket(astikit.NewBytesIterator(pb.packetReadBuffer), pb.s); err != nil {
-			if !errors.Is(err, errSkippedPacket) {
+		p = NewPacket()
+		if err = p.parsePacket(astikit.NewBytesIterator(pb.packetReadBuffer), pb.s); err != nil {
+			p.Close()
+			p = nil
+			if err != errSkippedPacket {
 				err = fmt.Errorf("astits: building packet failed: %w", err)
 				return
 			}

@@ -91,15 +91,7 @@ func DemuxerOptPacketSkipper(s PacketSkipper) func(*Demuxer) {
 	}
 }
 
-// NextPacket retrieves the next packet
-func (dmx *Demuxer) NextPacket() (p *Packet, err error) {
-	// Check ctx error
-	// TODO Handle ctx error another way since if the read blocks, everything blocks
-	// Maybe execute everything in a goroutine and listen the ctx channel in the same for loop
-	if err = dmx.ctx.Err(); err != nil {
-		return
-	}
-
+func (dmx *Demuxer) nextPacket() (p *Packet, err error) {
 	// Create packet buffer if not exists
 	if dmx.packetBuffer == nil {
 		if dmx.packetBuffer, err = newPacketBuffer(dmx.r, dmx.optPacketSize, dmx.optPacketSkipper); err != nil {
@@ -118,8 +110,23 @@ func (dmx *Demuxer) NextPacket() (p *Packet, err error) {
 	return
 }
 
-// NextData retrieves the next data
-func (dmx *Demuxer) NextData() (d *DemuxerData, err error) {
+// NextPacket retrieves the next packet
+func (dmx *Demuxer) NextPacket() (p *Packet, err error) {
+	select {
+	case <-dmx.ctx.Done():
+		// Check ctx error
+		// TODO Handle ctx error another way since if the read blocks, everything blocks
+		// Maybe execute everything in a goroutine and listen the ctx channel in the same for loop
+		if err = dmx.ctx.Err(); err != nil {
+			return
+		}
+	default:
+		return dmx.nextPacket()
+	}
+	return
+}
+
+func (dmx *Demuxer) nextData() (d *DemuxerData, err error) {
 	// Check data buffer
 	if len(dmx.dataBuffer) > 0 {
 		d = dmx.dataBuffer[0]
@@ -130,10 +137,9 @@ func (dmx *Demuxer) NextData() (d *DemuxerData, err error) {
 	// Loop through packets
 	var p *Packet
 	var ps []*Packet
-	var ds []*DemuxerData
 	for {
 		// Get next packet
-		if p, err = dmx.NextPacket(); err != nil {
+		if p, err = dmx.nextPacket(); err != nil {
 			// If the end of the stream has been reached, we dump the packet pool
 			if err == ErrNoMorePackets {
 				for {
@@ -143,8 +149,9 @@ func (dmx *Demuxer) NextData() (d *DemuxerData, err error) {
 					}
 
 					// Parse data
-					var errParseData error
-					if ds, errParseData = parseData(ps, dmx.optPacketsParser, dmx.programMap); errParseData != nil {
+					ds, errParseData := parseData(ps, dmx.optPacketsParser, dmx.programMap)
+					clearPacketSlice(ps)
+					if errParseData != nil {
 						// Log error as there may be some incomplete data here
 						// We still want to try to parse all packets, in case final data is complete
 						dmx.l.Error(fmt.Errorf("astits: parsing data failed: %w", errParseData))
@@ -169,7 +176,10 @@ func (dmx *Demuxer) NextData() (d *DemuxerData, err error) {
 		}
 
 		// Parse data
-		if ds, err = parseData(ps, dmx.optPacketsParser, dmx.programMap); err != nil {
+		var ds []*DemuxerData
+		ds, err = parseData(ps, dmx.optPacketsParser, dmx.programMap)
+		clearPacketSlice(ps)
+		if err != nil {
 			err = fmt.Errorf("astits: building new data failed: %w", err)
 			return
 		}
@@ -179,6 +189,22 @@ func (dmx *Demuxer) NextData() (d *DemuxerData, err error) {
 			return
 		}
 	}
+}
+
+// NextData retrieves the next data
+func (dmx *Demuxer) NextData() (d *DemuxerData, err error) {
+	select {
+	case <-dmx.ctx.Done():
+		// Check ctx error
+		// TODO Handle ctx error another way since if the read blocks, everything blocks
+		// Maybe execute everything in a goroutine and listen the ctx channel in the same for loop
+		if err = dmx.ctx.Err(); err != nil {
+			return
+		}
+	default:
+		return dmx.nextData()
+	}
+	return
 }
 
 func (dmx *Demuxer) updateData(ds []*DemuxerData) (d *DemuxerData) {

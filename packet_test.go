@@ -45,17 +45,20 @@ func TestParsePacket(t *testing.T) {
 	buf := &bytes.Buffer{}
 	w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: buf})
 	w.Write(uint16(1)) // Invalid sync byte
-	_, err := parsePacket(astikit.NewBytesIterator(buf.Bytes()), nil)
+	p := new(Packet)
+	err := p.parsePacket(astikit.NewBytesIterator(buf.Bytes()), nil)
 	assert.EqualError(t, err, ErrPacketMustStartWithASyncByte.Error())
 
 	// Valid
 	b, ep := packet(packetHeader, *packetAdaptationField, []byte("payload"), true)
-	p, err := parsePacket(astikit.NewBytesIterator(b), nil)
+	p = new(Packet)
+	err = p.parsePacket(astikit.NewBytesIterator(b), nil)
 	assert.NoError(t, err)
 	assert.Equal(t, p, ep)
 
 	// Skip
-	_, err = parsePacket(astikit.NewBytesIterator(b), func(p *Packet) bool { return true })
+	p = new(Packet)
+	err = p.parsePacket(astikit.NewBytesIterator(b), func(p *Packet) bool { return true })
 	assert.EqualError(t, err, errSkippedPacket.Error())
 }
 
@@ -93,7 +96,8 @@ func TestWritePacket_HeaderOnly(t *testing.T) {
 	// we can't just compare bytes returned by packetShort since they're not completely correct,
 	//  so we just cross-check writePacket with parsePacket
 	i := astikit.NewBytesIterator(buf.Bytes())
-	p, err := parsePacket(i, nil)
+	p := new(Packet)
+	err = p.parsePacket(i, nil)
 	assert.NoError(t, err)
 	assert.Equal(t, ep, p)
 }
@@ -123,7 +127,8 @@ func packetHeaderBytes(h PacketHeader, afControl string) []byte {
 }
 
 func TestParsePacketHeader(t *testing.T) {
-	v, err := parsePacketHeader(astikit.NewBytesIterator(packetHeaderBytes(packetHeader, "11")))
+	v := PacketHeader{}
+	err := v.parsePacketHeader(astikit.NewBytesIterator(packetHeaderBytes(packetHeader, "11")))
 	assert.Equal(t, packetHeader, v)
 	assert.NoError(t, err)
 }
@@ -263,8 +268,9 @@ func BenchmarkParsePacket(b *testing.B) {
 	b.Run("ParsePacket", func(b *testing.B) {
 		b.ReportAllocs()
 		for i := 0; i < b.N; i++ {
-			p, _ := parsePacket(astikit.NewBytesIterator(bs), nil)
-			PoolOfPacket.Put(p)
+			p := NewPacket()
+			_ = p.parsePacket(astikit.NewBytesIterator(bs), nil)
+			p.Close()
 		}
 	})
 }

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/asticode/go-astikit"
+	"sync"
 )
 
 // Scrambling Controls
@@ -20,6 +21,12 @@ const (
 	pcrBytesSize           = 6
 )
 
+var PoolOfPacket = sync.Pool{
+	New: func() interface{} {
+		return &Packet{Payload: make([]byte, 0, MpegTsPacketSize)}
+	},
+}
+
 var errSkippedPacket = errors.New("astits: skipped packet")
 
 // Packet represents a packet
@@ -28,6 +35,9 @@ type Packet struct {
 	AdaptationField *PacketAdaptationField
 	Header          PacketHeader
 	Payload         []byte // This is only the payload content
+
+	next *Packet
+	prev *Packet
 }
 
 // PacketHeader represents a packet header
@@ -76,51 +86,53 @@ type PacketAdaptationExtensionField struct {
 	SpliceType             uint8  // Indicates the parameters of the H.262 splice.
 }
 
+func NewPacket() *Packet {
+	return PoolOfPacket.Get().(*Packet)
+}
+
+func (p *Packet) Close() {
+	*p = Packet{Payload: p.Payload[:0]}
+	PoolOfPacket.Put(p)
+}
+
+func clearPacketSlice(ps []*Packet) {
+	for _, p := range ps {
+		p.Close()
+	}
+}
+
 // parsePacket parses a packet
-func parsePacket(i *astikit.BytesIterator, s PacketSkipper) (p *Packet, err error) {
+func (p *Packet) parsePacket(i *astikit.BytesIterator, s PacketSkipper) (err error) {
 	// Get next byte
 	var b byte
 	if b, err = i.NextByte(); err != nil {
-		err = fmt.Errorf("astits: getting next byte failed: %w", err)
-		return
+		return fmt.Errorf("astits: getting next byte failed: %w", err)
 	}
 
 	// Packet must start with a sync byte
 	if b != syncByte {
-		err = ErrPacketMustStartWithASyncByte
-		return
+		return ErrPacketMustStartWithASyncByte
 	}
-
-	// Create packet
-	p = PoolOfPacket.get()
-	defer func() {
-		if err != nil {
-			PoolOfPacket.Put(p)
-		}
-	}()
 
 	// In case packet size is bigger than 188 bytes, we don't care for the first bytes
 	i.Seek(i.Len() - MpegTsPacketSize + 1)
 	offsetStart := i.Offset()
 
 	// Parse header
-	if p.Header, err = parsePacketHeader(i); err != nil {
-		err = fmt.Errorf("astits: parsing packet header failed: %w", err)
-		return
+	if err = p.Header.parsePacketHeader(i); err != nil {
+		return fmt.Errorf("astits: parsing packet header failed: %w", err)
 	}
 
 	// Parse adaptation field
 	if p.Header.HasAdaptationField {
 		if p.AdaptationField, err = parsePacketAdaptationField(i); err != nil {
-			err = fmt.Errorf("astits: parsing packet adaptation field failed: %w", err)
-			return
+			return fmt.Errorf("astits: parsing packet adaptation field failed: %w", err)
 		}
 	}
 
 	// Skip packet
 	if s != nil && s(p) {
-		err = errSkippedPacket
-		return nil, err
+		return errSkippedPacket
 	}
 
 	// Build payload
@@ -128,7 +140,7 @@ func parsePacket(i *astikit.BytesIterator, s PacketSkipper) (p *Packet, err erro
 		i.Seek(payloadOffset(offsetStart, p.Header, p.AdaptationField))
 		var payload []byte
 		if payload, err = i.NextBytesNoCopy(i.Len() - i.Offset()); err != nil {
-			err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
+			return fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		}
 		p.Payload = append(p.Payload, payload...)
 	}
@@ -145,7 +157,7 @@ func payloadOffset(offsetStart int, h PacketHeader, a *PacketAdaptationField) (o
 }
 
 // parsePacketHeader parses the packet header
-func parsePacketHeader(i *astikit.BytesIterator) (h PacketHeader, err error) {
+func (ph *PacketHeader) parsePacketHeader(i *astikit.BytesIterator) (err error) {
 	// Get next bytes
 	var bs []byte
 	if bs, err = i.NextBytesNoCopy(3); err != nil {
@@ -153,17 +165,18 @@ func parsePacketHeader(i *astikit.BytesIterator) (h PacketHeader, err error) {
 		return
 	}
 
-	// Create header
-	return PacketHeader{
-		ContinuityCounter:          uint8(bs[2] & 0xf),
-		HasAdaptationField:         bs[2]&0x20 > 0,
-		HasPayload:                 bs[2]&0x10 > 0,
-		PayloadUnitStartIndicator:  bs[0]&0x40 > 0,
-		PID:                        uint16(bs[0]&0x1f)<<8 | uint16(bs[1]),
-		TransportErrorIndicator:    bs[0]&0x80 > 0,
-		TransportPriority:          bs[0]&0x20 > 0,
-		TransportScramblingControl: uint8(bs[2]) >> 6 & 0x3,
-	}, nil
+	{
+		ph.ContinuityCounter = bs[2] & 0xf
+		ph.HasAdaptationField = bs[2]&0x20 > 0
+		ph.HasPayload = bs[2]&0x10 > 0
+		ph.PayloadUnitStartIndicator = bs[0]&0x40 > 0
+		ph.PID = uint16(bs[0]&0x1f)<<8 | uint16(bs[1])
+		ph.TransportErrorIndicator = bs[0]&0x80 > 0
+		ph.TransportPriority = bs[0]&0x20 > 0
+		ph.TransportScramblingControl = bs[2] >> 6 & 0x3
+	}
+
+	return
 }
 
 // parsePacketAdaptationField parses the packet adaptation field

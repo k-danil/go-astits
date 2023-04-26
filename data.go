@@ -36,9 +36,6 @@ type MuxerData struct {
 
 // parseData parses a payload spanning over multiple packets and returns a set of data
 func parseData(ps []*Packet, prs PacketsParser, pm *programMap) (ds []*DemuxerData, err error) {
-	// Return packet slice to pool after parsing is complete
-	defer PoolOfPacket.PutSlice(ps)
-
 	// Use custom parser first
 	if prs != nil {
 		var skip bool
