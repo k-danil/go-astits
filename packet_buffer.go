@@ -10,10 +10,9 @@ import (
 
 // packetBuffer represents a packet buffer
 type packetBuffer struct {
-	packetSize       int
-	s                PacketSkipper
-	r                io.Reader
-	packetReadBuffer []byte
+	packetSize int
+	s          PacketSkipper
+	r          io.Reader
 }
 
 // newPacketBuffer creates a new packet buffer
@@ -119,12 +118,6 @@ func rewind(r io.Reader) (n int64, err error) {
 // next fetches the next packet from the buffer
 func (pb *packetBuffer) next() (p *Packet, err error) {
 	p = NewPacket()
-	defer func(err *error) {
-		if *err != nil {
-			p.Close()
-		}
-	}(&err)
-
 	bi := astikit.NewBytesIterator(p.bs)
 
 	// Loop to make sure we return a packet even if first packets are skipped
@@ -132,6 +125,7 @@ func (pb *packetBuffer) next() (p *Packet, err error) {
 		bi.Seek(0)
 		p.Reset()
 		if _, err = io.ReadFull(pb.r, p.bs); err != nil {
+			p.Close()
 			if err == io.EOF || err == io.ErrUnexpectedEOF {
 				err = ErrNoMorePackets
 			} else {
@@ -143,6 +137,7 @@ func (pb *packetBuffer) next() (p *Packet, err error) {
 		// Parse packet
 		if err = p.parsePacket(bi, pb.s); err != nil {
 			if err != errSkippedPacket {
+				p.Close()
 				return nil, fmt.Errorf("astits: building packet failed: %w", err)
 			}
 		} else {
@@ -150,7 +145,5 @@ func (pb *packetBuffer) next() (p *Packet, err error) {
 		}
 	}
 
-	err = nil
-
-	return
+	return p, nil
 }

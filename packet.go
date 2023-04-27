@@ -105,12 +105,10 @@ func (p *Packet) Reset() {
 func (p *Packet) parsePacket(i *astikit.BytesIterator, s PacketSkipper) (err error) {
 	// Get next byte
 	var b byte
-	if b, err = i.NextByte(); err != nil {
-		return fmt.Errorf("astits: getting next byte failed: %w", err)
-	}
-
-	// Packet must start with a sync byte
-	if b != syncByte {
+	if b, err = i.NextByte(); err != nil || b != syncByte {
+		if err != nil {
+			return fmt.Errorf("astits: getting next byte failed: %w", err)
+		}
 		return ErrPacketMustStartWithASyncByte
 	}
 
