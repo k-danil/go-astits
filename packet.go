@@ -23,7 +23,7 @@ const (
 
 var PoolOfPacket = sync.Pool{
 	New: func() interface{} {
-		return &Packet{Payload: make([]byte, 0, MpegTsPacketSize)}
+		return &Packet{bs: make([]byte, 188)}
 	},
 }
 
@@ -98,7 +98,7 @@ func (p *Packet) Close() {
 }
 
 func (p *Packet) Reset() {
-	*p = Packet{Payload: p.Payload[:0]}
+	*p = Packet{bs: p.bs[:MpegTsPacketSize]}
 }
 
 // parsePacket parses a packet
@@ -137,21 +137,19 @@ func (p *Packet) parsePacket(i *astikit.BytesIterator, s PacketSkipper) (err err
 
 	// Build payload
 	if p.Header.HasPayload {
-		i.Seek(payloadOffset(offsetStart, p.Header, p.AdaptationField))
-		var payload []byte
-		if payload, err = i.NextBytesNoCopy(i.Len() - i.Offset()); err != nil {
+		i.Seek(p.payloadOffset(offsetStart))
+		if p.Payload, err = i.NextBytesNoCopy(i.Len() - i.Offset()); err != nil {
 			return fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		}
-		p.Payload = append(p.Payload, payload...)
 	}
 	return
 }
 
 // payloadOffset returns the payload offset
-func payloadOffset(offsetStart int, h PacketHeader, a *PacketAdaptationField) (offset int) {
+func (p *Packet) payloadOffset(offsetStart int) (offset int) {
 	offset = offsetStart + 3
-	if h.HasAdaptationField {
-		offset += 1 + a.Length
+	if p.Header.HasAdaptationField {
+		offset += 1 + p.AdaptationField.Length
 	}
 	return
 }
@@ -250,7 +248,7 @@ func parsePacketAdaptationField(i *astikit.BytesIterator) (a *PacketAdaptationFi
 
 			// Data
 			if a.TransportPrivateDataLength > 0 {
-				if a.TransportPrivateData, err = i.NextBytes(a.TransportPrivateDataLength); err != nil {
+				if a.TransportPrivateData, err = i.NextBytesNoCopy(a.TransportPrivateDataLength); err != nil {
 					err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 					return
 				}

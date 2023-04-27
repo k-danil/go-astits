@@ -62,7 +62,7 @@ func parseData(pl *PacketList, prs PacketsParser, pm *programMap) (ds []*Demuxer
 
 	// Append payload
 	var c int
-	for p := pl.GetHead(); p != nil; p = pl.IteratorNext() {
+	for p := pl.IteratorGet(); p != nil; p = pl.IteratorNext() {
 		c += copy(payload.s[c:], p.Payload)
 	}
 
@@ -140,7 +140,7 @@ func isPSIComplete(pl *PacketList) bool {
 
 	// Append payload
 	var o int
-	for p := pl.GetHead(); p != nil; p = pl.IteratorNext() {
+	for p := pl.IteratorGet(); p != nil; p = pl.IteratorNext() {
 		o += copy(payload.s[o:], p.Payload)
 	}
 

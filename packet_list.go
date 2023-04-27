@@ -32,6 +32,10 @@ func (pl *PacketList) GetHead() *Packet {
 	return pl.head
 }
 
+func (pl *PacketList) IteratorGet() *Packet {
+	return pl.it
+}
+
 func (pl *PacketList) IteratorNext() *Packet {
 	pl.it = pl.it.next
 	return pl.it
@@ -58,8 +62,7 @@ func (pl *PacketList) Clear() {
 	for pl.tail != nil {
 		cur := pl.tail
 		pl.tail = cur.prev
-		*cur = Packet{Payload: cur.Payload[:0]}
-		PoolOfPacket.Put(cur)
+		cur.Close()
 	}
 	*pl = PacketList{}
 }
