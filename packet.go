@@ -129,7 +129,7 @@ func (p *Packet) parsePacket(i *astikit.BytesIterator, s PacketSkipper) (err err
 	}
 
 	// Skip packet
-	if s != nil && s(p) {
+	if s(p) {
 		return errSkippedPacket
 	}
 

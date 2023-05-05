@@ -48,10 +48,11 @@ type PacketSkipper func(p *Packet) (skip bool)
 func NewDemuxer(ctx context.Context, r io.Reader, opts ...func(*Demuxer)) (d *Demuxer) {
 	// Init
 	d = &Demuxer{
-		ctx:        ctx,
-		l:          astikit.AdaptStdLogger(nil),
-		programMap: newProgramMap(),
-		r:          r,
+		ctx:              ctx,
+		l:                astikit.AdaptStdLogger(nil),
+		programMap:       newProgramMap(),
+		optPacketSkipper: func(_ *Packet) (skip bool) { return },
+		r:                r,
 	}
 	d.packetPool = newPacketPool(d.programMap)
 
