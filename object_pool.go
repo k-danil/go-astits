@@ -8,7 +8,7 @@ var poolOfTempPayload = &poolTempPayload{
 		New: func() interface{} {
 			// Prepare the slice of somewhat sensible initial size to minimize calls to runtime.growslice
 			return &tempPayload{
-				s: make([]byte, 0, 1024),
+				s: make([]byte, 0, 1<<13),
 			}
 		},
 	},
@@ -18,7 +18,7 @@ var poolOfTempPayload = &poolTempPayload{
 var PoolOfPESData = &poolPESData{
 	sp: sync.Pool{
 		New: func() interface{} {
-			return &PESData{Data: make([]byte, 0, 1024)}
+			return &PESData{Data: make([]byte, 0, 1<<13)}
 		},
 	},
 }
