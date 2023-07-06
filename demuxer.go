@@ -9,7 +9,7 @@ import (
 )
 
 // Sync byte
-const syncByte = '\x47'
+const syncByte byte = '\x47'
 
 // Errors
 var (
@@ -44,6 +44,8 @@ type PacketsParser func(pl *PacketList) (ds []*DemuxerData, skip bool, err error
 // Use this option if you need to filter out unwanted packets from your pipeline. NextPacket() will return the next unskipped packet if any.
 type PacketSkipper func(p *Packet) (skip bool)
 
+var EmptySkipper = func(_ *Packet) (skip bool) { return }
+
 // NewDemuxer creates a new transport stream based on a reader
 func NewDemuxer(ctx context.Context, r io.Reader, opts ...func(*Demuxer)) (d *Demuxer) {
 	// Init
@@ -51,7 +53,7 @@ func NewDemuxer(ctx context.Context, r io.Reader, opts ...func(*Demuxer)) (d *De
 		ctx:              ctx,
 		l:                astikit.AdaptStdLogger(nil),
 		programMap:       newProgramMap(),
-		optPacketSkipper: func(_ *Packet) (skip bool) { return },
+		optPacketSkipper: EmptySkipper,
 		r:                r,
 	}
 	d.packetPool = newPacketPool(d.programMap)

@@ -42,6 +42,8 @@ type Muxer struct {
 	patBytes bytes.Buffer
 	pmtBytes bytes.Buffer
 
+	bb *[8]byte
+
 	buf       bytes.Buffer
 	bufWriter *astikit.BitsWriter
 
@@ -82,6 +84,8 @@ func NewMuxer(ctx context.Context, w io.Writer, opts ...func(*Muxer)) *Muxer {
 			ElementaryStreams: []*PMTElementaryStream{},
 			ProgramNumber:     programNumberStart,
 		},
+
+		bb: new([8]byte),
 
 		// table version is 5-bit field
 		patVersion: newWrappingCounter(0b11111),
@@ -184,8 +188,8 @@ func (m *Muxer) WriteData(d *MuxerData) (int, error) {
 	writeAf := d.AdaptationField != nil
 	payloadBytesWritten := 0
 	for payloadBytesWritten < len(d.PES.Data) {
-		pktLen := 1 + mpegTsPacketHeaderSize // sync byte + header
-		pkt := Packet{
+		pktLen := mpegTsPacketHeaderSize
+		pkt := &Packet{
 			Header: PacketHeader{
 				ContinuityCounter:         uint8(ctx.cc.inc()),
 				HasAdaptationField:        writeAf,
@@ -254,7 +258,7 @@ func (m *Muxer) WriteData(d *MuxerData) (int, error) {
 				}
 			}
 
-			n, err = writePacket(m.bitsWriter, &pkt, m.packetSize)
+			n, err = pkt.writePacket(m.bitsWriter, m.bb, m.packetSize)
 			if err != nil {
 				return bytesWritten, err
 			}
@@ -275,7 +279,7 @@ func (m *Muxer) WriteData(d *MuxerData) (int, error) {
 // Writes given packet to MPEG-TS stream
 // Stuffs with 0xffs if packet turns out to be shorter than target packet length
 func (m *Muxer) WritePacket(p *Packet) (int, error) {
-	return writePacket(m.bitsWriter, p, m.packetSize)
+	return p.writePacket(m.bitsWriter, m.bb, m.packetSize)
 }
 
 func (m *Muxer) retransmitTables(force bool) (int, error) {
@@ -359,7 +363,7 @@ func (m *Muxer) generatePAT() error {
 	m.patBytes.Reset()
 	wPacket := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: &m.patBytes})
 
-	pkt := Packet{
+	pkt := &Packet{
 		Header: PacketHeader{
 			HasPayload:                true,
 			PayloadUnitStartIndicator: true,
@@ -368,7 +372,7 @@ func (m *Muxer) generatePAT() error {
 		},
 		Payload: m.buf.Bytes(),
 	}
-	if _, err := writePacket(wPacket, &pkt, m.packetSize); err != nil {
+	if _, err := pkt.writePacket(wPacket, m.bb, m.packetSize); err != nil {
 		// FIXME save old PAT and rollback to it here maybe?
 		return err
 	}
@@ -427,7 +431,7 @@ func (m *Muxer) generatePMT() error {
 	m.pmtBytes.Reset()
 	wPacket := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: &m.pmtBytes})
 
-	pkt := Packet{
+	pkt := &Packet{
 		Header: PacketHeader{
 			HasPayload:                true,
 			PayloadUnitStartIndicator: true,
@@ -436,7 +440,7 @@ func (m *Muxer) generatePMT() error {
 		},
 		Payload: m.buf.Bytes(),
 	}
-	if _, err := writePacket(wPacket, &pkt, m.packetSize); err != nil {
+	if _, err := pkt.writePacket(wPacket, m.bb, m.packetSize); err != nil {
 		// FIXME save old PMT and rollback to it here maybe?
 		return err
 	}

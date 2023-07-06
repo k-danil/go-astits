@@ -12,7 +12,7 @@ import (
 func patExpectedBytes(versionNumber uint8, cc uint8) []byte {
 	buf := bytes.Buffer{}
 	w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: &buf})
-	w.Write(uint8(syncByte))
+	w.Write(syncByte)
 	w.Write("010") // no transport error, payload start, no priority
 	w.WriteN(PIDPAT, 13)
 	w.Write("0001") // no scrambling, no AF, payload present
@@ -70,7 +70,7 @@ func TestMuxer_generatePAT(t *testing.T) {
 func pmtExpectedBytesVideoOnly(versionNumber, cc uint8) []byte {
 	buf := bytes.Buffer{}
 	w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: &buf})
-	w.Write(uint8(syncByte))
+	w.Write(syncByte)
 	w.Write("010") // no transport error, payload start, no priority
 	w.WriteN(pmtStartPID, 13)
 	w.Write("0001") // no scrambling, no AF, payload present
@@ -110,7 +110,7 @@ func pmtExpectedBytesVideoOnly(versionNumber, cc uint8) []byte {
 func pmtExpectedBytesVideoAndAudio(versionNumber uint8, cc uint8) []byte {
 	buf := bytes.Buffer{}
 	w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: &buf})
-	w.Write(uint8(syncByte))
+	w.Write(syncByte)
 	w.Write("010") // no transport error, payload start, no priority
 	w.WriteN(pmtStartPID, 13)
 	w.Write("0001") // no scrambling, no AF, payload present

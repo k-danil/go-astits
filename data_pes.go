@@ -2,7 +2,6 @@ package astits
 
 import (
 	"fmt"
-
 	"github.com/asticode/go-astikit"
 )
 
@@ -579,24 +578,27 @@ func writePESOptionalHeader(w *astikit.BitsWriter, h *PESOptionalHeader) (int, e
 
 	b := astikit.NewBitsWriterBatch(w)
 
-	b.WriteN(uint8(0b10), 2) // marker bits
-	b.WriteN(h.ScramblingControl, 2)
-	b.Write(h.Priority)
-	b.Write(h.DataAlignmentIndicator)
-	b.Write(h.IsCopyrighted)
-	b.Write(h.IsOriginal)
+	flags := writeBufferPool.Get().(*[8]byte)
+	defer writeBufferPool.Put(flags)
 
-	b.WriteN(h.PTSDTSIndicator, 2)
-	b.Write(h.HasESCR)
-	b.Write(h.HasESRate)
-	b.Write(h.HasDSMTrickMode)
-	b.Write(h.HasAdditionalCopyInfo)
-	b.Write(false) // CRC of previous PES packet. not supported yet
-	//b.Write(h.HasCRC)
-	b.Write(h.HasExtension)
+	flags[0] = uint8(0b10) << 6
+	flags[0] |= h.ScramblingControl << 4
+	flags[0] |= b2u(h.Priority) << 3
+	flags[0] |= b2u(h.DataAlignmentIndicator) << 2
+	flags[0] |= b2u(h.IsCopyrighted) << 1
+	flags[0] |= b2u(h.IsOriginal)
+	flags[1] = h.PTSDTSIndicator << 6
+	flags[1] |= b2u(h.HasESCR) << 5
+	flags[1] |= b2u(h.HasESRate) << 4
+	flags[1] |= b2u(h.HasDSMTrickMode) << 3
+	flags[1] |= b2u(h.HasAdditionalCopyInfo) << 2
+	//flags[1] |= 0 << 1
+	flags[1] |= b2u(h.HasExtension)
+	flags[2] = calcPESOptionalHeaderDataLength(h)
 
-	pesOptionalHeaderDataLength := calcPESOptionalHeaderDataLength(h)
-	b.Write(pesOptionalHeaderDataLength)
+	if err := w.Write(flags[:3]); err != nil {
+		return 0, err
+	}
 
 	bytesWritten := 3
 
@@ -740,15 +742,13 @@ func writeESCR(w *astikit.BitsWriter, cr *ClockReference) (int, error) {
 }
 
 func writePTSOrDTS(w *astikit.BitsWriter, flag uint8, cr *ClockReference) (bytesWritten int, retErr error) {
-	b := astikit.NewBitsWriterBatch(w)
+	pcr := writeBufferPool.Get().(*[8]byte)
+	defer writeBufferPool.Put(pcr)
+	pcr[0] = flag<<4 | uint8(cr.Base>>29) | 1
+	pcr[1] = uint8(cr.Base >> 22)
+	pcr[2] = uint8(cr.Base>>14) | 1
+	pcr[3] = uint8(cr.Base >> 7)
+	pcr[4] = uint8(cr.Base<<1) | 1
 
-	b.WriteN(flag, 4)
-	b.WriteN(uint64(cr.Base>>30), 3)
-	b.Write(true)
-	b.WriteN(uint64(cr.Base>>15), 15)
-	b.Write(true)
-	b.WriteN(uint64(cr.Base), 15)
-	b.Write(true)
-
-	return ptsOrDTSByteLength, b.Err()
+	return ptsOrDTSByteLength, w.Write(pcr[:5])
 }
