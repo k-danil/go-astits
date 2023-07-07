@@ -118,13 +118,13 @@ func rewind(r io.Reader) (n int64, err error) {
 // next fetches the next packet from the buffer
 func (pb *packetBuffer) next() (p *Packet, err error) {
 	p = NewPacket()
-	bi := astikit.NewBytesIterator(p.bs)
+	bi := astikit.NewBytesIterator(p.bs[:])
 
 	// Loop to make sure we return a packet even if first packets are skipped
 	for {
 		bi.Seek(0)
 		p.Reset()
-		if _, err = io.ReadFull(pb.r, p.bs); err != nil {
+		if _, err = io.ReadFull(pb.r, p.bs[:]); err != nil {
 			p.Close()
 			if err == io.EOF || err == io.ErrUnexpectedEOF {
 				err = ErrNoMorePackets
@@ -135,7 +135,7 @@ func (pb *packetBuffer) next() (p *Packet, err error) {
 		}
 
 		// Parse packet
-		if err = p.parsePacket(bi, pb.s); err != nil {
+		if err = p.parse(bi, pb.s); err != nil {
 			if err != errSkippedPacket {
 				p.Close()
 				return nil, fmt.Errorf("astits: building packet failed: %w", err)

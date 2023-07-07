@@ -202,20 +202,20 @@ func (m *Muxer) WriteData(d *MuxerData) (int, error) {
 		if writeAf {
 			pkt.AdaptationField = d.AdaptationField
 			// one byte for adaptation field length field
-			pktLen += 1 + int(calcPacketAdaptationFieldLength(d.AdaptationField))
+			pktLen += 1 + int(d.AdaptationField.calcLength())
 			writeAf = false
 		}
 
 		bytesAvailable := m.packetSize - pktLen
 		if payloadStart {
-			pesHeaderLengthCurrent := pesHeaderLength + int(calcPESOptionalHeaderLength(d.PES.Header.OptionalHeader))
+			pesHeaderLengthCurrent := pesHeaderLength + int(d.PES.Header.OptionalHeader.calcLength())
 			// d.AdaptationField with pes header are too big, we don't have space to write pes header
 			if bytesAvailable < pesHeaderLengthCurrent {
 				pkt.Header.HasAdaptationField = true
 				if pkt.AdaptationField == nil {
 					pkt.AdaptationField = newStuffingAdaptationField(bytesAvailable)
 				} else {
-					pkt.AdaptationField.StuffingLength = bytesAvailable
+					pkt.AdaptationField.StuffingLength = uint8(bytesAvailable)
 				}
 			} else {
 				pkt.Header.HasPayload = true
@@ -231,9 +231,8 @@ func (m *Muxer) WriteData(d *MuxerData) (int, error) {
 				d.PES.Header.StreamID = ctx.es.StreamType.ToPESStreamID()
 			}
 
-			ntot, npayload, err := writePESData(
+			ntot, npayload, err := d.PES.Header.writePESData(
 				m.bufWriter,
-				d.PES.Header,
 				d.PES.Data[payloadBytesWritten:],
 				payloadStart,
 				bytesAvailable,
@@ -254,11 +253,11 @@ func (m *Muxer) WriteData(d *MuxerData) (int, error) {
 				if pkt.AdaptationField == nil {
 					pkt.AdaptationField = newStuffingAdaptationField(bytesAvailable)
 				} else {
-					pkt.AdaptationField.StuffingLength = bytesAvailable
+					pkt.AdaptationField.StuffingLength = uint8(bytesAvailable)
 				}
 			}
 
-			n, err = pkt.writePacket(m.bitsWriter, m.bb, m.packetSize)
+			n, err = pkt.write(m.bitsWriter, m.bb, m.packetSize)
 			if err != nil {
 				return bytesWritten, err
 			}
@@ -279,7 +278,7 @@ func (m *Muxer) WriteData(d *MuxerData) (int, error) {
 // Writes given packet to MPEG-TS stream
 // Stuffs with 0xffs if packet turns out to be shorter than target packet length
 func (m *Muxer) WritePacket(p *Packet) (int, error) {
-	return p.writePacket(m.bitsWriter, m.bb, m.packetSize)
+	return p.write(m.bitsWriter, m.bb, m.packetSize)
 }
 
 func (m *Muxer) retransmitTables(force bool) (int, error) {
@@ -372,7 +371,7 @@ func (m *Muxer) generatePAT() error {
 		},
 		Payload: m.buf.Bytes(),
 	}
-	if _, err := pkt.writePacket(wPacket, m.bb, m.packetSize); err != nil {
+	if _, err := pkt.write(wPacket, m.bb, m.packetSize); err != nil {
 		// FIXME save old PAT and rollback to it here maybe?
 		return err
 	}
@@ -440,7 +439,7 @@ func (m *Muxer) generatePMT() error {
 		},
 		Payload: m.buf.Bytes(),
 	}
-	if _, err := pkt.writePacket(wPacket, m.bb, m.packetSize); err != nil {
+	if _, err := pkt.write(wPacket, m.bb, m.packetSize); err != nil {
 		// FIXME save old PMT and rollback to it here maybe?
 		return err
 	}

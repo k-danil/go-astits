@@ -135,7 +135,7 @@ func TestWriteDSMTrickMode(t *testing.T) {
 			bufActual := &bytes.Buffer{}
 			wActual := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: bufActual})
 
-			n, err := writeDSMTrickMode(wActual, tc.trickMode)
+			n, err := tc.trickMode.writeDSMTrickMode(wActual)
 			assert.NoError(t, err)
 			assert.Equal(t, 1, n)
 			assert.Equal(t, n, bufActual.Len())
@@ -183,7 +183,8 @@ func TestParsePTSOrDTS(t *testing.T) {
 func TestWritePTSOrDTS(t *testing.T) {
 	buf := &bytes.Buffer{}
 	w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: buf})
-	n, err := writePTSOrDTS(w, uint8(0b0010), dtsClockReference)
+	bb := new([8]byte)
+	n, err := writePTSOrDTS(w, bb, uint8(0b0010), dtsClockReference)
 	assert.NoError(t, err)
 	assert.Equal(t, n, 5)
 	assert.Equal(t, n, buf.Len())
@@ -423,9 +424,8 @@ func TestWritePESData(t *testing.T) {
 			payloadPos := 0
 
 			for payloadPos+1 < len(tc.pesData.Data) {
-				n, payloadN, err := writePESData(
+				n, payloadN, err := tc.pesData.Header.writePESData(
 					wActual,
-					tc.pesData.Header,
 					tc.pesData.Data[payloadPos:],
 					start,
 					MpegTsPacketSize-mpegTsPacketHeaderSize,
@@ -455,7 +455,8 @@ func TestWritePESHeader(t *testing.T) {
 			bufActual := bytes.Buffer{}
 			wActual := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: &bufActual})
 
-			n, err := writePESHeader(wActual, tc.pesData.Header, len(tc.pesData.Data))
+			bb := new([8]byte)
+			n, err := tc.pesData.Header.write(wActual, bb, len(tc.pesData.Data))
 			assert.NoError(t, err)
 			assert.Equal(t, n, bufActual.Len())
 			assert.Equal(t, bufExpected.Len(), bufActual.Len())
@@ -474,7 +475,8 @@ func TestWritePESOptionalHeader(t *testing.T) {
 			bufActual := bytes.Buffer{}
 			wActual := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: &bufActual})
 
-			n, err := writePESOptionalHeader(wActual, tc.pesData.Header.OptionalHeader)
+			bb := new([8]byte)
+			n, err := tc.pesData.Header.OptionalHeader.write(wActual, bb)
 			assert.NoError(t, err)
 			assert.Equal(t, n, bufActual.Len())
 			assert.Equal(t, bufExpected.Len(), bufActual.Len())
