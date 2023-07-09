@@ -126,6 +126,7 @@ func TestParseDSMTrickMode(t *testing.T) {
 }
 
 func TestWriteDSMTrickMode(t *testing.T) {
+	bb := new([8]byte)
 	for _, tc := range dsmTrickModeTestCases {
 		t.Run(tc.name, func(t *testing.T) {
 			bufExpected := &bytes.Buffer{}
@@ -135,7 +136,7 @@ func TestWriteDSMTrickMode(t *testing.T) {
 			bufActual := &bytes.Buffer{}
 			wActual := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: bufActual})
 
-			n, err := tc.trickMode.writeDSMTrickMode(wActual)
+			n, err := tc.trickMode.writeDSMTrickMode(wActual, bb)
 			assert.NoError(t, err)
 			assert.Equal(t, 1, n)
 			assert.Equal(t, n, bufActual.Len())
@@ -144,7 +145,7 @@ func TestWriteDSMTrickMode(t *testing.T) {
 	}
 }
 
-var ptsClockReference = &ClockReference{Base: 5726623061}
+var ptsClockReference = ClockReference{Base: 5726623061}
 
 func ptsBytes(flag string) []byte {
 	buf := &bytes.Buffer{}
@@ -159,7 +160,7 @@ func ptsBytes(flag string) []byte {
 	return buf.Bytes()
 }
 
-var dtsClockReference = &ClockReference{Base: 5726623060}
+var dtsClockReference = ClockReference{Base: 5726623060}
 
 func dtsBytes(flag string) []byte {
 	buf := &bytes.Buffer{}
@@ -175,7 +176,8 @@ func dtsBytes(flag string) []byte {
 }
 
 func TestParsePTSOrDTS(t *testing.T) {
-	v, err := parsePTSOrDTS(astikit.NewBytesIterator(ptsBytes("0010")))
+	var v ClockReference
+	err := v.parsePTSOrDTS(astikit.NewBytesIterator(ptsBytes("0010")))
 	assert.Equal(t, v, ptsClockReference)
 	assert.NoError(t, err)
 }
@@ -184,7 +186,7 @@ func TestWritePTSOrDTS(t *testing.T) {
 	buf := &bytes.Buffer{}
 	w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: buf})
 	bb := new([8]byte)
-	n, err := writePTSOrDTS(w, bb, uint8(0b0010), dtsClockReference)
+	n, err := dtsClockReference.writePTSOrDTS(w, bb, uint8(0b0010))
 	assert.NoError(t, err)
 	assert.Equal(t, n, 5)
 	assert.Equal(t, n, buf.Len())
@@ -207,7 +209,8 @@ func escrBytes() []byte {
 }
 
 func TestParseESCR(t *testing.T) {
-	v, err := parseESCR(astikit.NewBytesIterator(escrBytes()))
+	var v ClockReference
+	err := v.parseESCR(astikit.NewBytesIterator(escrBytes()))
 	assert.Equal(t, v, clockReference)
 	assert.NoError(t, err)
 }
@@ -215,7 +218,8 @@ func TestParseESCR(t *testing.T) {
 func TestWriteESCR(t *testing.T) {
 	buf := &bytes.Buffer{}
 	w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: buf})
-	n, err := writeESCR(w, clockReference)
+	bb := new([8]byte)
+	n, err := clockReference.writeESCR(w, bb)
 	assert.NoError(t, err)
 	assert.Equal(t, n, 6)
 	assert.Equal(t, n, buf.Len())
@@ -246,7 +250,7 @@ var pesTestCases = []pesTestCase{
 		},
 		&PESData{
 			Data: []byte("data"),
-			Header: &PESHeader{
+			Header: PESHeader{
 				PacketLength: 4,
 				StreamID:     StreamIDPaddingStream,
 			},
@@ -332,7 +336,7 @@ var pesTestCases = []pesTestCase{
 		},
 		&PESData{
 			Data: []byte("data"),
-			Header: &PESHeader{
+			Header: PESHeader{
 				OptionalHeader: &PESOptionalHeader{
 					AdditionalCopyInfo:              127,
 					CRC:                             4,
@@ -461,6 +465,24 @@ func TestWritePESHeader(t *testing.T) {
 			assert.Equal(t, n, bufActual.Len())
 			assert.Equal(t, bufExpected.Len(), bufActual.Len())
 			assert.Equal(t, bufExpected.Bytes(), bufActual.Bytes())
+		})
+	}
+}
+
+func BenchmarkWritePESHeader(b *testing.B) {
+	buf := &bytes.Buffer{}
+	buf.Grow(100)
+	w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: buf})
+
+	bb := new([8]byte)
+
+	for _, tc := range pesTestCases {
+		b.Run(tc.name, func(b *testing.B) {
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				buf.Reset()
+				tc.pesData.Header.write(w, bb, len(tc.pesData.Data))
+			}
 		})
 	}
 }

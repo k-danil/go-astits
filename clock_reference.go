@@ -11,19 +11,19 @@ type ClockReference struct {
 }
 
 // newClockReference builds a new clock reference
-func newClockReference(base, extension int64) *ClockReference {
-	return &ClockReference{
+func newClockReference(base, extension int64) ClockReference {
+	return ClockReference{
 		Base:      base,
 		Extension: extension,
 	}
 }
 
 // Duration converts the clock reference into duration
-func (p ClockReference) Duration() time.Duration {
-	return time.Duration(p.Base*1e9/90000) + time.Duration(p.Extension*1e9/27000000)
+func (cr *ClockReference) Duration() time.Duration {
+	return time.Duration(cr.Base*1e9/90000) + time.Duration(cr.Extension*1e9/27000000)
 }
 
 // Time converts the clock reference into time
-func (p ClockReference) Time() time.Time {
-	return time.Unix(0, p.Duration().Nanoseconds())
+func (cr *ClockReference) Time() time.Time {
+	return time.Unix(0, cr.Duration().Nanoseconds())
 }

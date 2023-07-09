@@ -59,10 +59,10 @@ func (pl *PacketList) GetSize() int {
 }
 
 func (pl *PacketList) Clear() {
-	for pl.tail != nil {
-		cur := pl.tail
-		pl.tail = cur.prev
+	tail := pl.tail
+	for tail != nil {
+		cur := tail
+		tail = cur.prev
 		cur.Close()
 	}
-	*pl = PacketList{}
 }
