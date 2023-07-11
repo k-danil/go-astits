@@ -170,7 +170,6 @@ func (ph *PacketHeader) parse(i *astikit.BytesIterator) (err error) {
 	ph.PayloadUnitStartIndicator = b&0x40 > 0
 	ph.TransportPriority = b&0x20 > 0
 	ph.PID = (uint16(bs[1]) | uint16(bs[0])<<8) & 0x1fff
-
 	return
 }
 
