@@ -8,4 +8,6 @@ require (
 	github.com/stretchr/testify v1.4.0
 )
 
-replace github.com/asticode/go-astikit => github.com/k-danil/go-astikit v0.0.0-20230427103827-d9b33e22c130
+replace github.com/asticode/go-astikit => github.com/k-danil/go-astikit v0.0.0-20230711075608-2d65e9e2ada8
+
+//replace github.com/asticode/go-astikit => /Users/danil/Project/go-astikit

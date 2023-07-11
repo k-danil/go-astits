@@ -1,7 +1,6 @@
 package astits
 
 import (
-	"errors"
 	"fmt"
 	"github.com/asticode/go-astikit"
 	"sync"
@@ -28,15 +27,13 @@ var PoolOfPacket = sync.Pool{
 	},
 }
 
-var errSkippedPacket = errors.New("astits: skipped packet")
-
 // Packet represents a packet
 // https://en.wikipedia.org/wiki/MPEG_transport_stream
 type Packet struct {
 	bs [MpegTsPacketSize]byte
 
-	AdaptationField *PacketAdaptationField
 	Header          PacketHeader
+	AdaptationField *PacketAdaptationField
 	Payload         []byte // This is only the payload content
 
 	next *Packet
@@ -89,8 +86,9 @@ type PacketAdaptationExtensionField struct {
 	SpliceType             uint8 // Indicates the parameters of the H.262 splice.
 }
 
-func NewPacket() *Packet {
-	return PoolOfPacket.Get().(*Packet)
+func NewPacket() (p *Packet) {
+	p, _ = PoolOfPacket.Get().(*Packet)
+	return
 }
 
 func (p *Packet) Close() {
@@ -102,13 +100,13 @@ func (p *Packet) Reset() {
 }
 
 // parsePacket parses a packet
-func (p *Packet) parse(i *astikit.BytesIterator, s PacketSkipper) error {
+func (p *Packet) parse(i *astikit.BytesIterator, s PacketSkipper) (bool, error) {
 	// Get next byte
 	if b, err := i.NextByte(); err != nil || b != syncByte {
 		if err != nil {
-			return fmt.Errorf("astits: getting next byte failed: %w", err)
+			return false, fmt.Errorf("astits: getting next byte failed: %w", err)
 		}
-		return ErrPacketMustStartWithASyncByte
+		return false, ErrPacketMustStartWithASyncByte
 	}
 
 	// In case packet size is bigger than 188 bytes, we don't care for the first bytes
@@ -117,19 +115,19 @@ func (p *Packet) parse(i *astikit.BytesIterator, s PacketSkipper) error {
 
 	// Parse header
 	if err := p.Header.parse(i); err != nil {
-		return fmt.Errorf("astits: parsing packet header failed: %w", err)
+		return false, fmt.Errorf("astits: parsing packet header failed: %w", err)
 	}
 
 	// Skip packet
 	if s(p) {
-		return errSkippedPacket
+		return true, nil
 	}
 
 	// Parse adaptation field
 	if p.Header.HasAdaptationField {
 		p.AdaptationField = &PacketAdaptationField{}
 		if err := p.AdaptationField.parse(i); err != nil {
-			return fmt.Errorf("astits: parsing packet adaptation field failed: %w", err)
+			return false, fmt.Errorf("astits: parsing packet adaptation field failed: %w", err)
 		}
 	}
 
@@ -138,10 +136,10 @@ func (p *Packet) parse(i *astikit.BytesIterator, s PacketSkipper) error {
 		i.Seek(p.payloadOffset(offsetStart))
 		var err error
 		if p.Payload, err = i.NextBytesNoCopy(i.Len() - i.Offset()); err != nil {
-			return fmt.Errorf("astits: fetching next bytes failed: %w", err)
+			return false, fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		}
 	}
-	return nil
+	return false, nil
 }
 
 // payloadOffset returns the payload offset
@@ -171,7 +169,7 @@ func (ph *PacketHeader) parse(i *astikit.BytesIterator) (err error) {
 	ph.TransportErrorIndicator = b&0x80 > 0
 	ph.PayloadUnitStartIndicator = b&0x40 > 0
 	ph.TransportPriority = b&0x20 > 0
-	ph.PID = uint16(b&0x1f)<<8 | uint16(bs[1])
+	ph.PID = (uint16(bs[1]) | uint16(bs[0])<<8) & 0x1fff
 
 	return
 }
@@ -339,7 +337,7 @@ func (cr *ClockReference) parsePCR(i *astikit.BytesIterator) (err error) {
 	}
 	_ = bs[5]
 	pcr := uint64(bs[0])<<40 | uint64(bs[1])<<32 | uint64(bs[2])<<24 | uint64(bs[3])<<16 | uint64(bs[4])<<8 | uint64(bs[5])
-	*cr = newClockReference(int64(pcr>>15), int64(pcr&0x1ff))
+	*cr = newClockReference(pcr>>15, pcr&0x1ff)
 	return
 }
 
@@ -410,12 +408,12 @@ func (ph *PacketHeader) write(w *astikit.BitsWriter, bb *[8]byte) (int, error) {
 }
 
 func (cr *ClockReference) writePCR(w *astikit.BitsWriter, bb *[8]byte) (int, error) {
-	bb[0] = uint8(cr.Base >> 25)
-	bb[1] = uint8(cr.Base >> 17)
-	bb[2] = uint8(cr.Base >> 9)
-	bb[3] = uint8(cr.Base >> 1)
-	bb[4] = uint8(cr.Base<<7) | 0x7e | uint8(cr.Extension>>8)
-	bb[5] = uint8(cr.Extension)
+	bb[0] = uint8(cr.Base() >> 25)
+	bb[1] = uint8(cr.Base() >> 17)
+	bb[2] = uint8(cr.Base() >> 9)
+	bb[3] = uint8(cr.Base() >> 1)
+	bb[4] = uint8(cr.Base()<<7) | 0x7e | uint8(cr.Extension()>>8)
+	bb[5] = uint8(cr.Extension())
 
 	return pcrBytesSize, w.Write(bb[:6])
 }

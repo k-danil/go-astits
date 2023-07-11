@@ -382,7 +382,7 @@ func (cr *ClockReference) parsePTSOrDTS(i *astikit.BytesIterator) (err error) {
 		return
 	}
 	_ = bs[4]
-	*cr = newClockReference(int64(uint64(bs[0])>>1&0x7<<30|uint64(bs[1])<<22|uint64(bs[2])>>1&0x7f<<15|uint64(bs[3])<<7|uint64(bs[4])>>1&0x7f), 0)
+	*cr = newClockReference(uint64(bs[0])>>1&0x7<<30|uint64(bs[1])<<22|uint64(bs[2])>>1&0x7f<<15|uint64(bs[3])<<7|uint64(bs[4])>>1&0x7f, 0)
 	return
 }
 
@@ -395,7 +395,7 @@ func (cr *ClockReference) parseESCR(i *astikit.BytesIterator) (err error) {
 	}
 	_ = bs[5]
 	escr := uint64(bs[0])>>3&0x7<<39 | uint64(bs[0])&0x3<<37 | uint64(bs[1])<<29 | uint64(bs[2])>>3<<24 | uint64(bs[2])&0x3<<22 | uint64(bs[3])<<14 | uint64(bs[4])>>3<<9 | uint64(bs[4])&0x3<<7 | uint64(bs[5])>>1
-	*cr = newClockReference(int64(escr>>9), int64(escr&0x1ff))
+	*cr = newClockReference(escr>>9, escr&0x1ff)
 	return
 }
 
@@ -681,22 +681,22 @@ func (m *DSMTrickMode) writeDSMTrickMode(w *astikit.BitsWriter, bb *[8]byte) (in
 }
 
 func (cr *ClockReference) writeESCR(w *astikit.BitsWriter, bb *[8]byte) (int, error) {
-	bb[0] = 0xc0 | uint8((cr.Base>>27)&0x38) | 0x04 | uint8((cr.Base>>28)&0x03)
-	bb[1] = uint8(cr.Base >> 20)
-	bb[2] = uint8((cr.Base>>13)&0x3) | 0x4 | uint8((cr.Base>>12)&0xf8)
-	bb[3] = uint8(cr.Base >> 5)
-	bb[4] = uint8(cr.Extension>>7) | 0x4 | uint8(cr.Base<<3)
-	bb[5] = uint8(cr.Extension<<1) | 0x1
+	bb[0] = 0xc0 | uint8((cr.Base()>>27)&0x38) | 0x04 | uint8((cr.Base()>>28)&0x03)
+	bb[1] = uint8(cr.Base() >> 20)
+	bb[2] = uint8((cr.Base()>>13)&0x3) | 0x4 | uint8((cr.Base()>>12)&0xf8)
+	bb[3] = uint8(cr.Base() >> 5)
+	bb[4] = uint8(cr.Extension()>>7) | 0x4 | uint8(cr.Base()<<3)
+	bb[5] = uint8(cr.Extension()<<1) | 0x1
 
 	return escrLength, w.Write(bb[:6])
 }
 
 func (cr *ClockReference) writePTSOrDTS(w *astikit.BitsWriter, bb *[8]byte, flag uint8) (bytesWritten int, retErr error) {
-	bb[0] = flag<<4 | uint8(cr.Base>>29) | 1
-	bb[1] = uint8(cr.Base >> 22)
-	bb[2] = uint8(cr.Base>>14) | 1
-	bb[3] = uint8(cr.Base >> 7)
-	bb[4] = uint8(cr.Base<<1) | 1
+	bb[0] = flag<<4 | uint8(cr.Base()>>29) | 1
+	bb[1] = uint8(cr.Base() >> 22)
+	bb[2] = uint8(cr.Base()>>14) | 1
+	bb[3] = uint8(cr.Base() >> 7)
+	bb[4] = uint8(cr.Base()<<1) | 1
 
 	return ptsOrDTSByteLength, w.Write(bb[:5])
 }

@@ -65,4 +65,5 @@ func (pl *PacketList) Clear() {
 		tail = cur.prev
 		cur.Close()
 	}
+	*pl = PacketList{}
 }

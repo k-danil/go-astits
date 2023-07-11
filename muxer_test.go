@@ -277,11 +277,8 @@ func TestMuxer_WritePayload(t *testing.T) {
 	assert.NoError(t, err)
 
 	payload := testPayload()
-	pcr := ClockReference{
-		Base:      5726623061,
-		Extension: 341,
-	}
-	pts := ClockReference{Base: 5726623060}
+	pcr := newClockReference(5726623061, 341)
+	pts := newClockReference(5726623060, 0)
 
 	n, err := muxer.WriteData(&MuxerData{
 		PID: 0x1234,

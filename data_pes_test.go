@@ -145,7 +145,7 @@ func TestWriteDSMTrickMode(t *testing.T) {
 	}
 }
 
-var ptsClockReference = ClockReference{Base: 5726623061}
+var ptsClockReference = newClockReference(5726623061, 0)
 
 func ptsBytes(flag string) []byte {
 	buf := &bytes.Buffer{}
@@ -160,7 +160,7 @@ func ptsBytes(flag string) []byte {
 	return buf.Bytes()
 }
 
-var dtsClockReference = ClockReference{Base: 5726623060}
+var dtsClockReference = newClockReference(5726623060, 0)
 
 func dtsBytes(flag string) []byte {
 	buf := &bytes.Buffer{}

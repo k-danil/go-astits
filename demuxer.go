@@ -105,10 +105,7 @@ func (dmx *Demuxer) nextPacket() (p *Packet, err error) {
 
 	// Fetch next packet from buffer
 	if p, err = dmx.packetBuffer.next(); err != nil {
-		if err != ErrNoMorePackets {
-			err = fmt.Errorf("astits: fetching next packet from buffer failed: %w", err)
-		}
-		return
+		err = fmt.Errorf("astits: fetching next packet from buffer failed: %w", err)
 	}
 	return
 }
