@@ -1,6 +1,7 @@
 package astits
 
 import (
+	"encoding/binary"
 	"fmt"
 	"github.com/asticode/go-astikit"
 )
@@ -114,10 +115,7 @@ func (h *PESHeader) IsVideoStream() bool {
 }
 
 // parsePESData parses a PES data
-func parsePESData(i *astikit.BytesIterator) (d *PESData, err error) {
-	// Create data
-	d = &PESData{}
-
+func (d *PESData) parsePESData(i *astikit.BytesIterator) (err error) {
 	// Skip first 3 bytes that are there to identify the PES payload
 	i.Seek(3)
 
@@ -160,9 +158,10 @@ func (h *PESHeader) parsePESHeader(i *astikit.BytesIterator) (dataStart, dataEnd
 		return
 	}
 
-	_ = bs[2]
-	h.StreamID = bs[0]
-	h.PacketLength = uint16(bs[1])<<8 | uint16(bs[2])
+	if len(bs) >= 3 {
+		h.StreamID = bs[0]
+		h.PacketLength = binary.BigEndian.Uint16(bs[1:3])
+	}
 
 	// Update data end
 	if h.PacketLength > 0 {
@@ -173,7 +172,8 @@ func (h *PESHeader) parsePESHeader(i *astikit.BytesIterator) (dataStart, dataEnd
 
 	// Optional header
 	if hasPESOptionalHeader(h.StreamID) {
-		if h.OptionalHeader, dataStart, err = parsePESOptionalHeader(i); err != nil {
+		h.OptionalHeader = &PESOptionalHeader{}
+		if dataStart, err = h.OptionalHeader.parsePESOptionalHeader(i); err != nil {
 			err = fmt.Errorf("astits: parsing PES optional header failed: %w", err)
 			return
 		}
@@ -184,10 +184,7 @@ func (h *PESHeader) parsePESHeader(i *astikit.BytesIterator) (dataStart, dataEnd
 }
 
 // parsePESOptionalHeader parses a PES optional header
-func parsePESOptionalHeader(i *astikit.BytesIterator) (h *PESOptionalHeader, dataStart int, err error) {
-	// Create header
-	h = &PESOptionalHeader{}
-
+func (h *PESOptionalHeader) parsePESOptionalHeader(i *astikit.BytesIterator) (dataStart int, err error) {
 	// Get next byte
 	var bs []byte
 	if bs, err = i.NextBytesNoCopy(3); err != nil {
@@ -195,26 +192,28 @@ func parsePESOptionalHeader(i *astikit.BytesIterator) (h *PESOptionalHeader, dat
 		return
 	}
 
-	_ = bs[2]
+	if len(bs) >= 3 {
+		b := bs[0]
+		h.MarkerBits = b >> 6
+		h.ScramblingControl = b >> 4 & 0x3
+		h.Priority = b&0x8 > 0
+		h.DataAlignmentIndicator = b&0x4 > 0
+		h.IsCopyrighted = b&0x2 > 0
+		h.IsOriginal = b&0x1 > 0
+		b = bs[1]
+		h.PTSDTSIndicator = b >> 6 & 0x3
 
-	h.MarkerBits = bs[0] >> 6
-	h.ScramblingControl = bs[0] >> 4 & 0x3
-	h.Priority = uint8(bs[0])&0x8 > 0
-	h.DataAlignmentIndicator = uint8(bs[0])&0x4 > 0
-	h.IsCopyrighted = uint(bs[0])&0x2 > 0
-	h.IsOriginal = uint8(bs[0])&0x1 > 0
-	h.PTSDTSIndicator = bs[1] >> 6 & 0x3
+		// Flags
+		h.HasESCR = b&0x20 > 0
+		h.HasESRate = b&0x10 > 0
+		h.HasDSMTrickMode = b&0x8 > 0
+		h.HasAdditionalCopyInfo = b&0x4 > 0
+		h.HasCRC = b&0x2 > 0
+		h.HasExtension = b&0x1 > 0
 
-	// Flags
-	h.HasESCR = uint8(bs[1])&0x20 > 0
-	h.HasESRate = uint8(bs[1])&0x10 > 0
-	h.HasDSMTrickMode = uint8(bs[1])&0x8 > 0
-	h.HasAdditionalCopyInfo = uint8(bs[1])&0x4 > 0
-	h.HasCRC = uint8(bs[1])&0x2 > 0
-	h.HasExtension = uint8(bs[1])&0x1 > 0
-
-	// Header length
-	h.HeaderLength = bs[2]
+		// Header length
+		h.HeaderLength = bs[2]
+	}
 
 	// Update data start
 	dataStart = i.Offset() + int(h.HeaderLength)
@@ -252,8 +251,9 @@ func parsePESOptionalHeader(i *astikit.BytesIterator) (h *PESOptionalHeader, dat
 			err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 			return
 		}
-		_ = bs[2]
-		h.ESRate = uint32(bs[0])&0x7f<<15 | uint32(bs[1])<<7 | uint32(bs[2])>>1
+		if len(bs) >= 3 {
+			h.ESRate = uint32(bs[0])&0x7f<<15 | uint32(bs[1])<<7 | uint32(bs[2])>>1
+		}
 	}
 
 	// Trick mode
@@ -280,8 +280,9 @@ func parsePESOptionalHeader(i *astikit.BytesIterator) (h *PESOptionalHeader, dat
 			err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 			return
 		}
-		_ = bs[1]
-		h.CRC = uint16(bs[0])>>8 | uint16(bs[1])
+		if len(bs) >= 2 {
+			h.CRC = binary.BigEndian.Uint16(bs)
+		}
 	}
 
 	// Extension
@@ -322,10 +323,11 @@ func parsePESOptionalHeader(i *astikit.BytesIterator) (h *PESOptionalHeader, dat
 				err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 				return
 			}
-			_ = bs[1]
-			h.PacketSequenceCounter = uint8(bs[0]) & 0x7f
-			h.MPEG1OrMPEG2ID = bs[1] >> 6 & 0x1
-			h.OriginalStuffingLength = uint8(bs[1]) & 0x3f
+			if len(bs) >= 2 {
+				h.PacketSequenceCounter = uint8(bs[0]) & 0x7f
+				h.MPEG1OrMPEG2ID = bs[1] >> 6 & 0x1
+				h.OriginalStuffingLength = uint8(bs[1]) & 0x3f
+			}
 		}
 
 		// P-STD buffer
@@ -334,9 +336,10 @@ func parsePESOptionalHeader(i *astikit.BytesIterator) (h *PESOptionalHeader, dat
 				err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 				return
 			}
-			_ = bs[1]
-			h.PSTDBufferScale = bs[0] >> 5 & 0x1
-			h.PSTDBufferSize = uint16(bs[0])&0x1f<<8 | uint16(bs[1])
+			if len(bs) >= 2 {
+				h.PSTDBufferScale = bs[0] >> 5 & 0x1
+				h.PSTDBufferSize = uint16(bs[0])&0x1f<<8 | uint16(bs[1])
+			}
 		}
 
 		// Extension 2
@@ -381,8 +384,9 @@ func (cr *ClockReference) parsePTSOrDTS(i *astikit.BytesIterator) (err error) {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return
 	}
-	_ = bs[4]
-	*cr = newClockReference(uint64(bs[0])>>1&0x7<<30|uint64(bs[1])<<22|uint64(bs[2])>>1&0x7f<<15|uint64(bs[3])<<7|uint64(bs[4])>>1&0x7f, 0)
+	if len(bs) >= 5 {
+		*cr = newClockReference(uint64(bs[0])>>1&0x7<<30|uint64(bs[1])<<22|uint64(bs[2])>>1&0x7f<<15|uint64(bs[3])<<7|uint64(bs[4])>>1&0x7f, 0)
+	}
 	return
 }
 
@@ -393,9 +397,10 @@ func (cr *ClockReference) parseESCR(i *astikit.BytesIterator) (err error) {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return
 	}
-	_ = bs[5]
-	escr := uint64(bs[0])>>3&0x7<<39 | uint64(bs[0])&0x3<<37 | uint64(bs[1])<<29 | uint64(bs[2])>>3<<24 | uint64(bs[2])&0x3<<22 | uint64(bs[3])<<14 | uint64(bs[4])>>3<<9 | uint64(bs[4])&0x3<<7 | uint64(bs[5])>>1
-	*cr = newClockReference(escr>>9, escr&0x1ff)
+	if len(bs) >= 6 {
+		escr := uint64(bs[0])>>3&0x7<<39 | uint64(bs[0])&0x3<<37 | uint64(bs[1])<<29 | uint64(bs[2])>>3<<24 | uint64(bs[2])&0x3<<22 | uint64(bs[3])<<14 | uint64(bs[4])>>3<<9 | uint64(bs[4])&0x3<<7 | uint64(bs[5])>>1
+		*cr = newClockReference(escr>>9, escr&0x1ff)
+	}
 	return
 }
 

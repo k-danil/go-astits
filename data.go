@@ -33,6 +33,9 @@ func (d *DemuxerData) Close() {
 	if d.internalData != nil {
 		poolOfTempPayload.put(d.internalData)
 	}
+	if d.FirstPacket != nil {
+		d.FirstPacket.Close()
+	}
 }
 
 // MuxerData represents a data to be written by Muxer
@@ -73,10 +76,9 @@ func parseData(pl *PacketList, prs PacketsParser, pm *programMap) (ds []*Demuxer
 	pid := pl.GetHead().Header.PID
 
 	// Copy first packet headers, so we can safely deallocate original payload
-	fp := &Packet{
-		Header:          pl.GetHead().Header,
-		AdaptationField: pl.GetHead().AdaptationField,
-	}
+	fp := NewPacket()
+	fp.Header = pl.GetHead().Header
+	fp.AdaptationField = pl.GetHead().AdaptationField
 
 	// Parse payload
 	if pid == PIDCAT {
@@ -94,8 +96,8 @@ func parseData(pl *PacketList, prs PacketsParser, pm *programMap) (ds []*Demuxer
 		ds = psiData.toData(fp, pid)
 	} else if isPESPayload(payload.s) {
 		// Parse PES data
-		var pesData *PESData
-		if pesData, err = parsePESData(i); err != nil {
+		pesData := &PESData{}
+		if err = pesData.parsePESData(i); err != nil {
 			err = fmt.Errorf("astits: parsing PES data failed: %w", err)
 			return
 		}

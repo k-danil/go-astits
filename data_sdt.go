@@ -27,7 +27,7 @@ type SDTData struct {
 
 // SDTDataService represents an SDT data service
 type SDTDataService struct {
-	Descriptors            []*Descriptor
+	Descriptors            []Descriptor
 	HasEITPresentFollowing bool // When true indicates that EIT present/following information for the service is present in the current TS
 	HasEITSchedule         bool // When true indicates that EIT schedule information for the service is present in the current TS
 	HasFreeCSAMode         bool // When true indicates that access to one or more streams may be controlled by a CA system.

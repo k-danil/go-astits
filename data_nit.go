@@ -10,7 +10,7 @@ import (
 // Page: 29 | Chapter: 5.2.1 | Link: https://www.dvb.org/resources/public/standards/a38_dvb-si_specification.pdf
 // (barbashov) the link above can be broken, alternative: https://dvb.org/wp-content/uploads/2019/12/a038_tm1217r37_en300468v1_17_1_-_rev-134_-_si_specification.pdf
 type NITData struct {
-	NetworkDescriptors []*Descriptor
+	NetworkDescriptors []Descriptor
 	NetworkID          uint16
 	TransportStreams   []*NITDataTransportStream
 }
@@ -18,7 +18,7 @@ type NITData struct {
 // NITDataTransportStream represents a NIT data transport stream
 type NITDataTransportStream struct {
 	OriginalNetworkID    uint16
-	TransportDescriptors []*Descriptor
+	TransportDescriptors []Descriptor
 	TransportStreamID    uint16
 }
 

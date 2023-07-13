@@ -88,6 +88,7 @@ type PacketAdaptationExtensionField struct {
 
 func NewPacket() (p *Packet) {
 	p, _ = PoolOfPacket.Get().(*Packet)
+	p.Reset()
 	return
 }
 
@@ -102,10 +103,11 @@ func (p *Packet) Reset() {
 // parsePacket parses a packet
 func (p *Packet) parse(i *astikit.BytesIterator, s PacketSkipper) (bool, error) {
 	// Get next byte
-	if b, err := i.NextByte(); err != nil || b != syncByte {
-		if err != nil {
-			return false, fmt.Errorf("astits: getting next byte failed: %w", err)
-		}
+	if b, _ := i.NextByte(); b != syncByte {
+		//if b, err := i.NextByte(); err != nil || b != syncByte {
+		//if err != nil {
+		//	return false, fmt.Errorf("astits: getting next byte failed: %w", err)
+		//}
 		return false, ErrPacketMustStartWithASyncByte
 	}
 
@@ -160,16 +162,18 @@ func (ph *PacketHeader) parse(i *astikit.BytesIterator) (err error) {
 		return
 	}
 
-	b := bs[2]
-	ph.TransportScramblingControl = b >> 6 & 0x3
-	ph.HasAdaptationField = b&0x20 > 0
-	ph.HasPayload = b&0x10 > 0
-	ph.ContinuityCounter = b & 0xf
-	b = bs[0]
-	ph.TransportErrorIndicator = b&0x80 > 0
-	ph.PayloadUnitStartIndicator = b&0x40 > 0
-	ph.TransportPriority = b&0x20 > 0
-	ph.PID = (uint16(bs[1]) | uint16(bs[0])<<8) & 0x1fff
+	if len(bs) >= 3 {
+		b := bs[2]
+		ph.TransportScramblingControl = b >> 6 & 0x3
+		ph.HasAdaptationField = b&0x20 > 0
+		ph.HasPayload = b&0x10 > 0
+		ph.ContinuityCounter = b & 0xf
+		b = bs[0]
+		ph.TransportErrorIndicator = b&0x80 > 0
+		ph.PayloadUnitStartIndicator = b&0x40 > 0
+		ph.TransportPriority = b&0x20 > 0
+		ph.PID = (uint16(bs[1]) | uint16(bs[0])<<8) & 0x1fff
+	}
 	return
 }
 
@@ -286,9 +290,10 @@ func (afe *PacketAdaptationExtensionField) parse(i *astikit.BytesIterator) (err 
 				err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 				return
 			}
-			_ = bs[1]
-			afe.LegalTimeWindowIsValid = bs[0]&0x80 > 0
-			afe.LegalTimeWindowOffset = uint16(bs[0]&0x7f)<<8 | uint16(bs[1])
+			if len(bs) >= 2 {
+				afe.LegalTimeWindowIsValid = bs[0]&0x80 > 0
+				afe.LegalTimeWindowOffset = uint16(bs[0]&0x7f)<<8 | uint16(bs[1])
+			}
 		}
 
 		// Piecewise rate
@@ -298,8 +303,9 @@ func (afe *PacketAdaptationExtensionField) parse(i *astikit.BytesIterator) (err 
 				err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 				return
 			}
-			_ = bs[2]
-			afe.PiecewiseRate = uint32(bs[0]&0x3f)<<16 | uint32(bs[1])<<8 | uint32(bs[2])
+			if len(bs) >= 3 {
+				afe.PiecewiseRate = uint32(bs[0]&0x3f)<<16 | uint32(bs[1])<<8 | uint32(bs[2])
+			}
 		}
 
 		// Seamless splice
@@ -334,9 +340,10 @@ func (cr *ClockReference) parsePCR(i *astikit.BytesIterator) (err error) {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return
 	}
-	_ = bs[5]
-	pcr := uint64(bs[0])<<40 | uint64(bs[1])<<32 | uint64(bs[2])<<24 | uint64(bs[3])<<16 | uint64(bs[4])<<8 | uint64(bs[5])
-	*cr = newClockReference(pcr>>15, pcr&0x1ff)
+	if len(bs) >= 6 {
+		pcr := uint64(bs[0])<<40 | uint64(bs[1])<<32 | uint64(bs[2])<<24 | uint64(bs[3])<<16 | uint64(bs[4])<<8 | uint64(bs[5])
+		*cr = newClockReference(pcr>>15, pcr&0x1ff)
+	}
 	return
 }
 
@@ -497,7 +504,9 @@ func (af *PacketAdaptationField) write(w *astikit.BitsWriter, bb *[8]byte) (byte
 			b.Write(bb[:])
 			bytesWritten += 8
 		}
-		b.Write(bb[:rem])
+		if uint8(len(bb)) >= rem {
+			b.Write(bb[:rem])
+		}
 		bytesWritten += int(rem)
 	}
 

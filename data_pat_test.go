@@ -9,7 +9,7 @@ import (
 )
 
 var pat = &PATData{
-	Programs: []*PATProgram{
+	Programs: []PATProgram{
 		{ProgramMapID: 3, ProgramNumber: 2},
 		{ProgramMapID: 5, ProgramNumber: 4},
 	},

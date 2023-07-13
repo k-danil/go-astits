@@ -332,7 +332,7 @@ func (m *Muxer) generatePAT() error {
 
 	syntax := &PSISectionSyntax{
 		Data: &PSISectionSyntaxData{PAT: d},
-		Header: &PSISectionSyntaxHeader{
+		Header: PSISectionSyntaxHeader{
 			CurrentNextIndicator: true,
 			// TODO support for PAT tables longer than 1 TS packet
 			//LastSectionNumber:    0,
@@ -341,21 +341,22 @@ func (m *Muxer) generatePAT() error {
 			VersionNumber:    uint8(versionNumber),
 		},
 	}
-	section := PSISection{
-		Header: &PSISectionHeader{
-			SectionLength:          calcPATSectionLength(d),
-			SectionSyntaxIndicator: true,
-			TableID:                PSITableID(d.TransportStreamID),
-		},
-		Syntax: syntax,
-	}
 	psiData := PSIData{
-		Sections: []*PSISection{&section},
+		Sections: []PSISection{
+			{
+				Header: PSISectionHeader{
+					SectionLength:          calcPATSectionLength(d),
+					SectionSyntaxIndicator: true,
+					TableID:                PSITableID(d.TransportStreamID),
+				},
+				Syntax: syntax,
+			},
+		},
 	}
 
 	m.buf.Reset()
 	w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: &m.buf})
-	if _, err := writePSIData(w, &psiData); err != nil {
+	if _, err := psiData.writePSIData(w); err != nil {
 		return err
 	}
 
@@ -400,7 +401,7 @@ func (m *Muxer) generatePMT() error {
 
 	syntax := &PSISectionSyntax{
 		Data: &PSISectionSyntaxData{PMT: &m.pmt},
-		Header: &PSISectionSyntaxHeader{
+		Header: PSISectionSyntaxHeader{
 			CurrentNextIndicator: true,
 			// TODO support for PMT tables longer than 1 TS packet
 			//LastSectionNumber:    0,
@@ -409,21 +410,22 @@ func (m *Muxer) generatePMT() error {
 			VersionNumber:    uint8(versionNumber),
 		},
 	}
-	section := PSISection{
-		Header: &PSISectionHeader{
-			SectionLength:          calcPMTSectionLength(&m.pmt),
-			SectionSyntaxIndicator: true,
-			TableID:                PSITableIDPMT,
-		},
-		Syntax: syntax,
-	}
 	psiData := PSIData{
-		Sections: []*PSISection{&section},
+		Sections: []PSISection{
+			{
+				Header: PSISectionHeader{
+					SectionLength:          calcPMTSectionLength(&m.pmt),
+					SectionSyntaxIndicator: true,
+					TableID:                PSITableIDPMT,
+				},
+				Syntax: syntax,
+			},
+		},
 	}
 
 	m.buf.Reset()
 	w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: &m.buf})
-	if _, err := writePSIData(w, &psiData); err != nil {
+	if _, err := psiData.writePSIData(w); err != nil {
 		return err
 	}
 

@@ -1266,7 +1266,7 @@ func newDescriptorVBIData(i *astikit.BytesIterator, offsetEnd int) (d *Descripto
 }
 
 // parseDescriptors parses descriptors
-func parseDescriptors(i *astikit.BytesIterator) (o []*Descriptor, err error) {
+func parseDescriptors(i *astikit.BytesIterator) (o []Descriptor, err error) {
 	// Get next 2 bytes
 	var bs []byte
 	if bs, err = i.NextBytesNoCopy(2); err != nil {
@@ -1288,7 +1288,7 @@ func parseDescriptors(i *astikit.BytesIterator) (o []*Descriptor, err error) {
 			}
 
 			// Create descriptor
-			d := &Descriptor{
+			d := Descriptor{
 				Length: uint8(bs[1]),
 				Tag:    uint8(bs[0]),
 			}
@@ -1997,7 +1997,7 @@ func writeDescriptorUnknown(w *astikit.BitsWriter, d *DescriptorUnknown) error {
 	return b.Err()
 }
 
-func calcDescriptorLength(d *Descriptor) uint8 {
+func (d *Descriptor) calcDescriptorLength() uint8 {
 	if d.Tag >= 0x80 && d.Tag <= 0xfe {
 		return calcDescriptorUserDefinedLength(d.UserDefined)
 	}
@@ -2055,9 +2055,9 @@ func calcDescriptorLength(d *Descriptor) uint8 {
 	return calcDescriptorUnknownLength(d.Unknown)
 }
 
-func writeDescriptor(w *astikit.BitsWriter, d *Descriptor) (int, error) {
+func (d *Descriptor) writeDescriptor(w *astikit.BitsWriter) (int, error) {
 	b := astikit.NewBitsWriterBatch(w)
-	length := calcDescriptorLength(d)
+	length := d.calcDescriptorLength()
 
 	b.Write(d.Tag)
 	b.Write(length)
@@ -2124,20 +2124,20 @@ func writeDescriptor(w *astikit.BitsWriter, d *Descriptor) (int, error) {
 	return written, writeDescriptorUnknown(w, d.Unknown)
 }
 
-func calcDescriptorsLength(ds []*Descriptor) uint16 {
+func calcDescriptorsLength(ds []Descriptor) uint16 {
 	length := uint16(0)
 	for _, d := range ds {
 		length += 2 // tag and length
-		length += uint16(calcDescriptorLength(d))
+		length += uint16(d.calcDescriptorLength())
 	}
 	return length
 }
 
-func writeDescriptors(w *astikit.BitsWriter, ds []*Descriptor) (int, error) {
+func writeDescriptors(w *astikit.BitsWriter, ds []Descriptor) (int, error) {
 	written := 0
 
 	for _, d := range ds {
-		n, err := writeDescriptor(w, d)
+		n, err := d.writeDescriptor(w)
 		if err != nil {
 			return 0, err
 		}
@@ -2147,7 +2147,7 @@ func writeDescriptors(w *astikit.BitsWriter, ds []*Descriptor) (int, error) {
 	return written, nil
 }
 
-func writeDescriptorsWithLength(w *astikit.BitsWriter, ds []*Descriptor) (int, error) {
+func writeDescriptorsWithLength(w *astikit.BitsWriter, ds []Descriptor) (int, error) {
 	length := calcDescriptorsLength(ds)
 	b := astikit.NewBitsWriterBatch(w)
 

@@ -105,6 +105,9 @@ func (dmx *Demuxer) nextPacket() (p *Packet, err error) {
 
 	// Fetch next packet from buffer
 	if p, err = dmx.packetBuffer.next(); err != nil {
+		if err == ErrNoMorePackets {
+			return
+		}
 		err = fmt.Errorf("astits: fetching next packet from buffer failed: %w", err)
 	}
 	return
@@ -141,7 +144,7 @@ func (dmx *Demuxer) nextData() (d *DemuxerData, err error) {
 		// Get next packet
 		if p, err = dmx.nextPacket(); err != nil {
 			// If the end of the stream has been reached, we dump the packet pool
-			if err == ErrNoMorePackets {
+			if errors.Is(err, ErrNoMorePackets) {
 				for {
 					// Dump packet pool
 					if pl = dmx.packetPool.dumpUnlocked(); pl.IsEmpty() {

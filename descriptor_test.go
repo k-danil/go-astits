@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-var descriptors = []*Descriptor{{
+var descriptors = []Descriptor{{
 	Length:           0x1,
 	StreamIdentifier: &DescriptorStreamIdentifier{ComponentTag: 0x7},
 	Tag:              DescriptorTagStreamIdentifier,
@@ -591,7 +591,7 @@ func TestParseDescriptorOneByOne(t *testing.T) {
 
 			ds, err := parseDescriptors(astikit.NewBytesIterator(descBytes))
 			assert.NoError(t, err)
-			assert.Equal(t, tc.desc, *ds[0])
+			assert.Equal(t, tc.desc, ds[0])
 		})
 	}
 }
@@ -614,7 +614,7 @@ func TestParseDescriptorAll(t *testing.T) {
 	assert.NoError(t, err)
 
 	for i, tc := range descriptorTestTable {
-		assert.Equal(t, tc.desc, *ds[i])
+		assert.Equal(t, tc.desc, ds[i])
 	}
 }
 
@@ -627,7 +627,7 @@ func TestWriteDescriptorOneByOne(t *testing.T) {
 
 			bufActual := bytes.Buffer{}
 			wActual := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: &bufActual})
-			n, err := writeDescriptor(wActual, &tc.desc)
+			n, err := tc.desc.writeDescriptor(wActual)
 			assert.NoError(t, err)
 			assert.Equal(t, n, bufActual.Len())
 			assert.Equal(t, bufExpected.Bytes(), bufActual.Bytes())
@@ -640,12 +640,12 @@ func TestWriteDescriptorAll(t *testing.T) {
 	bufExpected.Write([]byte{0x00, 0x00}) // reserve two bytes for length
 	wExpected := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: &bufExpected})
 
-	dss := []*Descriptor{}
+	dss := []Descriptor{}
 
 	for _, tc := range descriptorTestTable {
 		tc.bytesFunc(wExpected)
 		tcc := tc
-		dss = append(dss, &tcc.desc)
+		dss = append(dss, tcc.desc)
 	}
 
 	descLen := uint16(bufExpected.Len() - 2)
@@ -673,7 +673,7 @@ func BenchmarkWriteDescriptor(b *testing.B) {
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {
 				buf.Reset()
-				writeDescriptor(w, &bm.desc)
+				bm.desc.writeDescriptor(w)
 			}
 		})
 	}

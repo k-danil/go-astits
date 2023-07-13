@@ -13,7 +13,7 @@ const (
 // PATData represents a PAT data
 // https://en.wikipedia.org/wiki/Program-specific_information
 type PATData struct {
-	Programs          []*PATProgram
+	Programs          []PATProgram
 	TransportStreamID uint16
 }
 
@@ -26,10 +26,13 @@ type PATProgram struct {
 // parsePATSection parses a PAT section
 func parsePATSection(i *astikit.BytesIterator, offsetSectionsEnd int, tableIDExtension uint16) (d *PATData, err error) {
 	// Create data
-	d = &PATData{TransportStreamID: tableIDExtension}
+	d = &PATData{
+		TransportStreamID: tableIDExtension,
+		Programs:          make([]PATProgram, (offsetSectionsEnd-i.Offset())/4),
+	}
 
 	// Loop until end of section data is reached
-	for i.Offset() < offsetSectionsEnd {
+	for idx := range d.Programs {
 		// Get next bytes
 		var bs []byte
 		if bs, err = i.NextBytesNoCopy(4); err != nil {
@@ -38,10 +41,10 @@ func parsePATSection(i *astikit.BytesIterator, offsetSectionsEnd int, tableIDExt
 		}
 
 		// Append program
-		d.Programs = append(d.Programs, &PATProgram{
+		d.Programs[idx] = PATProgram{
 			ProgramMapID:  uint16(bs[2]&0x1f)<<8 | uint16(bs[3]),
 			ProgramNumber: uint16(bs[0])<<8 | uint16(bs[1]),
-		})
+		}
 	}
 	return
 }

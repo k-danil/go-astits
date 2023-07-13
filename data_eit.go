@@ -21,7 +21,7 @@ type EITData struct {
 
 // EITDataEvent represents an EIT data event
 type EITDataEvent struct {
-	Descriptors    []*Descriptor
+	Descriptors    []Descriptor
 	Duration       time.Duration
 	EventID        uint16
 	HasFreeCSAMode bool // When true indicates that access to one or more streams may be controlled by a CA system.

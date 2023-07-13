@@ -120,11 +120,9 @@ func (pb *packetBuffer) next() (p *Packet, err error) {
 	p = NewPacket()
 	bi := astikit.NewBytesIterator(p.bs[:])
 
-	skip := true
+	var skip bool
 	// Loop to make sure we return a packet even if first packets are skipped
-	for skip {
-		bi.Seek(0)
-		p.Reset()
+	for {
 		if _, err = io.ReadFull(pb.r, p.bs[:]); err != nil {
 			p.Close()
 			if err == io.EOF || err == io.ErrUnexpectedEOF {
@@ -140,6 +138,13 @@ func (pb *packetBuffer) next() (p *Packet, err error) {
 			p.Close()
 			return nil, fmt.Errorf("astits: building packet failed: %w", err)
 		}
+
+		if !skip {
+			break
+		}
+
+		bi.Seek(0)
+		p.Reset()
 	}
 
 	return

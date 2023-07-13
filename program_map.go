@@ -31,12 +31,12 @@ func (m programMap) unsetUnlocked(pid uint16) {
 
 func (m programMap) toPATDataUnlocked() *PATData {
 	d := &PATData{
-		Programs:          make([]*PATProgram, 0, len(m.p)),
+		Programs:          make([]PATProgram, 0, len(m.p)),
 		TransportStreamID: uint16(PSITableIDPAT),
 	}
 
 	for pid, pnr := range m.p {
-		d.Programs = append(d.Programs, &PATProgram{
+		d.Programs = append(d.Programs, PATProgram{
 			ProgramMapID:  uint16(pid),
 			ProgramNumber: pnr,
 		})
