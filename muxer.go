@@ -324,7 +324,7 @@ func (m *Muxer) generatePAT() (err error) {
 	}
 
 	syntax := &PSISectionSyntax{
-		Data: &PSISectionSyntaxData{PAT: d},
+		Data: d,
 		Header: PSISectionSyntaxHeader{
 			CurrentNextIndicator: true,
 			// TODO support for PAT tables longer than 1 TS packet
@@ -393,7 +393,7 @@ func (m *Muxer) generatePMT() (err error) {
 	}
 
 	syntax := &PSISectionSyntax{
-		Data: &PSISectionSyntaxData{PMT: &m.pmt},
+		Data: &m.pmt,
 		Header: PSISectionSyntaxHeader{
 			CurrentNextIndicator: true,
 			// TODO support for PMT tables longer than 1 TS packet

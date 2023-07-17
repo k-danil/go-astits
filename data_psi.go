@@ -76,7 +76,7 @@ type PSISectionHeader struct {
 
 // PSISectionSyntax represents a PSI section syntax
 type PSISectionSyntax struct {
-	Data   *PSISectionSyntaxData
+	Data   PSISectionSyntaxData
 	Header PSISectionSyntaxHeader
 }
 
@@ -90,14 +90,7 @@ type PSISectionSyntaxHeader struct {
 }
 
 // PSISectionSyntaxData represents a PSI section syntax data
-type PSISectionSyntaxData struct {
-	EIT *EITData
-	NIT *NITData
-	PAT *PATData
-	PMT *PMTData
-	SDT *SDTData
-	TOT *TOTData
-}
+type PSISectionSyntaxData interface{}
 
 // parsePSIData parses a PSI data
 func parsePSIData(i *astikit.BytesIterator) (d *PSIData, err error) {
@@ -389,10 +382,7 @@ func (h *PSISectionSyntaxHeader) parsePSISectionSyntaxHeader(i *astikit.BytesIte
 }
 
 // parsePSISectionSyntaxData parses a PSI section data
-func parsePSISectionSyntaxData(i *astikit.BytesIterator, h *PSISectionHeader, sh *PSISectionSyntaxHeader, offsetSectionsEnd int) (d *PSISectionSyntaxData, err error) {
-	// Init
-	d = &PSISectionSyntaxData{}
-
+func parsePSISectionSyntaxData(i *astikit.BytesIterator, h *PSISectionHeader, sh *PSISectionSyntaxHeader, offsetSectionsEnd int) (d PSISectionSyntaxData, err error) {
 	// Switch on table type
 	switch h.TableID {
 	case PSITableIDBAT:
@@ -400,24 +390,24 @@ func parsePSISectionSyntaxData(i *astikit.BytesIterator, h *PSISectionHeader, sh
 	case PSITableIDDIT:
 		// TODO Parse DIT
 	case PSITableIDNITVariant1, PSITableIDNITVariant2:
-		if d.NIT, err = parseNITSection(i, sh.TableIDExtension); err != nil {
+		if d, err = parseNITSection(i, sh.TableIDExtension); err != nil {
 			err = fmt.Errorf("astits: parsing NIT section failed: %w", err)
 			return
 		}
 	case PSITableIDPAT:
-		if d.PAT, err = parsePATSection(i, offsetSectionsEnd, sh.TableIDExtension); err != nil {
+		if d, err = parsePATSection(i, offsetSectionsEnd, sh.TableIDExtension); err != nil {
 			err = fmt.Errorf("astits: parsing PAT section failed: %w", err)
 			return
 		}
 	case PSITableIDPMT:
-		if d.PMT, err = parsePMTSection(i, offsetSectionsEnd, sh.TableIDExtension); err != nil {
+		if d, err = parsePMTSection(i, offsetSectionsEnd, sh.TableIDExtension); err != nil {
 			err = fmt.Errorf("astits: parsing PMT section failed: %w", err)
 			return
 		}
 	case PSITableIDRST:
 		// TODO Parse RST
 	case PSITableIDSDTVariant1, PSITableIDSDTVariant2:
-		if d.SDT, err = parseSDTSection(i, offsetSectionsEnd, sh.TableIDExtension); err != nil {
+		if d, err = parseSDTSection(i, offsetSectionsEnd, sh.TableIDExtension); err != nil {
 			err = fmt.Errorf("astits: parsing PMT section failed: %w", err)
 			return
 		}
@@ -426,7 +416,7 @@ func parsePSISectionSyntaxData(i *astikit.BytesIterator, h *PSISectionHeader, sh
 	case PSITableIDST:
 		// TODO Parse ST
 	case PSITableIDTOT:
-		if d.TOT, err = parseTOTSection(i); err != nil {
+		if d, err = parseTOTSection(i); err != nil {
 			err = fmt.Errorf("astits: parsing TOT section failed: %w", err)
 			return
 		}
@@ -435,7 +425,7 @@ func parsePSISectionSyntaxData(i *astikit.BytesIterator, h *PSISectionHeader, sh
 	}
 
 	if h.TableID >= PSITableIDEITStart && h.TableID <= PSITableIDEITEnd {
-		if d.EIT, err = parseEITSection(i, offsetSectionsEnd, sh.TableIDExtension); err != nil {
+		if d, err = parseEITSection(i, offsetSectionsEnd, sh.TableIDExtension); err != nil {
 			err = fmt.Errorf("astits: parsing EIT section failed: %w", err)
 			return
 		}
@@ -455,20 +445,19 @@ func (d *PSIData) toData(af *PacketAdaptationField, pid uint16) (ds []*DemuxerDa
 		}
 
 		// Switch on table type
-		switch s.Header.TableID {
-		case PSITableIDNITVariant1, PSITableIDNITVariant2:
-			ds = append(ds, &DemuxerData{AdaptationField: af, NIT: s.Syntax.Data.NIT, PID: pid})
-		case PSITableIDPAT:
-			ds = append(ds, &DemuxerData{AdaptationField: af, PAT: s.Syntax.Data.PAT, PID: pid})
-		case PSITableIDPMT:
-			ds = append(ds, &DemuxerData{AdaptationField: af, PID: pid, PMT: s.Syntax.Data.PMT})
-		case PSITableIDSDTVariant1, PSITableIDSDTVariant2:
-			ds = append(ds, &DemuxerData{AdaptationField: af, PID: pid, SDT: s.Syntax.Data.SDT})
-		case PSITableIDTOT:
-			ds = append(ds, &DemuxerData{AdaptationField: af, PID: pid, TOT: s.Syntax.Data.TOT})
-		}
-		if s.Header.TableID >= PSITableIDEITStart && s.Header.TableID <= PSITableIDEITEnd {
-			ds = append(ds, &DemuxerData{EIT: s.Syntax.Data.EIT, AdaptationField: af, PID: pid})
+		switch data := s.Syntax.Data.(type) {
+		case *NITData:
+			ds = append(ds, &DemuxerData{AdaptationField: af, NIT: data, PID: pid})
+		case *PATData:
+			ds = append(ds, &DemuxerData{AdaptationField: af, PAT: data, PID: pid})
+		case *PMTData:
+			ds = append(ds, &DemuxerData{AdaptationField: af, PID: pid, PMT: data})
+		case *SDTData:
+			ds = append(ds, &DemuxerData{AdaptationField: af, PID: pid, SDT: data})
+		case *TOTData:
+			ds = append(ds, &DemuxerData{AdaptationField: af, PID: pid, TOT: data})
+		case *EITData:
+			ds = append(ds, &DemuxerData{AdaptationField: af, PID: pid, EIT: data})
 		}
 	}
 	return
@@ -503,11 +492,11 @@ func (s *PSISection) calcPSISectionLength() (ret uint16) {
 		ret += 5 // PSI syntax header length
 	}
 
-	switch s.Header.TableID {
-	case PSITableIDPAT:
-		ret += s.Syntax.Data.PAT.calcPATSectionLength()
-	case PSITableIDPMT:
-		ret += s.Syntax.Data.PMT.calcPMTSectionLength()
+	switch data := s.Syntax.Data.(type) {
+	case *PATData:
+		ret += data.calcPATSectionLength()
+	case *PMTData:
+		ret += data.calcPMTSectionLength()
 	}
 
 	if s.Header.TableID.hasCRC32() {
@@ -557,20 +546,27 @@ func (s *PSISection) writePSISection(w *astikit.BitsWriter) (int, error) {
 	return bytesWritten, b.Err()
 }
 
-func (s *PSISection) writePSISectionSyntax(w *astikit.BitsWriter) (int, error) {
-	bytesWritten := 0
+func (s *PSISection) writePSISectionSyntax(w *astikit.BitsWriter) (bytesWritten int, err error) {
+	var n int
 	if s.Header.TableID.hasPSISyntaxHeader() {
-		n, err := s.Syntax.Header.writePSISectionSyntaxHeader(w)
+		n, err = s.Syntax.Header.writePSISectionSyntaxHeader(w)
 		if err != nil {
 			return 0, err
 		}
 		bytesWritten += n
 	}
 
-	n, err := s.Syntax.Data.writePSISectionSyntaxData(w, s.Header.TableID)
+	switch data := s.Syntax.Data.(type) {
+	// TODO write other table types
+	case *PATData:
+		n, err = data.writePATSection(w)
+	case *PMTData:
+		n, err = data.writePMTSection(w)
+	}
 	if err != nil {
 		return 0, err
 	}
+
 	bytesWritten += n
 
 	return bytesWritten, nil
@@ -587,16 +583,4 @@ func (h *PSISectionSyntaxHeader) writePSISectionSyntaxHeader(w *astikit.BitsWrit
 	b.Write(h.LastSectionNumber)
 
 	return 5, b.Err()
-}
-
-func (d *PSISectionSyntaxData) writePSISectionSyntaxData(w *astikit.BitsWriter, tableID PSITableID) (int, error) {
-	switch tableID {
-	// TODO write other table types
-	case PSITableIDPAT:
-		return d.PAT.writePATSection(w)
-	case PSITableIDPMT:
-		return d.PMT.writePMTSection(w)
-	}
-
-	return 0, nil
 }

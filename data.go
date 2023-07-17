@@ -97,14 +97,13 @@ func parseData(pl *PacketList, prs PacketsParser, pm *programMap) (ds []*Demuxer
 		}
 
 		// Append data
-		ds = []*DemuxerData{
-			{
-				AdaptationField: af,
-				PES:             pesData,
-				PID:             pid,
-				internalData:    payload,
-			},
-		}
+		ds = []*DemuxerData{{
+			AdaptationField: af,
+			PES:             pesData,
+			PID:             pid,
+
+			internalData: payload,
+		}}
 	}
 	return
 }

@@ -20,7 +20,7 @@ var psi = &PSIData{
 				TableID:                78,
 			},
 			Syntax: &PSISectionSyntax{
-				Data:   &PSISectionSyntaxData{EIT: eit},
+				Data:   eit,
 				Header: psiSectionSyntaxHeader,
 			},
 		},
@@ -33,7 +33,7 @@ var psi = &PSIData{
 				TableID:                64,
 			},
 			Syntax: &PSISectionSyntax{
-				Data:   &PSISectionSyntaxData{NIT: nit},
+				Data:   nit,
 				Header: psiSectionSyntaxHeader,
 			},
 		},
@@ -46,7 +46,7 @@ var psi = &PSIData{
 				TableID:                0,
 			},
 			Syntax: &PSISectionSyntax{
-				Data:   &PSISectionSyntaxData{PAT: pat},
+				Data:   pat,
 				Header: psiSectionSyntaxHeader,
 			},
 		},
@@ -59,7 +59,7 @@ var psi = &PSIData{
 				TableID:                2,
 			},
 			Syntax: &PSISectionSyntax{
-				Data:   &PSISectionSyntaxData{PMT: pmt},
+				Data:   pmt,
 				Header: psiSectionSyntaxHeader,
 			},
 		},
@@ -72,7 +72,7 @@ var psi = &PSIData{
 				TableID:                66,
 			},
 			Syntax: &PSISectionSyntax{
-				Data:   &PSISectionSyntaxData{SDT: sdt},
+				Data:   sdt,
 				Header: psiSectionSyntaxHeader,
 			},
 		},
@@ -85,7 +85,7 @@ var psi = &PSIData{
 				TableID:                115,
 			},
 			Syntax: &PSISectionSyntax{
-				Data: &PSISectionSyntaxData{TOT: tot},
+				Data: tot,
 			},
 		},
 		{Header: PSISectionHeader{
@@ -308,7 +308,7 @@ var psiDataTestCases = []psiDataTestCase{
 						TableID:                0,
 					},
 					Syntax: &PSISectionSyntax{
-						Data:   &PSISectionSyntaxData{PAT: pat},
+						Data:   pat,
 						Header: psiSectionSyntaxHeader,
 					},
 				},
@@ -341,7 +341,7 @@ var psiDataTestCases = []psiDataTestCase{
 						TableID:                2,
 					},
 					Syntax: &PSISectionSyntax{
-						Data:   &PSISectionSyntaxData{PMT: pmt},
+						Data:   pmt,
 						Header: psiSectionSyntaxHeader,
 					},
 				},
