@@ -1,6 +1,7 @@
 package astits
 
 import (
+	"encoding/binary"
 	"fmt"
 
 	"github.com/asticode/go-astikit"
@@ -35,25 +36,25 @@ func parsePATSection(i *astikit.BytesIterator, offsetSectionsEnd int, tableIDExt
 	for idx := range d.Programs {
 		// Get next bytes
 		var bs []byte
-		if bs, err = i.NextBytesNoCopy(4); err != nil {
+		if bs, err = i.NextBytesNoCopy(4); err != nil || len(bs) < 4 {
 			err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 			return
 		}
-
+		val := binary.BigEndian.Uint32(bs)
 		// Append program
 		d.Programs[idx] = PATProgram{
-			ProgramMapID:  uint16(bs[2]&0x1f)<<8 | uint16(bs[3]),
-			ProgramNumber: uint16(bs[0])<<8 | uint16(bs[1]),
+			ProgramMapID:  uint16(val & 0x1fff),
+			ProgramNumber: uint16(val >> 16),
 		}
 	}
 	return
 }
 
-func calcPATSectionLength(d *PATData) uint16 {
+func (d *PATData) calcPATSectionLength() uint16 {
 	return uint16(4 * len(d.Programs))
 }
 
-func writePATSection(w *astikit.BitsWriter, d *PATData) (int, error) {
+func (d *PATData) writePATSection(w *astikit.BitsWriter) (int, error) {
 	b := astikit.NewBitsWriterBatch(w)
 
 	for _, p := range d.Programs {

@@ -9,7 +9,7 @@ import (
 )
 
 var pmt = &PMTData{
-	ElementaryStreams: []*PMTElementaryStream{{
+	ElementaryStreams: []PMTElementaryStream{{
 		ElementaryPID:               2730,
 		ElementaryStreamDescriptors: descriptors,
 		StreamType:                  StreamTypeMPEG1Audio,
@@ -44,7 +44,7 @@ func TestParsePMTSection(t *testing.T) {
 func TestWritePMTSection(t *testing.T) {
 	buf := bytes.Buffer{}
 	w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: &buf})
-	n, err := writePMTSection(w, pmt)
+	n, err := pmt.writePMTSection(w)
 	assert.NoError(t, err)
 	assert.Equal(t, n, buf.Len())
 	assert.Equal(t, pmtBytes(), buf.Bytes())
@@ -68,6 +68,6 @@ func BenchmarkWritePMTSection(b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		bw.Reset()
-		writePMTSection(w, pmt)
+		pmt.writePMTSection(w)
 	}
 }

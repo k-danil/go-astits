@@ -71,8 +71,8 @@ func MuxerOptTablesRetransmitPeriod(newPeriod int) func(*Muxer) {
 
 // TODO MuxerOptAutodetectPCRPID selecting first video PID for each PMT, falling back to first audio, falling back to any other
 
-func NewMuxer(ctx context.Context, w io.Writer, opts ...func(*Muxer)) *Muxer {
-	m := &Muxer{
+func NewMuxer(ctx context.Context, w io.Writer, opts ...func(*Muxer)) (m *Muxer) {
+	m = &Muxer{
 		ctx: ctx,
 		w:   w,
 
@@ -81,7 +81,7 @@ func NewMuxer(ctx context.Context, w io.Writer, opts ...func(*Muxer)) *Muxer {
 
 		pm: newProgramMap(),
 		pmt: PMTData{
-			ElementaryStreams: []*PMTElementaryStream{},
+			ElementaryStreams: []PMTElementaryStream{},
 			ProgramNumber:     programNumberStart,
 		},
 
@@ -111,7 +111,7 @@ func NewMuxer(ctx context.Context, w io.Writer, opts ...func(*Muxer)) *Muxer {
 	// to output tables at the very start
 	m.tablesRetransmitCounter = m.tablesRetransmitPeriod
 
-	return m
+	return
 }
 
 // if es.ElementaryPID is zero, it will be generated automatically
@@ -127,7 +127,7 @@ func (m *Muxer) AddElementaryStream(es PMTElementaryStream) error {
 		m.nextPID++
 	}
 
-	m.pmt.ElementaryStreams = append(m.pmt.ElementaryStreams, &es)
+	m.pmt.ElementaryStreams = append(m.pmt.ElementaryStreams, es)
 
 	m.esContexts[uint32(es.ElementaryPID)] = newEsContext(&es)
 	// invalidate pmt cache
@@ -165,20 +165,18 @@ func (m *Muxer) SetPCRPID(pid uint16) {
 // WriteData writes MuxerData to TS stream
 // Currently only PES packets are supported
 // Be aware that after successful call WriteData will set d.AdaptationField.StuffingLength value to zero
-func (m *Muxer) WriteData(d *MuxerData) (int, error) {
+func (m *Muxer) WriteData(d *MuxerData) (bytesWritten int, err error) {
 	ctx, ok := m.esContexts[uint32(d.PID)]
 	if !ok {
 		return 0, ErrPIDNotFound
 	}
 
-	bytesWritten := 0
-
 	forceTables := d.AdaptationField != nil &&
 		d.AdaptationField.RandomAccessIndicator &&
 		d.PID == m.pmt.PCRPID
 
-	n, err := m.retransmitTables(forceTables)
-	if err != nil {
+	var n int
+	if n, err = m.retransmitTables(forceTables); err != nil {
 		return n, err
 	}
 
@@ -189,7 +187,7 @@ func (m *Muxer) WriteData(d *MuxerData) (int, error) {
 	payloadBytesWritten := 0
 	for payloadBytesWritten < len(d.PES.Data) {
 		pktLen := mpegTsPacketHeaderSize
-		pkt := &Packet{
+		pkt := Packet{
 			Header: PacketHeader{
 				ContinuityCounter:         uint8(ctx.cc.inc()),
 				HasAdaptationField:        writeAf,
@@ -231,14 +229,14 @@ func (m *Muxer) WriteData(d *MuxerData) (int, error) {
 				d.PES.Header.StreamID = ctx.es.StreamType.ToPESStreamID()
 			}
 
-			ntot, npayload, err := d.PES.Header.writePESData(
+			var ntot, npayload int
+			if ntot, npayload, err = d.PES.Header.writePESData(
 				m.bufWriter,
 				d.PES.Data[payloadBytesWritten:],
 				payloadStart,
 				bytesAvailable,
-			)
-			if err != nil {
-				return bytesWritten, err
+			); err != nil {
+				return
 			}
 
 			payloadBytesWritten += npayload
@@ -257,9 +255,8 @@ func (m *Muxer) WriteData(d *MuxerData) (int, error) {
 				}
 			}
 
-			n, err = pkt.write(m.bitsWriter, m.bb, m.packetSize)
-			if err != nil {
-				return bytesWritten, err
+			if n, err = pkt.write(m.bitsWriter, m.bb, m.packetSize); err != nil {
+				return
 			}
 
 			bytesWritten += n
@@ -272,7 +269,7 @@ func (m *Muxer) WriteData(d *MuxerData) (int, error) {
 		d.AdaptationField.StuffingLength = 0
 	}
 
-	return bytesWritten, nil
+	return
 }
 
 // Writes given packet to MPEG-TS stream
@@ -281,48 +278,44 @@ func (m *Muxer) WritePacket(p *Packet) (int, error) {
 	return p.write(m.bitsWriter, m.bb, m.packetSize)
 }
 
-func (m *Muxer) retransmitTables(force bool) (int, error) {
+func (m *Muxer) retransmitTables(force bool) (n int, err error) {
 	m.tablesRetransmitCounter++
 	if !force && m.tablesRetransmitCounter < m.tablesRetransmitPeriod {
-		return 0, nil
+		return
 	}
 
-	n, err := m.WriteTables()
-	if err != nil {
-		return n, err
+	if n, err = m.WriteTables(); err != nil {
+		return
 	}
 
 	m.tablesRetransmitCounter = 0
-	return n, nil
+	return
 }
 
-func (m *Muxer) WriteTables() (int, error) {
-	bytesWritten := 0
-
-	if err := m.generatePAT(); err != nil {
-		return bytesWritten, err
+func (m *Muxer) WriteTables() (bytesWritten int, err error) {
+	if err = m.generatePAT(); err != nil {
+		return
 	}
 
-	if err := m.generatePMT(); err != nil {
-		return bytesWritten, err
+	if err = m.generatePMT(); err != nil {
+		return
 	}
 
-	n, err := m.w.Write(m.patBytes.Bytes())
-	if err != nil {
-		return bytesWritten, err
+	var n int
+	if n, err = m.w.Write(m.patBytes.Bytes()); err != nil {
+		return
 	}
 	bytesWritten += n
 
-	n, err = m.w.Write(m.pmtBytes.Bytes())
-	if err != nil {
-		return bytesWritten, err
+	if n, err = m.w.Write(m.pmtBytes.Bytes()); err != nil {
+		return
 	}
 	bytesWritten += n
 
-	return bytesWritten, nil
+	return
 }
 
-func (m *Muxer) generatePAT() error {
+func (m *Muxer) generatePAT() (err error) {
 	d := m.pm.toPATDataUnlocked()
 
 	versionNumber := m.patVersion.get()
@@ -345,7 +338,7 @@ func (m *Muxer) generatePAT() error {
 		Sections: []PSISection{
 			{
 				Header: PSISectionHeader{
-					SectionLength:          calcPATSectionLength(d),
+					SectionLength:          d.calcPATSectionLength(),
 					SectionSyntaxIndicator: true,
 					TableID:                PSITableID(d.TransportStreamID),
 				},
@@ -356,14 +349,14 @@ func (m *Muxer) generatePAT() error {
 
 	m.buf.Reset()
 	w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: &m.buf})
-	if _, err := psiData.writePSIData(w); err != nil {
-		return err
+	if _, err = psiData.writePSIData(w); err != nil {
+		return
 	}
 
 	m.patBytes.Reset()
 	wPacket := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: &m.patBytes})
 
-	pkt := &Packet{
+	pkt := Packet{
 		Header: PacketHeader{
 			HasPayload:                true,
 			PayloadUnitStartIndicator: true,
@@ -372,17 +365,17 @@ func (m *Muxer) generatePAT() error {
 		},
 		Payload: m.buf.Bytes(),
 	}
-	if _, err := pkt.write(wPacket, m.bb, m.packetSize); err != nil {
+	if _, err = pkt.write(wPacket, m.bb, m.packetSize); err != nil {
 		// FIXME save old PAT and rollback to it here maybe?
-		return err
+		return
 	}
 
 	m.pmUpdated = false
 
-	return nil
+	return
 }
 
-func (m *Muxer) generatePMT() error {
+func (m *Muxer) generatePMT() (err error) {
 	hasPCRPID := false
 	for _, es := range m.pmt.ElementaryStreams {
 		if es.ElementaryPID == m.pmt.PCRPID {
@@ -414,7 +407,7 @@ func (m *Muxer) generatePMT() error {
 		Sections: []PSISection{
 			{
 				Header: PSISectionHeader{
-					SectionLength:          calcPMTSectionLength(&m.pmt),
+					SectionLength:          m.pmt.calcPMTSectionLength(),
 					SectionSyntaxIndicator: true,
 					TableID:                PSITableIDPMT,
 				},
@@ -425,14 +418,14 @@ func (m *Muxer) generatePMT() error {
 
 	m.buf.Reset()
 	w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: &m.buf})
-	if _, err := psiData.writePSIData(w); err != nil {
-		return err
+	if _, err = psiData.writePSIData(w); err != nil {
+		return
 	}
 
 	m.pmtBytes.Reset()
 	wPacket := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: &m.pmtBytes})
 
-	pkt := &Packet{
+	pkt := Packet{
 		Header: PacketHeader{
 			HasPayload:                true,
 			PayloadUnitStartIndicator: true,
@@ -441,12 +434,12 @@ func (m *Muxer) generatePMT() error {
 		},
 		Payload: m.buf.Bytes(),
 	}
-	if _, err := pkt.write(wPacket, m.bb, m.packetSize); err != nil {
+	if _, err = pkt.write(wPacket, m.bb, m.packetSize); err != nil {
 		// FIXME save old PMT and rollback to it here maybe?
-		return err
+		return
 	}
 
 	m.pmtUpdated = false
 
-	return nil
+	return
 }

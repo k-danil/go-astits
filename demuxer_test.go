@@ -145,13 +145,13 @@ func TestDemuxerNextDataPATPMT(t *testing.T) {
 
 	d, err := dmx.NextData()
 	assert.NoError(t, err)
-	assert.Equal(t, uint16(0), d.FirstPacket.Header.PID)
+	assert.Equal(t, uint16(0), d.PID)
 	assert.NotNil(t, d.PAT)
 	assert.Equal(t, 188, r.Len())
 
 	d, err = dmx.NextData()
 	assert.NoError(t, err)
-	assert.Equal(t, uint16(0x1000), d.FirstPacket.Header.PID)
+	assert.Equal(t, uint16(0x1000), d.PID)
 	assert.NotNil(t, d.PMT)
 }
 

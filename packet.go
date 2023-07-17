@@ -1,10 +1,10 @@
 package astits
 
 import (
+	"encoding/binary"
 	"fmt"
 	"github.com/asticode/go-astikit"
 	"sync"
-	"unsafe"
 )
 
 // Scrambling Controls
@@ -157,23 +157,22 @@ func (p *Packet) payloadOffset(offsetStart int) (offset int) {
 func (ph *PacketHeader) parse(i *astikit.BytesIterator) (err error) {
 	// Get next bytes
 	var bs []byte
-	if bs, err = i.NextBytesNoCopy(3); err != nil {
+	if bs, err = i.NextBytesNoCopy(3); err != nil || len(bs) < 3 {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return
 	}
 
-	if len(bs) >= 3 {
-		b := bs[2]
-		ph.TransportScramblingControl = b >> 6 & 0x3
-		ph.HasAdaptationField = b&0x20 > 0
-		ph.HasPayload = b&0x10 > 0
-		ph.ContinuityCounter = b & 0xf
-		b = bs[0]
-		ph.TransportErrorIndicator = b&0x80 > 0
-		ph.PayloadUnitStartIndicator = b&0x40 > 0
-		ph.TransportPriority = b&0x20 > 0
-		ph.PID = (uint16(bs[1]) | uint16(bs[0])<<8) & 0x1fff
-	}
+	b := bs[2]
+	ph.TransportScramblingControl = b >> 6 & 0x3
+	ph.HasAdaptationField = b&0x20 > 0
+	ph.HasPayload = b&0x10 > 0
+	ph.ContinuityCounter = b & 0xf
+	b = bs[0]
+	ph.TransportErrorIndicator = b&0x80 > 0
+	ph.PayloadUnitStartIndicator = b&0x40 > 0
+	ph.TransportPriority = b&0x20 > 0
+	ph.PID = binary.BigEndian.Uint16(bs[:2]) & 0x1fff
+
 	return
 }
 
@@ -286,26 +285,22 @@ func (afe *PacketAdaptationExtensionField) parse(i *astikit.BytesIterator) (err 
 		// Legal time window
 		if afe.HasLegalTimeWindow {
 			var bs []byte
-			if bs, err = i.NextBytesNoCopy(2); err != nil {
+			if bs, err = i.NextBytesNoCopy(2); err != nil || len(bs) < 2 {
 				err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 				return
 			}
-			if len(bs) >= 2 {
-				afe.LegalTimeWindowIsValid = bs[0]&0x80 > 0
-				afe.LegalTimeWindowOffset = uint16(bs[0]&0x7f)<<8 | uint16(bs[1])
-			}
+			afe.LegalTimeWindowIsValid = bs[0]&0x80 > 0
+			afe.LegalTimeWindowOffset = binary.BigEndian.Uint16(bs) & 0x7fff
 		}
 
 		// Piecewise rate
 		if afe.HasPiecewiseRate {
 			var bs []byte
-			if bs, err = i.NextBytesNoCopy(3); err != nil {
+			if bs, err = i.NextBytesNoCopy(3); err != nil || len(bs) < 3 {
 				err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 				return
 			}
-			if len(bs) >= 3 {
-				afe.PiecewiseRate = uint32(bs[0]&0x3f)<<16 | uint32(bs[1])<<8 | uint32(bs[2])
-			}
+			afe.PiecewiseRate = uint32(bs[0]&0x3f)<<16 | uint32(bs[1])<<8 | uint32(bs[2])
 		}
 
 		// Seamless splice
@@ -336,14 +331,15 @@ func (afe *PacketAdaptationExtensionField) parse(i *astikit.BytesIterator) (err 
 // Program clock reference, stored as 33 bits base, 6 bits reserved, 9 bits extension.
 func (cr *ClockReference) parsePCR(i *astikit.BytesIterator) (err error) {
 	var bs []byte
-	if bs, err = i.NextBytesNoCopy(6); err != nil {
+	if bs, err = i.NextBytesNoCopy(6); err != nil || len(bs) < 6 {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return
 	}
-	if len(bs) >= 6 {
-		pcr := uint64(bs[0])<<40 | uint64(bs[1])<<32 | uint64(bs[2])<<24 | uint64(bs[3])<<16 | uint64(bs[4])<<8 | uint64(bs[5])
-		*cr = newClockReference(pcr>>15, pcr&0x1ff)
-	}
+
+	bs = bs[:6]
+	pcr := (uint64(binary.BigEndian.Uint32(bs[:4])) << 16) |
+		uint64(binary.BigEndian.Uint32(bs[2:]))
+	*cr = newClockReference(pcr>>15, pcr&0x1ff)
 	return
 }
 
@@ -376,10 +372,20 @@ func (p *Packet) write(w *astikit.BitsWriter, bb *[8]byte, targetPacketSize int)
 	}
 
 	for written < targetPacketSize {
-		if err = w.Write(uint8(0xff)); err != nil {
-			return
+		size := uint8(targetPacketSize - written)
+		fast := size / 8
+		rem := size % 8
+		binary.BigEndian.PutUint64(bb[:], ^uint64(0))
+		for i := uint8(0); i < fast; i++ {
+			if err = w.Write(bb[:]); err != nil {
+				return 0, err
+			}
+			written += 8
 		}
-		written++
+		if err = w.Write(bb[:rem]); err != nil {
+			return 0, err
+		}
+		written += int(rem)
 	}
 
 	return
@@ -399,29 +405,24 @@ func b2u(b bool) uint8 {
 }
 
 func (ph *PacketHeader) write(w *astikit.BitsWriter, bb *[8]byte) (int, error) {
-	bb[0] = syncByte
-	b := b2u(ph.TransportErrorIndicator) << 7
-	b |= b2u(ph.PayloadUnitStartIndicator) << 6
-	b |= b2u(ph.TransportPriority) << 5
-	bb[1] = b | uint8(ph.PID>>8)
-	bb[2] = uint8(ph.PID)
-	b = ph.TransportScramblingControl << 6
-	b |= b2u(ph.HasAdaptationField) << 5
-	b |= b2u(ph.HasPayload) << 4
-	bb[3] = b | ph.ContinuityCounter
+	var val uint32
+	val |= uint32(syncByte) << 24
+	val |= uint32(b2u(ph.TransportErrorIndicator)) << 23
+	val |= uint32(b2u(ph.PayloadUnitStartIndicator)) << 22
+	val |= uint32(b2u(ph.TransportPriority)) << 21
+	val |= uint32(ph.PID&0x1fff) << 8
+	val |= uint32(ph.TransportScramblingControl&0x3) << 6
+	val |= uint32(b2u(ph.HasAdaptationField)) << 5
+	val |= uint32(b2u(ph.HasPayload)) << 4
+	val |= uint32(ph.ContinuityCounter & 0xf)
+	binary.BigEndian.PutUint32(bb[:], val)
 
 	return mpegTsPacketHeaderSize, w.Write(bb[:4])
 }
 
 func (cr *ClockReference) writePCR(w *astikit.BitsWriter, bb *[8]byte) (int, error) {
-	bb[0] = uint8(cr.Base() >> 25)
-	bb[1] = uint8(cr.Base() >> 17)
-	bb[2] = uint8(cr.Base() >> 9)
-	bb[3] = uint8(cr.Base() >> 1)
-	bb[4] = uint8(cr.Base()<<7) | 0x7e | uint8(cr.Extension()>>8)
-	bb[5] = uint8(cr.Extension())
-
-	return pcrBytesSize, w.Write(bb[:6])
+	binary.BigEndian.PutUint64(bb[:], cr.Extension()|cr.Base()<<15|0x7e<<8)
+	return pcrBytesSize, w.Write(bb[2:])
 }
 
 func (af *PacketAdaptationField) calcLength() (length uint8) {
@@ -438,59 +439,70 @@ func (af *PacketAdaptationField) calcLength() (length uint8) {
 }
 
 func (af *PacketAdaptationField) write(w *astikit.BitsWriter, bb *[8]byte) (bytesWritten int, retErr error) {
-	b := astikit.NewBitsWriterBatch(w)
-
 	if af.IsOneByteStuffing {
-		b.Write(uint8(0))
-		return 1, nil
+		bb[0] = 0
+		return 1, w.Write(bb[:1])
 	}
 
-	bb[0] = af.calcLength()
-	bs := b2u(af.DiscontinuityIndicator) << 7
-	bs |= b2u(af.RandomAccessIndicator) << 6
-	bs |= b2u(af.ElementaryStreamPriorityIndicator) << 5
-	bs |= b2u(af.HasPCR) << 4
-	bs |= b2u(af.HasOPCR) << 3
-	bs |= b2u(af.HasSplicingCountdown) << 2
-	bs |= b2u(af.HasTransportPrivateData) << 1
-	bb[1] = bs | b2u(af.HasAdaptationExtensionField)
-	b.Write(bb[:2])
+	var val uint16
+	val = uint16(af.calcLength()) << 8
+	val |= uint16(b2u(af.DiscontinuityIndicator)) << 7
+	val |= uint16(b2u(af.RandomAccessIndicator)) << 6
+	val |= uint16(b2u(af.ElementaryStreamPriorityIndicator)) << 5
+	val |= uint16(b2u(af.HasPCR)) << 4
+	val |= uint16(b2u(af.HasOPCR)) << 3
+	val |= uint16(b2u(af.HasSplicingCountdown)) << 2
+	val |= uint16(b2u(af.HasTransportPrivateData)) << 1
+	val |= uint16(b2u(af.HasAdaptationExtensionField))
+	binary.BigEndian.PutUint16(bb[:], val)
+	var err error
+	if err = w.Write(bb[:2]); err != nil {
+		return 0, err
+	}
 	bytesWritten += 2
 
 	if af.HasPCR {
-		n, err := af.PCR.writePCR(w, bb)
-		if err != nil {
+		var n int
+		if n, err = af.PCR.writePCR(w, bb); err != nil {
 			return 0, err
 		}
 		bytesWritten += n
 	}
 
 	if af.HasOPCR {
-		n, err := af.OPCR.writePCR(w, bb)
-		if err != nil {
+		var n int
+		if n, err = af.OPCR.writePCR(w, bb); err != nil {
 			return 0, err
 		}
 		bytesWritten += n
 	}
 
 	if af.HasSplicingCountdown {
-		b.Write(af.SpliceCountdown)
+		bb[0] = af.SpliceCountdown
+		if err = w.Write(bb[:1]); err != nil {
+			return 0, err
+		}
 		bytesWritten++
 	}
 
 	if af.HasTransportPrivateData {
 		// we can get length from TransportPrivateData itself, why do we need separate field?
-		b.Write(af.TransportPrivateDataLength)
+		bb[0] = af.TransportPrivateDataLength
+		if err = w.Write(bb[:1]); err != nil {
+			return 0, err
+		}
 		bytesWritten++
 		if af.TransportPrivateDataLength > 0 {
-			b.Write(af.TransportPrivateData)
+			if err = w.Write(af.TransportPrivateData); err != nil {
+				return 0, err
+			}
 			bytesWritten += len(af.TransportPrivateData)
 		}
 	}
 
 	if af.HasAdaptationExtensionField {
-		n, err := af.AdaptationExtensionField.write(w, bb)
-		if err != nil {
+		var n int
+		if n, err = af.AdaptationExtensionField.write(w, bb); err != nil {
 			return 0, err
 		}
 		bytesWritten += n
@@ -498,19 +510,20 @@ func (af *PacketAdaptationField) write(w *astikit.BitsWriter, bb *[8]byte) (byte
 
 	if af.StuffingLength > 0 {
 		fast := af.StuffingLength / 8
-		rem := af.StuffingLength - fast*8
-		*(*uint64)(unsafe.Pointer(bb)) = ^uint64(0)
+		rem := af.StuffingLength % 8
+		binary.BigEndian.PutUint64(bb[:], ^uint64(0))
 		for i := uint8(0); i < fast; i++ {
-			b.Write(bb[:])
+			if err = w.Write(bb[:]); err != nil {
+				return 0, err
+			}
 			bytesWritten += 8
 		}
-		if uint8(len(bb)) >= rem {
-			b.Write(bb[:rem])
+		if err = w.Write(bb[:rem]); err != nil {
+			return 0, err
 		}
 		bytesWritten += int(rem)
 	}
 
-	retErr = b.Err()
 	return
 }
 

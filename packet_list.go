@@ -8,7 +8,7 @@ type PacketList struct {
 	s  int
 }
 
-func MakePacketList() *PacketList {
+func NewPacketList() *PacketList {
 	return &PacketList{}
 }
 

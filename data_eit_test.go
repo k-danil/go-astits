@@ -9,7 +9,7 @@ import (
 )
 
 var eit = &EITData{
-	Events: []*EITDataEvent{{
+	Events: []EITDataEvent{{
 		Descriptors:    descriptors,
 		Duration:       dvbDurationSeconds,
 		EventID:        6,

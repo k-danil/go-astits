@@ -1,6 +1,7 @@
 package astits
 
 import (
+	"encoding/binary"
 	"fmt"
 
 	"github.com/asticode/go-astikit"
@@ -11,15 +12,15 @@ import (
 // (barbashov) the link above can be broken, alternative: https://dvb.org/wp-content/uploads/2019/12/a038_tm1217r37_en300468v1_17_1_-_rev-134_-_si_specification.pdf
 type NITData struct {
 	NetworkDescriptors []Descriptor
+	TransportStreams   []NITDataTransportStream
 	NetworkID          uint16
-	TransportStreams   []*NITDataTransportStream
 }
 
 // NITDataTransportStream represents a NIT data transport stream
 type NITDataTransportStream struct {
-	OriginalNetworkID    uint16
 	TransportDescriptors []Descriptor
 	TransportStreamID    uint16
+	OriginalNetworkID    uint16
 }
 
 // parseNITSection parses a NIT section
@@ -35,37 +36,31 @@ func parseNITSection(i *astikit.BytesIterator, tableIDExtension uint16) (d *NITD
 
 	// Get next bytes
 	var bs []byte
-	if bs, err = i.NextBytesNoCopy(2); err != nil {
+	if bs, err = i.NextBytesNoCopy(2); err != nil || len(bs) < 2 {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return
 	}
 
 	// Transport stream loop length
-	transportStreamLoopLength := int(uint16(bs[0]&0xf)<<8 | uint16(bs[1]))
+	transportStreamLoopLength := int(binary.BigEndian.Uint16(bs) & 0xfff)
 
 	// Transport stream loop
 	offsetEnd := i.Offset() + transportStreamLoopLength
 	for i.Offset() < offsetEnd {
 		// Create transport stream
-		ts := &NITDataTransportStream{}
+		ts := NITDataTransportStream{}
 
 		// Get next bytes
-		if bs, err = i.NextBytesNoCopy(2); err != nil {
+		if bs, err = i.NextBytesNoCopy(4); err != nil || len(bs) < 4 {
 			err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 			return
 		}
+		val := binary.BigEndian.Uint32(bs)
 
 		// Transport stream ID
-		ts.TransportStreamID = uint16(bs[0])<<8 | uint16(bs[1])
-
-		// Get next bytes
-		if bs, err = i.NextBytesNoCopy(2); err != nil {
-			err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
-			return
-		}
-
+		ts.TransportStreamID = uint16(val >> 16)
 		// Original network ID
-		ts.OriginalNetworkID = uint16(bs[0])<<8 | uint16(bs[1])
+		ts.OriginalNetworkID = uint16(val)
 
 		// Transport descriptors
 		if ts.TransportDescriptors, err = parseDescriptors(i); err != nil {

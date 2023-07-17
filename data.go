@@ -16,25 +16,23 @@ const (
 
 // DemuxerData represents a data parsed by Demuxer
 type DemuxerData struct {
-	EIT         *EITData
-	FirstPacket *Packet
-	NIT         *NITData
-	PAT         *PATData
-	PES         *PESData
-	PID         uint16
-	PMT         *PMTData
-	SDT         *SDTData
-	TOT         *TOTData
+	EIT             *EITData
+	NIT             *NITData
+	PAT             *PATData
+	PES             *PESData
+	PMT             *PMTData
+	SDT             *SDTData
+	TOT             *TOTData
+	AdaptationField *PacketAdaptationField
 
 	internalData *tempPayload
+
+	PID uint16
 }
 
 func (d *DemuxerData) Close() {
 	if d.internalData != nil {
 		poolOfTempPayload.put(d.internalData)
-	}
-	if d.FirstPacket != nil {
-		d.FirstPacket.Close()
 	}
 }
 
@@ -72,13 +70,9 @@ func parseData(pl *PacketList, prs PacketsParser, pm *programMap) (ds []*Demuxer
 	// Create reader
 	i := astikit.NewBytesIterator(payload.s)
 
-	// Parse PID
-	pid := pl.GetHead().Header.PID
-
-	// Copy first packet headers, so we can safely deallocate original payload
-	fp := NewPacket()
-	fp.Header = pl.GetHead().Header
-	fp.AdaptationField = pl.GetHead().AdaptationField
+	fp := pl.GetHead()
+	pid := fp.Header.PID
+	af := fp.AdaptationField
 
 	// Parse payload
 	if pid == PIDCAT {
@@ -93,7 +87,7 @@ func parseData(pl *PacketList, prs PacketsParser, pm *programMap) (ds []*Demuxer
 		}
 
 		// Append data
-		ds = psiData.toData(fp, pid)
+		ds = psiData.toData(af, pid)
 	} else if isPESPayload(payload.s) {
 		// Parse PES data
 		pesData := &PESData{}
@@ -105,10 +99,10 @@ func parseData(pl *PacketList, prs PacketsParser, pm *programMap) (ds []*Demuxer
 		// Append data
 		ds = []*DemuxerData{
 			{
-				FirstPacket:  fp,
-				PES:          pesData,
-				PID:          pid,
-				internalData: payload,
+				AdaptationField: af,
+				PES:             pesData,
+				PID:             pid,
+				internalData:    payload,
 			},
 		}
 	}
@@ -123,14 +117,14 @@ func isPSIPayload(pid uint16, pm *programMap) bool {
 }
 
 // isPESPayload checks whether the payload is a PES one
-func isPESPayload(i []byte) bool {
+func isPESPayload(bs []byte) bool {
 	// Packet is not big enough
-	if len(i) < 3 {
+	if len(bs) < 4 {
 		return false
 	}
 
 	// Check prefix
-	return uint32(i[0])<<16|uint32(i[1])<<8|uint32(i[2]) == 1
+	return binary.BigEndian.Uint32(bs)>>8 == 1
 }
 
 // isPSIComplete checks whether we have sufficient amount of packets to parse PSI

@@ -32,10 +32,10 @@ func (b *packetAccumulator) add(p *Packet) (pl *PacketList) {
 		}
 		if p.Header.PayloadUnitStartIndicator {
 			pl = mps
-			mps = MakePacketList()
+			mps = NewPacketList()
 		}
 	} else {
-		mps = MakePacketList()
+		mps = NewPacketList()
 	}
 
 	mps.Add(p)
@@ -54,7 +54,7 @@ func (b *packetAccumulator) add(p *Packet) (pl *PacketList) {
 
 // packetPool represents a queue of packets for each PID in the stream
 type packetPool struct {
-	b map[uint32]*packetAccumulator // Indexed by PID
+	b map[uint64]*packetAccumulator // Indexed by PID
 
 	programMap *programMap
 }
@@ -62,7 +62,7 @@ type packetPool struct {
 // newPacketPool creates a new packet pool with an optional parser and programMap
 func newPacketPool(programMap *programMap) *packetPool {
 	return &packetPool{
-		b: make(map[uint32]*packetAccumulator),
+		b: make(map[uint64]*packetAccumulator),
 
 		programMap: programMap,
 	}
@@ -82,10 +82,10 @@ func (b *packetPool) addUnlocked(p *Packet) (pl *PacketList) {
 	}
 
 	// Make sure accumulator exists
-	acc, ok := b.b[uint32(p.Header.PID)]
+	acc, ok := b.b[uint64(p.Header.PID)]
 	if !ok {
 		acc = newPacketAccumulator(p.Header.PID, b.programMap)
-		b.b[uint32(p.Header.PID)] = acc
+		b.b[uint64(p.Header.PID)] = acc
 	}
 
 	// Add to the accumulator
@@ -100,8 +100,8 @@ func (b *packetPool) dumpUnlocked() (pl *PacketList) {
 	}
 	sort.Ints(keys)
 	for _, k := range keys {
-		pl = b.b[uint32(k)].q
-		delete(b.b, uint32(k))
+		pl = b.b[uint64(k)].q
+		delete(b.b, uint64(k))
 		if !pl.IsEmpty() {
 			return
 		}

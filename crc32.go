@@ -12,7 +12,7 @@ func computeCRC32(bs []byte) uint32 {
 // reallocations): https://github.com/videolan/vlc/blob/master/modules/mux/mpeg/ps.c
 func updateCRC32(crc32 uint32, bs []byte) uint32 {
 	for _, b := range bs {
-		crc32 = (crc32 << 8) ^ tableCRC32[((crc32>>24)^uint32(b))&0xff]
+		crc32 = (crc32 << 8) ^ tableCRC32[uint8(crc32>>24)^b]
 	}
 	return crc32
 }

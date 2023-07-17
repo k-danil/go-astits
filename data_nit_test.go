@@ -11,7 +11,7 @@ import (
 var nit = &NITData{
 	NetworkDescriptors: descriptors,
 	NetworkID:          1,
-	TransportStreams: []*NITDataTransportStream{{
+	TransportStreams: []NITDataTransportStream{{
 		OriginalNetworkID:    3,
 		TransportDescriptors: descriptors,
 		TransportStreamID:    2,

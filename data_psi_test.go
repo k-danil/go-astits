@@ -18,7 +18,6 @@ var psi = &PSIData{
 				SectionLength:          30,
 				SectionSyntaxIndicator: true,
 				TableID:                78,
-				//TableType:              PSITableTypeEIT,
 			},
 			Syntax: &PSISectionSyntax{
 				Data:   &PSISectionSyntaxData{EIT: eit},
@@ -32,7 +31,6 @@ var psi = &PSIData{
 				SectionLength:          25,
 				SectionSyntaxIndicator: true,
 				TableID:                64,
-				//TableType:              PSITableTypeNIT,
 			},
 			Syntax: &PSISectionSyntax{
 				Data:   &PSISectionSyntaxData{NIT: nit},
@@ -46,7 +44,6 @@ var psi = &PSIData{
 				SectionLength:          17,
 				SectionSyntaxIndicator: true,
 				TableID:                0,
-				//TableType:              PSITableTypePAT,
 			},
 			Syntax: &PSISectionSyntax{
 				Data:   &PSISectionSyntaxData{PAT: pat},
@@ -60,7 +57,6 @@ var psi = &PSIData{
 				SectionLength:          24,
 				SectionSyntaxIndicator: true,
 				TableID:                2,
-				//TableType:              PSITableTypePMT,
 			},
 			Syntax: &PSISectionSyntax{
 				Data:   &PSISectionSyntaxData{PMT: pmt},
@@ -74,7 +70,6 @@ var psi = &PSIData{
 				SectionLength:          20,
 				SectionSyntaxIndicator: true,
 				TableID:                66,
-				//TableType:              PSITableTypeSDT,
 			},
 			Syntax: &PSISectionSyntax{
 				Data:   &PSISectionSyntaxData{SDT: sdt},
@@ -88,7 +83,6 @@ var psi = &PSIData{
 				SectionLength:          14,
 				SectionSyntaxIndicator: true,
 				TableID:                115,
-				//TableType:              PSITableTypeTOT,
 			},
 			Syntax: &PSISectionSyntax{
 				Data: &PSISectionSyntaxData{TOT: tot},
@@ -96,7 +90,6 @@ var psi = &PSIData{
 		},
 		{Header: PSISectionHeader{
 			TableID: 254,
-			//TableType: PSITableTypeUnknown,
 		}},
 	},
 }
@@ -184,7 +177,6 @@ var psiSectionHeader = PSISectionHeader{
 	SectionLength:          2730,
 	SectionSyntaxIndicator: true,
 	TableID:                0,
-	//TableType:              PSITableTypePAT,
 }
 
 func psiSectionHeaderBytes() []byte {
@@ -209,7 +201,6 @@ func TestParsePSISectionHeader(t *testing.T) {
 	_, _, _, _, err := d.parsePSISectionHeader(astikit.NewBytesIterator(buf.Bytes()))
 	assert.Equal(t, d, PSISectionHeader{
 		TableID: 254,
-		//TableType: PSITableTypeUnknown,
 	})
 	assert.NoError(t, err)
 
@@ -274,15 +265,14 @@ func TestParsePSISectionSyntaxHeader(t *testing.T) {
 }
 
 func TestPSIToData(t *testing.T) {
-	p := &Packet{}
 	assert.Equal(t, []*DemuxerData{
-		{EIT: eit, FirstPacket: p, PID: 2},
-		{FirstPacket: p, NIT: nit, PID: 2},
-		{FirstPacket: p, PAT: pat, PID: 2},
-		{FirstPacket: p, PMT: pmt, PID: 2},
-		{FirstPacket: p, SDT: sdt, PID: 2},
-		{FirstPacket: p, TOT: tot, PID: 2},
-	}, psi.toData(p, uint16(2)))
+		{EIT: eit, PID: 2},
+		{NIT: nit, PID: 2},
+		{PAT: pat, PID: 2},
+		{PMT: pmt, PID: 2},
+		{SDT: sdt, PID: 2},
+		{TOT: tot, PID: 2},
+	}, psi.toData(nil, uint16(2)))
 }
 
 type psiDataTestCase struct {
@@ -316,7 +306,6 @@ var psiDataTestCases = []psiDataTestCase{
 						SectionLength:          17,
 						SectionSyntaxIndicator: true,
 						TableID:                0,
-						//TableType:              PSITableTypePAT,
 					},
 					Syntax: &PSISectionSyntax{
 						Data:   &PSISectionSyntaxData{PAT: pat},
@@ -350,7 +339,6 @@ var psiDataTestCases = []psiDataTestCase{
 						SectionLength:          24,
 						SectionSyntaxIndicator: true,
 						TableID:                2,
-						//TableType:              PSITableTypePMT,
 					},
 					Syntax: &PSISectionSyntax{
 						Data:   &PSISectionSyntaxData{PMT: pmt},

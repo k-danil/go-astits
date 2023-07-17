@@ -10,7 +10,7 @@ import (
 
 var sdt = &SDTData{
 	OriginalNetworkID: 2,
-	Services: []*SDTDataService{{
+	Services: []SDTDataService{{
 		Descriptors:            descriptors,
 		HasEITPresentFollowing: true,
 		HasEITSchedule:         true,
