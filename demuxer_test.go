@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
+	"fmt"
 	"github.com/asticode/go-astikit"
 	"github.com/stretchr/testify/assert"
 	"io"
@@ -26,104 +27,107 @@ func hexToBytes(in string) []byte {
 	return o
 }
 
-//	func TestDemuxerNew(t *testing.T) {
-//		ps := 1
-//		pp := func(ps []*Packet) (ds []*DemuxerData, skip bool, err error) { return }
-//		sp := func(p *Packet) bool { return true }
-//		dmx := NewDemuxer(context.Background(), nil, DemuxerOptPacketSize(ps), DemuxerOptPacketsParser(pp), DemuxerOptPacketSkipper(sp))
-//		assert.Equal(t, ps, dmx.optPacketSize)
-//		assert.Equal(t, fmt.Sprintf("%p", pp), fmt.Sprintf("%p", dmx.optPacketsParser))
-//		assert.Equal(t, fmt.Sprintf("%p", sp), fmt.Sprintf("%p", dmx.optPacketSkipper))
-//	}
-//
-//	func TestDemuxerNextPacket(t *testing.T) {
-//		// Ctx error
-//		ctx, cancel := context.WithCancel(context.Background())
-//		dmx := NewDemuxer(ctx, bytes.NewReader([]byte{}))
-//		cancel()
-//		_, err := dmx.NextPacket()
-//		assert.Error(t, err)
-//
-//		// Valid
-//		buf := &bytes.Buffer{}
-//		w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: buf})
-//		b1, p1 := packet(packetHeader, *packetAdaptationField, []byte("1"), true)
-//		w.Write(b1)
-//		b2, p2 := packet(packetHeader, *packetAdaptationField, []byte("2"), true)
-//		w.Write(b2)
-//		dmx = NewDemuxer(context.Background(), bytes.NewReader(buf.Bytes()))
-//
-//		// First packet
-//		p, err := dmx.NextPacket()
-//		assert.NoError(t, err)
-//		assert.Equal(t, p1, p)
-//		assert.Equal(t, 192, dmx.packetBuffer.packetSize)
-//
-//		// Second packet
-//		p, err = dmx.NextPacket()
-//		assert.NoError(t, err)
-//		assert.Equal(t, p2, p)
-//
-//		// EOF
-//		_, err = dmx.NextPacket()
-//		assert.EqualError(t, err, ErrNoMorePackets.Error())
-//	}
+func TestDemuxerNew(t *testing.T) {
+	ps := 1
+	pp := func(pl *PacketList) (ds []*DemuxerData, skip bool, err error) { return }
+	sp := func(p *Packet) bool { return true }
+	dmx := NewDemuxer(context.Background(), nil, DemuxerOptPacketSize(ps), DemuxerOptPacketsParser(pp), DemuxerOptPacketSkipper(sp))
+	assert.Equal(t, uint(ps), dmx.optPacketSize)
+	assert.Equal(t, fmt.Sprintf("%p", pp), fmt.Sprintf("%p", dmx.optPacketsParser))
+	assert.Equal(t, fmt.Sprintf("%p", sp), fmt.Sprintf("%p", dmx.optPacketSkipper))
+}
 
-//func TestDemuxerNextData(t *testing.T) {
-//	// Init
-//	buf := &bytes.Buffer{}
-//	w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: buf})
-//	b := psiBytes()
-//	b1, _ := packet(PacketHeader{ContinuityCounter: uint8(0), PayloadUnitStartIndicator: true, PID: PIDPAT}, &PacketAdaptationField{}, b[:147], true)
-//	w.Write(b1)
-//	b2, _ := packet(PacketHeader{ContinuityCounter: uint8(1), PID: PIDPAT}, &PacketAdaptationField{}, b[147:], true)
-//	w.Write(b2)
-//	dmx := NewDemuxer(context.Background(), bytes.NewReader(buf.Bytes()))
-//	p, err := dmx.NextPacket()
-//	assert.NoError(t, err)
-//	_, err = dmx.Rewind()
-//	assert.NoError(t, err)
-//
-//	// Next data
-//	var ds []*DemuxerData
-//	for _, s := range psi.Sections {
-//		if !s.Header.TableID.isUnknown() {
-//			d, err := dmx.NextData()
-//			assert.NoError(t, err)
-//			ds = append(ds, d)
-//		}
-//	}
-//	assert.Equal(t, psi.toData(
-//		&Packet{Header: p.Header, AdaptationField: p.AdaptationField},
-//		PIDPAT,
-//	), ds)
-//	assert.Equal(t, map[uint32]uint16{0x3: 0x2, 0x5: 0x4}, dmx.programMap.p)
-//
-//	// No more packets
-//	_, err = dmx.NextData()
-//	assert.EqualError(t, err, ErrNoMorePackets.Error())
-//}
+func TestDemuxerNextPacket(t *testing.T) {
+	// Ctx error
+	ctx, cancel := context.WithCancel(context.Background())
+	dmx := NewDemuxer(ctx, bytes.NewReader([]byte{}))
+	cancel()
+	_, err := dmx.NextPacket()
+	assert.Error(t, err)
 
-//	func TestDemuxerNextDataUnknownDataPackets(t *testing.T) {
-//		buf := &bytes.Buffer{}
-//		bufWriter := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: buf})
-//
-//		// Packet that isn't a data packet (PSI or PES)
-//		b1, _ := packet(PacketHeader{
-//			ContinuityCounter:         uint8(0),
-//			PID:                       256,
-//			PayloadUnitStartIndicator: true,
-//			HasPayload:                true,
-//		}, PacketAdaptationField{}, []byte{0x01, 0x02, 0x03, 0x04}, true)
-//		bufWriter.Write(b1)
-//
-//		// The demuxer must return "no more packets"
-//		dmx := NewDemuxer(context.Background(), bytes.NewReader(buf.Bytes()),
-//			DemuxerOptPacketSize(188))
-//		d, err := dmx.NextData()
-//		assert.Equal(t, (*DemuxerData)(nil), d)
-//		assert.EqualError(t, err, ErrNoMorePackets.Error())
-//	}
+	// Valid
+	buf := &bytes.Buffer{}
+	w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: buf})
+	b1, p1 := packet(packetHeader, packetAdaptationField, []byte("1"), true)
+	copy(p1.bs[:], b1)
+	w.Write(b1)
+	b2, p2 := packet(packetHeader, packetAdaptationField, []byte("2"), true)
+	copy(p2.bs[:], b2)
+	w.Write(b2)
+	dmx = NewDemuxer(context.Background(), bytes.NewReader(buf.Bytes()))
+
+	// First packet
+	p, err := dmx.NextPacket()
+	assert.NoError(t, err)
+	assert.Equal(t, p1, p)
+	assert.Equal(t, uint(192), dmx.packetBuffer.packetSize)
+
+	// Second packet
+	p, err = dmx.NextPacket()
+	assert.NoError(t, err)
+	assert.Equal(t, p2, p)
+
+	// EOF
+	_, err = dmx.NextPacket()
+	assert.EqualError(t, err, ErrNoMorePackets.Error())
+}
+
+func TestDemuxerNextData(t *testing.T) {
+	// Init
+	buf := &bytes.Buffer{}
+	w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: buf})
+	b := psiBytes()
+	b1, _ := packet(PacketHeader{ContinuityCounter: uint8(0), PayloadUnitStartIndicator: true, PID: PIDPAT}, &PacketAdaptationField{}, b[:147], true)
+	w.Write(b1)
+	b2, _ := packet(PacketHeader{ContinuityCounter: uint8(1), PID: PIDPAT}, &PacketAdaptationField{}, b[147:], true)
+	w.Write(b2)
+	dmx := NewDemuxer(context.Background(), bytes.NewReader(buf.Bytes()))
+	p, err := dmx.NextPacket()
+	assert.NoError(t, err)
+	_, err = dmx.Rewind()
+	assert.NoError(t, err)
+
+	// Next data
+	var ds []*DemuxerData
+	for _, s := range psi.Sections {
+		if !s.Header.TableID.isUnknown() {
+			d, err := dmx.NextData()
+			assert.NoError(t, err)
+			ds = append(ds, d)
+		}
+	}
+	assert.Equal(t, psi.toData(
+		p.AdaptationField,
+		PIDPAT,
+	), ds)
+	assert.Equal(t, map[uint64]uint16{0x3: 0x2, 0x5: 0x4}, dmx.programMap.p)
+
+	// No more packets
+	_, err = dmx.NextData()
+	assert.EqualError(t, err, ErrNoMorePackets.Error())
+}
+
+func TestDemuxerNextDataUnknownDataPackets(t *testing.T) {
+	buf := &bytes.Buffer{}
+	bufWriter := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: buf})
+
+	// Packet that isn't a data packet (PSI or PES)
+	b1, _ := packet(PacketHeader{
+		ContinuityCounter:         uint8(0),
+		PID:                       256,
+		PayloadUnitStartIndicator: true,
+		HasPayload:                true,
+	}, &PacketAdaptationField{}, []byte{0x01, 0x02, 0x03, 0x04}, true)
+	bufWriter.Write(b1)
+
+	// The demuxer must return "no more packets"
+	dmx := NewDemuxer(context.Background(), bytes.NewReader(buf.Bytes()),
+		DemuxerOptPacketSize(188))
+	d, err := dmx.NextData()
+	assert.Equal(t, (*DemuxerData)(nil), d)
+	assert.EqualError(t, err, ErrNoMorePackets.Error())
+}
+
 func TestDemuxerNextDataPATPMT(t *testing.T) {
 	pat := hexToBytes(`474000100000b00d0001c100000001f0002ab104b2ffffffffffffffff
 		ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
@@ -196,15 +200,15 @@ func BenchmarkDemuxer_NextData(b *testing.B) {
 	}
 }
 
-//func FuzzDemuxer(f *testing.F) {
-//	f.Fuzz(func(t *testing.T, b []byte) {
-//		r := bytes.NewReader(b)
-//		dmx := NewDemuxer(context.Background(), r, DemuxerOptPacketSize(188))
-//		for {
-//			_, err := dmx.NextData()
-//			if err == ErrNoMorePackets {
-//				break
-//			}
-//		}
-//	})
-//}
+func FuzzDemuxer(f *testing.F) {
+	f.Fuzz(func(t *testing.T, b []byte) {
+		r := bytes.NewReader(b)
+		dmx := NewDemuxer(context.Background(), r, DemuxerOptPacketSize(188))
+		for {
+			_, err := dmx.NextData()
+			if err == ErrNoMorePackets {
+				break
+			}
+		}
+	})
+}

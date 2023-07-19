@@ -13,6 +13,7 @@ const (
 	startPID           uint16 = 0x0100
 	pmtStartPID        uint16 = 0x1000
 	programNumberStart uint16 = 1
+	packetMaxPayload          = 184
 )
 
 var (
@@ -231,7 +232,7 @@ func (m *Muxer) WriteData(d *MuxerData) (bytesWritten int, err error) {
 
 			var ntot, npayload int
 			if ntot, npayload, err = d.PES.Header.writePESData(
-				m.bufWriter,
+				m.bufWriter, m.bb,
 				d.PES.Data[payloadBytesWritten:],
 				payloadStart,
 				bytesAvailable,
@@ -396,7 +397,6 @@ func (m *Muxer) generatePMT() (err error) {
 		Data: &m.pmt,
 		Header: PSISectionSyntaxHeader{
 			CurrentNextIndicator: true,
-			// TODO support for PMT tables longer than 1 TS packet
 			//LastSectionNumber:    0,
 			//SectionNumber:        0,
 			TableIDExtension: m.pmt.ProgramNumber,
@@ -425,18 +425,26 @@ func (m *Muxer) generatePMT() (err error) {
 	m.pmtBytes.Reset()
 	wPacket := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: &m.pmtBytes})
 
-	pkt := Packet{
-		Header: PacketHeader{
-			HasPayload:                true,
-			PayloadUnitStartIndicator: true,
-			PID:                       pmtStartPID, // FIXME multiple programs support
-			ContinuityCounter:         uint8(m.pmtCC.inc()),
-		},
-		Payload: m.buf.Bytes(),
-	}
-	if _, err = pkt.write(wPacket, m.bb, m.packetSize); err != nil {
-		// FIXME save old PMT and rollback to it here maybe?
-		return
+	l := m.buf.Len()
+	for i := 0; i <= l/packetMaxPayload; i++ {
+		start := i * packetMaxPayload
+		stop := start + packetMaxPayload
+		if stop > l {
+			stop = l
+		}
+		pkt := Packet{
+			Header: PacketHeader{
+				HasPayload:                true,
+				PayloadUnitStartIndicator: i == 0,
+				PID:                       pmtStartPID, // FIXME multiple programs support
+				ContinuityCounter:         uint8(m.pmtCC.inc()),
+			},
+			Payload: m.buf.Bytes()[start:stop],
+		}
+		if _, err = pkt.write(wPacket, m.bb, m.packetSize); err != nil {
+			// FIXME save old PMT and rollback to it here maybe?
+			return
+		}
 	}
 
 	m.pmtUpdated = false

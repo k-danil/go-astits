@@ -10,13 +10,13 @@ import (
 
 // packetBuffer represents a packet buffer
 type packetBuffer struct {
-	packetSize int
+	packetSize uint
 	s          PacketSkipper
 	r          io.Reader
 }
 
 // newPacketBuffer creates a new packet buffer
-func newPacketBuffer(r io.Reader, packetSize int, s PacketSkipper) (pb *packetBuffer, err error) {
+func newPacketBuffer(r io.Reader, packetSize uint, s PacketSkipper) (pb *packetBuffer, err error) {
 	// Init
 	pb = &packetBuffer{
 		packetSize: packetSize,
@@ -38,27 +38,27 @@ func newPacketBuffer(r io.Reader, packetSize int, s PacketSkipper) (pb *packetBu
 // autoDetectPacketSize updates the packet size based on the first bytes
 // Minimum packet size is 188 and is bounded by 2 sync bytes
 // Assumption is made that the first byte of the reader is a sync byte
-func autoDetectPacketSize(r io.Reader) (packetSize int, err error) {
+func autoDetectPacketSize(r io.Reader) (packetSize uint, err error) {
 	// Read first bytes
 	const l = 193
-	var b = make([]byte, l)
-	shouldRewind, rerr := peek(r, b)
+	var bs = make([]byte, l)
+	shouldRewind, rerr := peek(r, bs)
 	if rerr != nil {
 		err = fmt.Errorf("astits: reading first %d bytes failed: %w", l, rerr)
 		return
 	}
 
 	// Packet must start with a sync byte
-	if b[0] != syncByte {
+	if bs[0] != syncByte {
 		err = ErrPacketMustStartWithASyncByte
 		return
 	}
 
 	// Look for sync bytes
-	for idx, b := range b {
+	for idx, b := range bs {
 		if b == syncByte && idx >= MpegTsPacketSize {
 			// Update packet size
-			packetSize = idx
+			packetSize = uint(idx)
 
 			if !shouldRewind {
 				return
@@ -118,12 +118,13 @@ func rewind(r io.Reader) (n int64, err error) {
 // next fetches the next packet from the buffer
 func (pb *packetBuffer) next() (p *Packet, err error) {
 	p = NewPacket()
-	bi := astikit.NewBytesIterator(p.bs[:])
+	bs := p.bs[:pb.packetSize]
+	bi := astikit.NewBytesIterator(bs)
 
 	var skip bool
 	// Loop to make sure we return a packet even if first packets are skipped
 	for {
-		if _, err = io.ReadFull(pb.r, p.bs[:]); err != nil {
+		if _, err = io.ReadFull(pb.r, bs); err != nil {
 			p.Close()
 			if err == io.EOF || err == io.ErrUnexpectedEOF {
 				err = ErrNoMorePackets

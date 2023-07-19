@@ -6,12 +6,12 @@ import (
 	"unsafe"
 )
 
-// poolOfTempPayload global variable is used to ease access to pool from any place of the code
-var poolOfTempPayload = initPool()
+// poolOfPayload global variable is used to ease access to pool from any place of the code
+var poolOfPayload = initPool()
 
-// tempPayload is an object containing payload slice
-type tempPayload struct {
-	s []byte
+// payload is an object containing payload slice
+type payload struct {
+	bs []byte
 }
 
 // poolTempPayload is a pool for temporary payload in parseData()
@@ -26,8 +26,8 @@ func initPool() *poolTempPayload {
 		s := (1 << i) * 1024
 		p.sp[i] = sync.Pool{
 			New: func() interface{} {
-				return &tempPayload{
-					s: make([]byte, 0, s),
+				return &payload{
+					bs: make([]byte, 0, s),
 				}
 			},
 		}
@@ -35,29 +35,29 @@ func initPool() *poolTempPayload {
 	return p
 }
 
-// get returns the tempPayload object with byte slice of a 'size' length
-func (ptp *poolTempPayload) get(size int) (payload *tempPayload) {
+// get returns the payload object with byte slice of a 'size' length
+func (ptp *poolTempPayload) get(size int) (p *payload) {
 	s := uint(size)
 	idx := bits.Len(s) - 10
 	neg := idx >= 0
 	idx *= int(*(*uint8)(unsafe.Pointer(&neg)))
 	if idx < len(ptp.sp) && idx >= 0 {
-		payload, _ = ptp.sp[idx].Get().(*tempPayload)
-		if uint(cap(payload.s)) >= s {
-			payload.s = payload.s[:s]
+		p, _ = ptp.sp[idx].Get().(*payload)
+		if uint(cap(p.bs)) >= s {
+			p.bs = p.bs[:s]
 		}
 		return
 	}
 
-	return &tempPayload{
-		s: make([]byte, s),
+	return &payload{
+		bs: make([]byte, s),
 	}
 }
 
 // put returns reference to the payload slice back to pool
 // Don't use the payload after a call to put
-func (ptp *poolTempPayload) put(payload *tempPayload) {
-	c := uint(cap(payload.s))
+func (ptp *poolTempPayload) put(payload *payload) {
+	c := uint(cap(payload.bs))
 	idx := bits.Len(c) - 11
 	if idx < len(ptp.sp) && idx >= 0 {
 		ptp.sp[idx].Put(payload)

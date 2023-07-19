@@ -113,10 +113,13 @@ func parsePSIData(i *astikit.BytesIterator) (d *PSIData, err error) {
 	// Parse sections
 	var s PSISection
 	var stop bool
-	for i.HasBytesLeft() && !stop {
+	for i.HasBytesLeft() {
 		if s, stop, err = parsePSISection(i); err != nil {
 			err = fmt.Errorf("astits: parsing PSI table failed: %w", err)
 			return
+		}
+		if stop {
+			break
 		}
 		d.Sections = append(d.Sections, s)
 	}
@@ -126,21 +129,21 @@ func parsePSIData(i *astikit.BytesIterator) (d *PSIData, err error) {
 // parsePSISection parses a PSI section
 func parsePSISection(i *astikit.BytesIterator) (s PSISection, stop bool, err error) {
 	// Parse header
-	var offsetStart, offsetSectionsEnd, offsetEnd int
-	if offsetStart, _, offsetSectionsEnd, offsetEnd, err = s.Header.parsePSISectionHeader(i); err != nil {
+	var offsets psiOffsets
+	if offsets, stop, err = s.Header.parsePSISectionHeader(i); err != nil {
 		err = fmt.Errorf("astits: parsing PSI section header failed: %w", err)
 		return
 	}
 
 	// Check whether we need to stop the parsing
-	if stop = shouldStopPSIParsing(s.Header.TableID); stop {
+	if stop {
 		return
 	}
 
-	// Check whether there's a syntax section
+	// Check whether there'bs a syntax section
 	if s.Header.SectionLength > 0 {
 		// Parse syntax
-		if s.Syntax, err = parsePSISectionSyntax(i, &s.Header, offsetSectionsEnd); err != nil {
+		if s.Syntax, err = parsePSISectionSyntax(i, &s.Header, offsets.sectionsEnd); err != nil {
 			err = fmt.Errorf("astits: parsing PSI section syntax failed: %w", err)
 			return
 		}
@@ -148,7 +151,7 @@ func parsePSISection(i *astikit.BytesIterator) (s PSISection, stop bool, err err
 		// Process CRC32
 		if s.Header.TableID.hasCRC32() {
 			// Seek to the end of the sections
-			i.Seek(offsetSectionsEnd)
+			i.Seek(offsets.sectionsEnd)
 
 			// Parse CRC32
 			if s.CRC32, err = parseCRC32(i); err != nil {
@@ -157,9 +160,9 @@ func parsePSISection(i *astikit.BytesIterator) (s PSISection, stop bool, err err
 			}
 
 			// Get CRC32 data
-			i.Seek(offsetStart)
+			i.Seek(offsets.start)
 			var crc32Data []byte
-			if crc32Data, err = i.NextBytesNoCopy(offsetSectionsEnd - offsetStart); err != nil {
+			if crc32Data, err = i.NextBytesNoCopy(offsets.sectionsEnd - offsets.start); err != nil {
 				err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 				return
 			}
@@ -176,7 +179,7 @@ func parsePSISection(i *astikit.BytesIterator) (s PSISection, stop bool, err err
 	}
 
 	// Seek to the end of the section
-	i.Seek(offsetEnd)
+	i.Seek(offsets.end)
 	return
 }
 
@@ -197,9 +200,14 @@ func shouldStopPSIParsing(tableID PSITableID) bool {
 		tableID.isUnknown()
 }
 
+type psiOffsets struct {
+	start, end                 int
+	sectionsStart, sectionsEnd int
+}
+
 // parsePSISectionHeader parses a PSI section header
-func (h *PSISectionHeader) parsePSISectionHeader(i *astikit.BytesIterator) (offsetStart, offsetSectionsStart, offsetSectionsEnd, offsetEnd int, err error) {
-	offsetStart = i.Offset()
+func (h *PSISectionHeader) parsePSISectionHeader(i *astikit.BytesIterator) (offsets psiOffsets, stop bool, err error) {
+	offsets.start = i.Offset()
 
 	// Get next byte
 	var b byte
@@ -212,7 +220,7 @@ func (h *PSISectionHeader) parsePSISectionHeader(i *astikit.BytesIterator) (offs
 	h.TableID = PSITableID(b)
 
 	// Check whether we need to stop the parsing
-	if shouldStopPSIParsing(h.TableID) {
+	if stop = shouldStopPSIParsing(h.TableID); stop {
 		return
 	}
 
@@ -234,11 +242,11 @@ func (h *PSISectionHeader) parsePSISectionHeader(i *astikit.BytesIterator) (offs
 	h.SectionLength = val & 0xfff
 
 	// Offsets
-	offsetSectionsStart = i.Offset()
-	offsetEnd = offsetSectionsStart + int(h.SectionLength)
-	offsetSectionsEnd = offsetEnd
+	offsets.sectionsStart = i.Offset()
+	offsets.end = offsets.sectionsStart + int(h.SectionLength)
+	offsets.sectionsEnd = offsets.end
 	if h.TableID.hasCRC32() {
-		offsetSectionsEnd -= 4
+		offsets.sectionsEnd -= 4
 	}
 	return
 }

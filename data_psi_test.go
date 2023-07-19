@@ -88,9 +88,9 @@ var psi = &PSIData{
 				Data: tot,
 			},
 		},
-		{Header: PSISectionHeader{
-			TableID: 254,
-		}},
+		//{Header: PSISectionHeader{
+		//	TableID: 254,
+		//}},
 	},
 }
 
@@ -198,7 +198,7 @@ func TestParsePSISectionHeader(t *testing.T) {
 	w.Write("1")        // Syntax section indicator
 	w.Write("0000000")  // Finish the byte
 	var d PSISectionHeader
-	_, _, _, _, err := d.parsePSISectionHeader(astikit.NewBytesIterator(buf.Bytes()))
+	_, _, err := d.parsePSISectionHeader(astikit.NewBytesIterator(buf.Bytes()))
 	assert.Equal(t, d, PSISectionHeader{
 		TableID: 254,
 	})
@@ -206,12 +206,12 @@ func TestParsePSISectionHeader(t *testing.T) {
 
 	d = PSISectionHeader{}
 	// Valid table type
-	offsetStart, offsetSectionsStart, offsetSectionsEnd, offsetEnd, err := d.parsePSISectionHeader(astikit.NewBytesIterator(psiSectionHeaderBytes()))
+	offsets, _, err := d.parsePSISectionHeader(astikit.NewBytesIterator(psiSectionHeaderBytes()))
 	assert.Equal(t, d, psiSectionHeader)
-	assert.Equal(t, 0, offsetStart)
-	assert.Equal(t, 3, offsetSectionsStart)
-	assert.Equal(t, 2729, offsetSectionsEnd)
-	assert.Equal(t, 2733, offsetEnd)
+	assert.Equal(t, 0, offsets.start)
+	assert.Equal(t, 3, offsets.sectionsStart)
+	assert.Equal(t, 2729, offsets.sectionsEnd)
+	assert.Equal(t, 2733, offsets.end)
 	assert.NoError(t, err)
 }
 

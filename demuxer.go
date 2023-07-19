@@ -25,7 +25,7 @@ type Demuxer struct {
 	dataBuffer []*DemuxerData
 	//l          astikit.CompleteLogger
 
-	optPacketSize    int
+	optPacketSize    uint
 	optPacketsParser PacketsParser
 	optPacketSkipper PacketSkipper
 
@@ -75,7 +75,7 @@ func NewDemuxer(ctx context.Context, r io.Reader, opts ...func(*Demuxer)) (d *De
 // DemuxerOptPacketSize returns the option to set the packet size
 func DemuxerOptPacketSize(packetSize int) func(*Demuxer) {
 	return func(d *Demuxer) {
-		d.optPacketSize = packetSize
+		d.optPacketSize = uint(packetSize)
 	}
 }
 

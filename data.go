@@ -25,14 +25,14 @@ type DemuxerData struct {
 	TOT             *TOTData
 	AdaptationField *PacketAdaptationField
 
-	internalData *tempPayload
+	internalData *payload
 
 	PID uint16
 }
 
 func (d *DemuxerData) Close() {
 	if d.internalData != nil {
-		poolOfTempPayload.put(d.internalData)
+		poolOfPayload.put(d.internalData)
 	}
 }
 
@@ -59,16 +59,16 @@ func parseData(pl *PacketList, prs PacketsParser, pm *programMap) (ds []*Demuxer
 	}
 
 	// Get the slice for payload from pool
-	payload := poolOfTempPayload.get(pl.GetSize())
+	p := poolOfPayload.get(pl.GetSize())
 
 	// Append payload
 	var c int
 	for p := pl.IteratorGet(); p != nil; p = pl.IteratorNext() {
-		c += copy(payload.s[c:], p.Payload)
+		c += copy(p.bs[c:], p.Payload)
 	}
 
 	// Create reader
-	i := astikit.NewBytesIterator(payload.s)
+	i := astikit.NewBytesIterator(p.bs)
 
 	fp := pl.GetHead()
 	pid := fp.Header.PID
@@ -88,7 +88,7 @@ func parseData(pl *PacketList, prs PacketsParser, pm *programMap) (ds []*Demuxer
 
 		// Append data
 		ds = psiData.toData(af, pid)
-	} else if isPESPayload(payload.s) {
+	} else if isPESPayload(p.bs) {
 		// Parse PES data
 		pesData := &PESData{}
 		if err = pesData.parsePESData(i); err != nil {
@@ -102,7 +102,7 @@ func parseData(pl *PacketList, prs PacketsParser, pm *programMap) (ds []*Demuxer
 			PES:             pesData,
 			PID:             pid,
 
-			internalData: payload,
+			internalData: p,
 		}}
 	}
 	return
@@ -130,17 +130,17 @@ func isPESPayload(bs []byte) bool {
 func isPSIComplete(pl *PacketList) bool {
 	defer pl.IteratorReset()
 	// Get the slice for payload from pool
-	payload := poolOfTempPayload.get(pl.GetSize())
-	defer poolOfTempPayload.put(payload)
+	p := poolOfPayload.get(pl.GetSize())
+	defer poolOfPayload.put(p)
 
 	// Append payload
 	var o int
 	for p := pl.IteratorGet(); p != nil; p = pl.IteratorNext() {
-		o += copy(payload.s[o:], p.Payload)
+		o += copy(p.bs[o:], p.Payload)
 	}
 
 	// Create reader
-	i := astikit.NewBytesIterator(payload.s)
+	i := astikit.NewBytesIterator(p.bs)
 
 	// Get next byte
 	b, err := i.NextByte()

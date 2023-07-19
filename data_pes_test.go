@@ -415,6 +415,7 @@ func TestParsePESData(t *testing.T) {
 }
 
 func TestWritePESData(t *testing.T) {
+	bb := new([8]byte)
 	for _, tc := range pesTestCases {
 		t.Run(tc.name, func(t *testing.T) {
 			bufExpected := bytes.Buffer{}
@@ -432,7 +433,7 @@ func TestWritePESData(t *testing.T) {
 
 			for payloadPos+1 < len(tc.pesData.Data) {
 				n, payloadN, err := tc.pesData.Header.writePESData(
-					wActual,
+					wActual, bb,
 					tc.pesData.Data[payloadPos:],
 					start,
 					MpegTsPacketSize-mpegTsPacketHeaderSize,
