@@ -163,6 +163,14 @@ func (m *Muxer) SetPCRPID(pid uint16) {
 	m.pmtUpdated = true
 }
 
+func (m *Muxer) SetCC(pid uint16, cc uint8) error {
+	ctx, ok := m.esContexts[uint32(pid)]
+	if !ok {
+		return ErrPIDNotFound
+	}
+	return ctx.cc.set(int(cc))
+}
+
 // WriteData writes MuxerData to TS stream
 // Currently only PES packets are supported
 // Be aware that after successful call WriteData will set d.AdaptationField.StuffingLength value to zero

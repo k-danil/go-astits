@@ -25,9 +25,10 @@ type DemuxerData struct {
 	TOT             *TOTData
 	AdaptationField *PacketAdaptationField
 
-	internalData *payload
+	internalData *dataPayload
 
-	PID uint16
+	ContinuityCounter uint8
+	PID               uint16
 }
 
 func (d *DemuxerData) Close() {
@@ -59,20 +60,21 @@ func parseData(pl *PacketList, prs PacketsParser, pm *programMap) (ds []*Demuxer
 	}
 
 	// Get the slice for payload from pool
-	p := poolOfPayload.get(pl.GetSize())
+	dp := poolOfPayload.get(pl.GetSize())
 
 	// Append payload
 	var c int
 	for p := pl.IteratorGet(); p != nil; p = pl.IteratorNext() {
-		c += copy(p.bs[c:], p.Payload)
+		c += copy(dp.bs[c:], p.Payload)
 	}
 
 	// Create reader
-	i := astikit.NewBytesIterator(p.bs)
+	i := astikit.NewBytesIterator(dp.bs)
 
 	fp := pl.GetHead()
 	pid := fp.Header.PID
 	af := fp.AdaptationField
+	cc := fp.Header.ContinuityCounter
 
 	// Parse payload
 	if pid == PIDCAT {
@@ -88,7 +90,7 @@ func parseData(pl *PacketList, prs PacketsParser, pm *programMap) (ds []*Demuxer
 
 		// Append data
 		ds = psiData.toData(af, pid)
-	} else if isPESPayload(p.bs) {
+	} else if isPESPayload(dp.bs) {
 		// Parse PES data
 		pesData := &PESData{}
 		if err = pesData.parsePESData(i); err != nil {
@@ -98,11 +100,12 @@ func parseData(pl *PacketList, prs PacketsParser, pm *programMap) (ds []*Demuxer
 
 		// Append data
 		ds = []*DemuxerData{{
-			AdaptationField: af,
-			PES:             pesData,
-			PID:             pid,
+			AdaptationField:   af,
+			PES:               pesData,
+			PID:               pid,
+			ContinuityCounter: cc,
 
-			internalData: p,
+			internalData: dp,
 		}}
 	}
 	return
@@ -130,17 +133,17 @@ func isPESPayload(bs []byte) bool {
 func isPSIComplete(pl *PacketList) bool {
 	defer pl.IteratorReset()
 	// Get the slice for payload from pool
-	p := poolOfPayload.get(pl.GetSize())
-	defer poolOfPayload.put(p)
+	dp := poolOfPayload.get(pl.GetSize())
+	defer poolOfPayload.put(dp)
 
 	// Append payload
 	var o int
 	for p := pl.IteratorGet(); p != nil; p = pl.IteratorNext() {
-		o += copy(p.bs[o:], p.Payload)
+		o += copy(dp.bs[o:], p.Payload)
 	}
 
 	// Create reader
-	i := astikit.NewBytesIterator(p.bs)
+	i := astikit.NewBytesIterator(dp.bs)
 
 	// Get next byte
 	b, err := i.NextByte()

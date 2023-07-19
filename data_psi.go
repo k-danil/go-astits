@@ -140,7 +140,7 @@ func parsePSISection(i *astikit.BytesIterator) (s PSISection, stop bool, err err
 		return
 	}
 
-	// Check whether there'bs a syntax section
+	// Check whether there's a syntax section
 	if s.Header.SectionLength > 0 {
 		// Parse syntax
 		if s.Syntax, err = parsePSISectionSyntax(i, &s.Header, offsets.sectionsEnd); err != nil {

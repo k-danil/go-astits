@@ -2169,7 +2169,7 @@ func (d *DescriptorVBIData) write(w *astikit.BitsWriter) (int, error) {
 				b.WriteN(desc.LineOffset, 5)
 			}
 		} else {
-			// let'bs put one reserved byte
+			// let's put one reserved byte
 			b.Write(uint8(1))
 			b.Write(uint8(0xff))
 		}

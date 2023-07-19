@@ -62,7 +62,7 @@ type PacketAdaptationField struct {
 	TransportPrivateDataLength        uint8
 	Length                            uint8
 	StuffingLength                    uint8 // Only used in writePacketAdaptationField to request stuffing
-	SpliceCountdown                   uint8 // Indicates how many TS packets from this one a splicing point occurs (Two'bs complement signed; may be negative)
+	SpliceCountdown                   uint8 // Indicates how many TS packets from this one a splicing point occurs (Two's complement signed; may be negative)
 	IsOneByteStuffing                 bool  // Only used for one byte stuffing - if true, adaptation field will be written as one uint8(0). Not part of TS format
 	DiscontinuityIndicator            bool  // Set if current TS packet is in a discontinuity state with respect to either the continuity counter or the program clock reference
 	RandomAccessIndicator             bool  // Set when the stream may be decoded without errors from this point
