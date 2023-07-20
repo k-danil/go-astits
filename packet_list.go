@@ -5,6 +5,7 @@ type PacketList struct {
 	tail *Packet
 
 	it *Packet
+	c  int
 	s  int
 }
 
@@ -21,6 +22,7 @@ func (pl *PacketList) Add(p *Packet) {
 		pl.it = p
 	}
 	pl.s += len(p.Payload)
+	pl.c++
 	pl.tail = p
 }
 
@@ -56,6 +58,10 @@ func (pl *PacketList) IsEmpty() bool {
 
 func (pl *PacketList) GetSize() int {
 	return pl.s
+}
+
+func (pl *PacketList) GetCount() int {
+	return pl.c
 }
 
 func (pl *PacketList) Clear() {

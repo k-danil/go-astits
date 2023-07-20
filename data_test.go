@@ -49,7 +49,7 @@ func TestParseData(t *testing.T) {
 			AdaptationField: p0.AdaptationField,
 			PES:             pesWithHeader(),
 			PID:             uint16(256),
-			internalData:    &payload{p},
+			internalData:    &dataPayload{p},
 		}}, ds)
 
 	// PSI
