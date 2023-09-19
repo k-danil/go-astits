@@ -16,13 +16,14 @@ const (
 
 // DemuxerData represents a data parsed by Demuxer
 type DemuxerData struct {
-	EIT             *EITData
-	NIT             *NITData
-	PAT             *PATData
-	PES             *PESData
-	PMT             *PMTData
-	SDT             *SDTData
-	TOT             *TOTData
+	PAT *PATData
+	PMT *PMTData
+	PES *PESData
+	EIT *EITData
+	NIT *NITData
+	SDT *SDTData
+	TOT *TOTData
+
 	AdaptationField *PacketAdaptationField
 
 	internalData *dataPayload
@@ -56,31 +57,31 @@ func parseData(pl *PacketList, prs PacketsParser, pm *programMap) (ds []*Demuxer
 		} else if skip {
 			return
 		}
-		pl.IteratorReset()
 	}
 
 	// Get the slice for payload from pool
-	dp := poolOfPayload.get(pl.GetSize())
+	dp := poolOfPayload.get(pl.Size())
 
 	// Append payload
 	var c int
-	for p := pl.IteratorGet(); p != nil; p = pl.IteratorNext() {
+	for p := pl.Head(); p != nil; p = p.Next() {
 		c += copy(dp.bs[c:], p.Payload)
 	}
 
 	// Create reader
 	i := astikit.NewBytesIterator(dp.bs)
 
-	fp := pl.GetHead()
+	fp := pl.Head()
 	pid := fp.Header.PID
 	af := fp.AdaptationField
 	cc := fp.Header.ContinuityCounter
 
 	// Parse payload
-	if pid == PIDCAT {
-		// Information in a CAT payload is private and dependent on the CA system. Use the PacketsParser
-		// to parse this type of payload
-	} else if isPSIPayload(pid, pm) {
+	switch {
+	case pid == PIDCAT:
+	// Information in a CAT payload is private and dependent on the CA system. Use the PacketsParser
+	// to parse this type of payload
+	case isPSIPayload(pid, pm):
 		// Parse PSI data
 		var psiData *PSIData
 		if psiData, err = parsePSIData(i); err != nil {
@@ -90,7 +91,7 @@ func parseData(pl *PacketList, prs PacketsParser, pm *programMap) (ds []*Demuxer
 
 		// Append data
 		ds = psiData.toData(af, pid)
-	} else if isPESPayload(dp.bs) {
+	case isPESPayload(dp.bs):
 		// Parse PES data
 		pesData := &PESData{}
 		if err = pesData.parsePESData(i); err != nil {
@@ -131,14 +132,13 @@ func isPESPayload(bs []byte) bool {
 
 // isPSIComplete checks whether we have sufficient amount of packets to parse PSI
 func isPSIComplete(pl *PacketList) bool {
-	defer pl.IteratorReset()
 	// Get the slice for payload from pool
-	dp := poolOfPayload.get(pl.GetSize())
+	dp := poolOfPayload.get(pl.Size())
 	defer poolOfPayload.put(dp)
 
 	// Append payload
 	var o int
-	for p := pl.IteratorGet(); p != nil; p = pl.IteratorNext() {
+	for p := pl.Head(); p != nil; p = p.Next() {
 		o += copy(dp.bs[o:], p.Payload)
 	}
 

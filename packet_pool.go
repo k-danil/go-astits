@@ -24,10 +24,10 @@ func (b *packetAccumulator) add(p *Packet) (pl *PacketList) {
 	mps := b.q
 
 	if !mps.IsEmpty() {
-		if isSameAsPrevious(mps.GetTail(), p) {
+		if isSameAsPrevious(mps.Tail(), p) {
 			return
 		}
-		if hasDiscontinuity(mps.GetTail(), p) {
+		if hasDiscontinuity(mps.Tail(), p) {
 			mps.Clear()
 		}
 		if p.Header.PayloadUnitStartIndicator {
@@ -38,7 +38,7 @@ func (b *packetAccumulator) add(p *Packet) (pl *PacketList) {
 		mps = NewPacketList()
 	}
 
-	mps.Add(p)
+	mps.PushBack(p)
 
 	// Check if PSI payload is complete
 	if b.programMap != nil &&

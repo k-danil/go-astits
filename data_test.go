@@ -25,7 +25,7 @@ func TestParseData(t *testing.T) {
 
 	// Do nothing for CAT
 	pl = NewPacketList()
-	pl.Add(&Packet{Header: PacketHeader{PID: PIDCAT}})
+	pl.PushBack(&Packet{Header: PacketHeader{PID: PIDCAT}})
 	ds, err = parseData(pl, nil, pm)
 	assert.NoError(t, err)
 	assert.Empty(t, ds)
@@ -37,8 +37,8 @@ func TestParseData(t *testing.T) {
 		Header:  PacketHeader{PID: uint16(256)},
 		Payload: p[:33],
 	}
-	pl.Add(p0)
-	pl.Add(&Packet{
+	pl.PushBack(p0)
+	pl.PushBack(&Packet{
 		Header:  PacketHeader{PID: uint16(256)},
 		Payload: p[33:],
 	})
@@ -60,8 +60,8 @@ func TestParseData(t *testing.T) {
 		Header:  PacketHeader{PID: uint16(256)},
 		Payload: p[:33],
 	}
-	pl.Add(p0)
-	pl.Add(&Packet{
+	pl.PushBack(p0)
+	pl.PushBack(&Packet{
 		Header:  PacketHeader{PID: uint16(256)},
 		Payload: p[33:],
 	})

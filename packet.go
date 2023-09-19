@@ -38,7 +38,6 @@ type Packet struct {
 	Payload         []byte // This is only the payload content
 
 	next *Packet
-	prev *Packet
 }
 
 // PacketHeader represents a packet header
@@ -93,6 +92,10 @@ func NewPacket() (p *Packet) {
 	return
 }
 
+func (p *Packet) Next() *Packet {
+	return p.next
+}
+
 func (p *Packet) Close() {
 	poolOfPacket.Put(p)
 }
@@ -102,14 +105,11 @@ func (p *Packet) Reset() {
 }
 
 // parsePacket parses a packet
-func (p *Packet) parse(i *astikit.BytesIterator, s PacketSkipper) (bool, error) {
+func (p *Packet) parse(i *astikit.BytesIterator, s PacketSkipper) (skip bool, err error) {
 	// Get next byte
 	if b, _ := i.NextByte(); b != syncByte {
-		//if b, err := i.NextByte(); err != nil || b != syncByte {
-		//if err != nil {
-		//	return false, fmt.Errorf("astits: getting next byte failed: %w", err)
-		//}
-		return false, ErrPacketMustStartWithASyncByte
+		err = ErrPacketMustStartWithASyncByte
+		return
 	}
 
 	// In case packet size is bigger than 188 bytes, we don't care for the first bytes
@@ -117,32 +117,35 @@ func (p *Packet) parse(i *astikit.BytesIterator, s PacketSkipper) (bool, error) 
 	offsetStart := i.Offset()
 
 	// Parse header
-	if err := p.Header.parse(i); err != nil {
-		return false, fmt.Errorf("astits: parsing packet header failed: %w", err)
+	if err = p.Header.parse(i); err != nil {
+		err = fmt.Errorf("astits: parsing packet header failed: %w", err)
+		return
 	}
 
 	// Skip packet
 	if s(p) {
-		return true, nil
+		skip = true
+		return
 	}
 
 	// Parse adaptation field
 	if p.Header.HasAdaptationField {
 		p.AdaptationField = &PacketAdaptationField{}
-		if err := p.AdaptationField.parse(i); err != nil {
-			return false, fmt.Errorf("astits: parsing packet adaptation field failed: %w", err)
+		if err = p.AdaptationField.parse(i); err != nil {
+			err = fmt.Errorf("astits: parsing packet adaptation field failed: %w", err)
+			return
 		}
 	}
 
 	// Build payload
 	if p.Header.HasPayload {
 		i.Seek(p.payloadOffset(offsetStart))
-		var err error
 		if p.Payload, err = i.NextBytesNoCopy(i.Len() - i.Offset()); err != nil {
-			return false, fmt.Errorf("astits: fetching next bytes failed: %w", err)
+			err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
+			return
 		}
 	}
-	return false, nil
+	return
 }
 
 // payloadOffset returns the payload offset
@@ -338,8 +341,7 @@ func (cr *ClockReference) parsePCR(i *astikit.BytesIterator) (err error) {
 	}
 
 	bs = bs[:6]
-	pcr := (uint64(binary.BigEndian.Uint32(bs[:4])) << 16) |
-		uint64(binary.BigEndian.Uint32(bs[2:]))
+	pcr := (uint64(binary.BigEndian.Uint32(bs[:4])) << 16) | uint64(binary.BigEndian.Uint32(bs[2:]))
 	*cr = newClockReference(pcr>>15, pcr&0x1ff)
 	return
 }
@@ -419,9 +421,7 @@ func (af *PacketAdaptationField) calcLength() (length uint8) {
 	length += pcrBytesSize * b2u(af.HasOPCR)
 	length += b2u(af.HasSplicingCountdown)
 	length += (1 + uint8(len(af.TransportPrivateData))) * b2u(af.HasTransportPrivateData)
-	if af.HasAdaptationExtensionField {
-		length += 1 + af.AdaptationExtensionField.calcLength()
-	}
+	length += (1 + af.AdaptationExtensionField.calcLength()) * b2u(af.HasAdaptationExtensionField)
 	length += af.StuffingLength
 	return
 }
@@ -516,6 +516,9 @@ func (af *PacketAdaptationField) write(w *astikit.BitsWriter, bb *[8]byte) (byte
 }
 
 func (afe *PacketAdaptationExtensionField) calcLength() (length uint8) {
+	if afe == nil {
+		return 0
+	}
 	length++
 	length += 2 * b2u(afe.HasLegalTimeWindow)
 	length += 3 * b2u(afe.HasPiecewiseRate)
@@ -523,7 +526,7 @@ func (afe *PacketAdaptationExtensionField) calcLength() (length uint8) {
 	return length
 }
 
-func (afe *PacketAdaptationExtensionField) write(w *astikit.BitsWriter, bb *[8]byte) (bytesWritten int, retErr error) {
+func (afe *PacketAdaptationExtensionField) write(w *astikit.BitsWriter, bb *[8]byte) (bytesWritten int, err error) {
 	bb[0] = afe.calcLength()
 	bb[1] = b2u(afe.HasLegalTimeWindow) << 7
 	bb[1] |= b2u(afe.HasPiecewiseRate) << 6
@@ -548,13 +551,13 @@ func (afe *PacketAdaptationExtensionField) write(w *astikit.BitsWriter, bb *[8]b
 		bytesWritten += 3
 	}
 
-	if retErr = w.Write(bb[:bytesWritten]); retErr != nil {
-		return 0, retErr
+	if err = w.Write(bb[:bytesWritten]); err != nil {
+		return 0, err
 	}
 
 	if afe.HasSeamlessSplice {
-		n, err := afe.DTSNextAccessUnit.writePTSOrDTS(w, bb, afe.SpliceType)
-		if err != nil {
+		var n int
+		if n, err = afe.DTSNextAccessUnit.writePTSOrDTS(w, bb, afe.SpliceType); err != nil {
 			return 0, err
 		}
 		bytesWritten += n

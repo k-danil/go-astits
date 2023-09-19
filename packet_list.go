@@ -1,74 +1,53 @@
 package astits
 
 type PacketList struct {
-	head *Packet
-	tail *Packet
+	head, tail *Packet
 
-	it *Packet
-	c  int
-	s  int
+	l, s int
 }
 
 func NewPacketList() *PacketList {
 	return &PacketList{}
 }
 
-func (pl *PacketList) Add(p *Packet) {
+func (pl *PacketList) PushBack(p *Packet) {
 	if pl.head != nil {
 		pl.tail.next = p
-		p.prev = pl.tail
 	} else {
 		pl.head = p
-		pl.it = p
 	}
+
 	pl.s += len(p.Payload)
-	pl.c++
+	pl.l++
+
 	pl.tail = p
 }
 
-func (pl *PacketList) GetTail() *Packet {
+func (pl *PacketList) Tail() *Packet {
 	return pl.tail
 }
 
-func (pl *PacketList) GetHead() *Packet {
+func (pl *PacketList) Head() *Packet {
 	return pl.head
-}
-
-func (pl *PacketList) IteratorGet() *Packet {
-	return pl.it
-}
-
-func (pl *PacketList) IteratorNext() *Packet {
-	pl.it = pl.it.next
-	return pl.it
-}
-
-func (pl *PacketList) IteratorPrev() *Packet {
-	pl.it = pl.it.prev
-	return pl.it
-}
-
-func (pl *PacketList) IteratorReset() {
-	pl.it = pl.head
 }
 
 func (pl *PacketList) IsEmpty() bool {
 	return pl == nil || pl.head == nil
 }
 
-func (pl *PacketList) GetSize() int {
+func (pl *PacketList) Size() int {
 	return pl.s
 }
 
-func (pl *PacketList) GetCount() int {
-	return pl.c
+func (pl *PacketList) Length() int {
+	return pl.l
 }
 
 func (pl *PacketList) Clear() {
-	tail := pl.tail
-	for tail != nil {
-		cur := tail
-		tail = cur.prev
+	head := pl.head
+	for head != nil {
+		cur := head
+		head = cur.next
 		cur.Close()
 	}
 	*pl = PacketList{}

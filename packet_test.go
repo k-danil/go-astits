@@ -331,8 +331,8 @@ func BenchmarkParsePacket(b *testing.B) {
 
 		p := NewPacket()
 		for i := 0; i < b.N; i++ {
+			p.parse(astikit.NewBytesIterator(bs), EmptySkipper)
 			p.Reset()
-			_, _ = p.parse(astikit.NewBytesIterator(bs), EmptySkipper)
 		}
 		p.Close()
 	})
