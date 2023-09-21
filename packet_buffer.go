@@ -10,18 +10,21 @@ import (
 
 // packetBuffer represents a packet buffer
 type packetBuffer struct {
-	packetSize uint
-	s          PacketSkipper
-	r          io.Reader
+	packetSize     uint
+	s              PacketSkipper
+	r              io.Reader
+	skipErrCounter uint
+	skipErrLimit   uint
 }
 
 // newPacketBuffer creates a new packet buffer
-func newPacketBuffer(r io.Reader, packetSize uint, s PacketSkipper) (pb *packetBuffer, err error) {
+func newPacketBuffer(r io.Reader, packetSize, skipErrLimit uint, s PacketSkipper) (pb *packetBuffer, err error) {
 	// Init
 	pb = &packetBuffer{
-		packetSize: packetSize,
-		s:          s,
-		r:          r,
+		packetSize:   packetSize,
+		s:            s,
+		r:            r,
+		skipErrLimit: skipErrLimit,
 	}
 
 	// Packet size is not set
@@ -136,8 +139,14 @@ func (pb *packetBuffer) next() (p *Packet, err error) {
 
 		// Parse packet
 		if skip, err = p.parse(bi, pb.s); err != nil {
-			p.Close()
-			return nil, fmt.Errorf("astits: building packet failed: %w", err)
+			if skip && pb.skipErrCounter < pb.skipErrLimit {
+				pb.skipErrCounter++
+			} else {
+				p.Close()
+				return nil, fmt.Errorf("astits: building packet failed: %w", err)
+			}
+		} else {
+			pb.skipErrCounter = 0
 		}
 
 		if !skip {

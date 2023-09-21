@@ -26,6 +26,7 @@ type Demuxer struct {
 	//l          astikit.CompleteLogger
 
 	optPacketSize    uint
+	optSkipErrLimit  uint
 	optPacketsParser PacketsParser
 	optPacketSkipper PacketSkipper
 
@@ -93,10 +94,17 @@ func DemuxerOptPacketSkipper(s PacketSkipper) func(*Demuxer) {
 	}
 }
 
+// DemuxerOptSkipErrLimit returns the option to set the packet skipper
+func DemuxerOptSkipErrLimit(count int) func(*Demuxer) {
+	return func(d *Demuxer) {
+		d.optSkipErrLimit = uint(count)
+	}
+}
+
 func (dmx *Demuxer) nextPacket() (p *Packet, err error) {
 	// Create packet buffer if not exists
 	if dmx.packetBuffer == nil {
-		if dmx.packetBuffer, err = newPacketBuffer(dmx.r, dmx.optPacketSize, dmx.optPacketSkipper); err != nil {
+		if dmx.packetBuffer, err = newPacketBuffer(dmx.r, dmx.optPacketSize, dmx.optSkipErrLimit, dmx.optPacketSkipper); err != nil {
 			err = fmt.Errorf("astits: creating packet buffer failed: %w", err)
 			return
 		}

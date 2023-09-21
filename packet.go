@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/asticode/go-astikit"
 	"sync"
+	"unsafe"
 )
 
 // Scrambling Controls
@@ -109,6 +110,7 @@ func (p *Packet) parse(i *astikit.BytesIterator, s PacketSkipper) (skip bool, er
 	// Get next byte
 	if b, _ := i.NextByte(); b != syncByte {
 		err = ErrPacketMustStartWithASyncByte
+		skip = *(*uint64)(unsafe.Pointer(&p.bs)) == 0
 		return
 	}
 
