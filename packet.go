@@ -33,6 +33,7 @@ var poolOfPacket = sync.Pool{
 // https://en.wikipedia.org/wiki/MPEG_transport_stream
 type Packet struct {
 	bs [M2TsPacketSize]byte
+	s  uint
 
 	Header          PacketHeader
 	AdaptationField *PacketAdaptationField

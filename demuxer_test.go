@@ -50,9 +50,11 @@ func TestDemuxerNextPacket(t *testing.T) {
 	w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: buf})
 	b1, p1 := packet(packetHeader, packetAdaptationField, []byte("1"), true)
 	copy(p1.bs[:], b1)
+	p1.s = uint(len(b1))
 	w.Write(b1)
 	b2, p2 := packet(packetHeader, packetAdaptationField, []byte("2"), true)
 	copy(p2.bs[:], b2)
+	p2.s = uint(len(b2))
 	w.Write(b2)
 	dmx = NewDemuxer(context.Background(), bytes.NewReader(buf.Bytes()))
 

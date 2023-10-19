@@ -83,14 +83,18 @@ func DemuxerOptPacketSize(packetSize int) func(*Demuxer) {
 // DemuxerOptPacketsParser returns the option to set the packets parser
 func DemuxerOptPacketsParser(p PacketsParser) func(*Demuxer) {
 	return func(d *Demuxer) {
-		d.optPacketsParser = p
+		if p != nil {
+			d.optPacketsParser = p
+		}
 	}
 }
 
 // DemuxerOptPacketSkipper returns the option to set the packet skipper
 func DemuxerOptPacketSkipper(s PacketSkipper) func(*Demuxer) {
 	return func(d *Demuxer) {
-		d.optPacketSkipper = s
+		if s != nil {
+			d.optPacketSkipper = s
+		}
 	}
 }
 
@@ -101,7 +105,7 @@ func DemuxerOptSkipErrLimit(count int) func(*Demuxer) {
 	}
 }
 
-func (dmx *Demuxer) nextPacket() (p *Packet, err error) {
+func (dmx *Demuxer) nextPacket(p *Packet) (err error) {
 	// Create packet buffer if not exists
 	if dmx.packetBuffer == nil {
 		if dmx.packetBuffer, err = newPacketBuffer(dmx.r, dmx.optPacketSize, dmx.optSkipErrLimit, dmx.optPacketSkipper); err != nil {
@@ -111,28 +115,42 @@ func (dmx *Demuxer) nextPacket() (p *Packet, err error) {
 	}
 
 	// Fetch next packet from buffer
-	if p, err = dmx.packetBuffer.next(); err != nil {
-		if err == ErrNoMorePackets {
-			return
+	if err = dmx.packetBuffer.next(p); err != nil {
+		if err != ErrNoMorePackets {
+			err = fmt.Errorf("astits: fetching next packet from buffer failed: %w", err)
 		}
-		err = fmt.Errorf("astits: fetching next packet from buffer failed: %w", err)
 	}
 	return
 }
 
-// NextPacket retrieves the next packet
+// NextPacket retrieves the next packet. You must Close() the packet after use.
 func (dmx *Demuxer) NextPacket() (p *Packet, err error) {
+	p = NewPacket()
+
 	select {
 	case <-dmx.ctx.Done():
-		// Check ctx error
-		// TODO Handle ctx error another way since if the read blocks, everything blocks
-		// Maybe execute everything in a goroutine and listen the ctx channel in the same for loop
-		if err = dmx.ctx.Err(); err != nil {
-			return
-		}
+		err = dmx.ctx.Err()
 	default:
-		return dmx.nextPacket()
+		err = dmx.nextPacket(p)
 	}
+
+	if err != nil {
+		p.Close()
+		return nil, err
+	}
+
+	return
+}
+
+// NextPacketTo unpack packet to provided p.
+func (dmx *Demuxer) NextPacketTo(p *Packet) (err error) {
+	select {
+	case <-dmx.ctx.Done():
+		err = dmx.ctx.Err()
+	default:
+		err = dmx.nextPacket(p)
+	}
+
 	return
 }
 
@@ -149,7 +167,9 @@ func (dmx *Demuxer) nextData() (d *DemuxerData, err error) {
 	var pl *PacketList
 	for {
 		// Get next packet
-		if p, err = dmx.nextPacket(); err != nil {
+		p = NewPacket()
+		if err = dmx.nextPacket(p); err != nil {
+			p.Close()
 			// If the end of the stream has been reached, we dump the packet pool
 			if errors.Is(err, ErrNoMorePackets) {
 				for {
@@ -203,9 +223,6 @@ func (dmx *Demuxer) nextData() (d *DemuxerData, err error) {
 func (dmx *Demuxer) NextData() (d *DemuxerData, err error) {
 	select {
 	case <-dmx.ctx.Done():
-		// Check ctx error
-		// TODO Handle ctx error another way since if the read blocks, everything blocks
-		// Maybe execute everything in a goroutine and listen the ctx channel in the same for loop
 		if err = dmx.ctx.Err(); err != nil {
 			return
 		}

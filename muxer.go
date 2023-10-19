@@ -43,6 +43,9 @@ type Muxer struct {
 	patBytes bytes.Buffer
 	pmtBytes bytes.Buffer
 
+	patDataBytes bytes.Buffer
+	pmtDataBytes bytes.Buffer
+
 	bb *[8]byte
 
 	buf       bytes.Buffer
@@ -284,6 +287,9 @@ func (m *Muxer) WriteData(d *MuxerData) (bytesWritten int, err error) {
 // Writes given packet to MPEG-TS stream
 // Stuffs with 0xffs if packet turns out to be shorter than target packet length
 func (m *Muxer) WritePacket(p *Packet) (int, error) {
+	if p.s > 0 {
+		return m.w.Write(p.bs[:p.s])
+	}
 	return p.write(m.bitsWriter, m.bb, m.packetSize)
 }
 
@@ -325,41 +331,39 @@ func (m *Muxer) WriteTables() (bytesWritten int, err error) {
 }
 
 func (m *Muxer) generatePAT() (err error) {
-	d := m.pm.toPATDataUnlocked()
-
-	versionNumber := m.patVersion.get()
 	if m.pmUpdated {
-		versionNumber = m.patVersion.inc()
-	}
+		d := m.pm.toPATDataUnlocked()
 
-	syntax := &PSISectionSyntax{
-		Data: d,
-		Header: PSISectionSyntaxHeader{
-			CurrentNextIndicator: true,
-			// TODO support for PAT tables longer than 1 TS packet
-			//LastSectionNumber:    0,
-			//SectionNumber:        0,
-			TableIDExtension: d.TransportStreamID,
-			VersionNumber:    uint8(versionNumber),
-		},
-	}
-	psiData := PSIData{
-		Sections: []PSISection{
-			{
-				Header: PSISectionHeader{
-					SectionLength:          d.calcPATSectionLength(),
-					SectionSyntaxIndicator: true,
-					TableID:                PSITableID(d.TransportStreamID),
+		psiData := PSIData{
+			Sections: []PSISection{
+				{
+					Header: PSISectionHeader{
+						SectionLength:          d.calcPATSectionLength(),
+						SectionSyntaxIndicator: true,
+						TableID:                PSITableID(d.TransportStreamID),
+					},
+					Syntax: &PSISectionSyntax{
+						Data: d,
+						Header: PSISectionSyntaxHeader{
+							CurrentNextIndicator: true,
+							// TODO support for PAT tables longer than 1 TS packet
+							//LastSectionNumber:    0,
+							//SectionNumber:        0,
+							TableIDExtension: d.TransportStreamID,
+							VersionNumber:    uint8(m.patVersion.inc()),
+						},
+					},
 				},
-				Syntax: syntax,
 			},
-		},
-	}
+		}
 
-	m.buf.Reset()
-	w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: &m.buf})
-	if _, err = psiData.writePSIData(w); err != nil {
-		return
+		m.patDataBytes.Reset()
+		w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: &m.patDataBytes})
+		if _, err = psiData.writePSIData(w); err != nil {
+			return
+		}
+
+		m.pmUpdated = false
 	}
 
 	m.patBytes.Reset()
@@ -372,68 +376,64 @@ func (m *Muxer) generatePAT() (err error) {
 			PID:                       PIDPAT,
 			ContinuityCounter:         uint8(m.patCC.inc()),
 		},
-		Payload: m.buf.Bytes(),
+		Payload: m.patDataBytes.Bytes(),
 	}
 	if _, err = pkt.write(wPacket, m.bb, m.packetSize); err != nil {
 		// FIXME save old PAT and rollback to it here maybe?
 		return
 	}
 
-	m.pmUpdated = false
-
 	return
 }
 
 func (m *Muxer) generatePMT() (err error) {
-	hasPCRPID := false
-	for _, es := range m.pmt.ElementaryStreams {
-		if es.ElementaryPID == m.pmt.PCRPID {
-			hasPCRPID = true
-			break
-		}
-	}
-	if !hasPCRPID {
-		return ErrPCRPIDInvalid
-	}
-
-	versionNumber := m.pmtVersion.get()
 	if m.pmtUpdated {
-		versionNumber = m.pmtVersion.inc()
-	}
+		hasPCRPID := false
+		for _, es := range m.pmt.ElementaryStreams {
+			if es.ElementaryPID == m.pmt.PCRPID {
+				hasPCRPID = true
+				break
+			}
+		}
+		if !hasPCRPID {
+			return ErrPCRPIDInvalid
+		}
 
-	syntax := &PSISectionSyntax{
-		Data: &m.pmt,
-		Header: PSISectionSyntaxHeader{
-			CurrentNextIndicator: true,
-			//LastSectionNumber:    0,
-			//SectionNumber:        0,
-			TableIDExtension: m.pmt.ProgramNumber,
-			VersionNumber:    uint8(versionNumber),
-		},
-	}
-	psiData := PSIData{
-		Sections: []PSISection{
-			{
-				Header: PSISectionHeader{
-					SectionLength:          m.pmt.calcPMTSectionLength(),
-					SectionSyntaxIndicator: true,
-					TableID:                PSITableIDPMT,
+		psiData := PSIData{
+			Sections: []PSISection{
+				{
+					Header: PSISectionHeader{
+						SectionLength:          m.pmt.calcPMTSectionLength(),
+						SectionSyntaxIndicator: true,
+						TableID:                PSITableIDPMT,
+					},
+					Syntax: &PSISectionSyntax{
+						Data: &m.pmt,
+						Header: PSISectionSyntaxHeader{
+							CurrentNextIndicator: true,
+							//LastSectionNumber:    0,
+							//SectionNumber:        0,
+							TableIDExtension: m.pmt.ProgramNumber,
+							VersionNumber:    uint8(m.pmtVersion.inc()),
+						},
+					},
 				},
-				Syntax: syntax,
 			},
-		},
-	}
+		}
 
-	m.buf.Reset()
-	w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: &m.buf})
-	if _, err = psiData.writePSIData(w); err != nil {
-		return
+		m.pmtDataBytes.Reset()
+		w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: &m.pmtDataBytes})
+		if _, err = psiData.writePSIData(w); err != nil {
+			return
+		}
+
+		m.pmtUpdated = false
 	}
 
 	m.pmtBytes.Reset()
 	wPacket := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: &m.pmtBytes})
 
-	l := m.buf.Len()
+	l := m.pmtDataBytes.Len()
 	for i := 0; i <= l/packetMaxPayload; i++ {
 		start := i * packetMaxPayload
 		stop := start + packetMaxPayload
@@ -447,15 +447,13 @@ func (m *Muxer) generatePMT() (err error) {
 				PID:                       pmtStartPID, // FIXME multiple programs support
 				ContinuityCounter:         uint8(m.pmtCC.inc()),
 			},
-			Payload: m.buf.Bytes()[start:stop],
+			Payload: m.pmtDataBytes.Bytes()[start:stop],
 		}
 		if _, err = pkt.write(wPacket, m.bb, m.packetSize); err != nil {
 			// FIXME save old PMT and rollback to it here maybe?
 			return
 		}
 	}
-
-	m.pmtUpdated = false
 
 	return
 }

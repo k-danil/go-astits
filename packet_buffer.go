@@ -119,8 +119,8 @@ func rewind(r io.Reader) (n int64, err error) {
 }
 
 // next fetches the next packet from the buffer
-func (pb *packetBuffer) next() (p *Packet, err error) {
-	p = NewPacket()
+func (pb *packetBuffer) next(p *Packet) (err error) {
+	p.s = pb.packetSize
 	bs := p.bs[:pb.packetSize]
 	bi := astikit.NewBytesIterator(bs)
 
@@ -128,13 +128,12 @@ func (pb *packetBuffer) next() (p *Packet, err error) {
 	// Loop to make sure we return a packet even if first packets are skipped
 	for {
 		if _, err = io.ReadFull(pb.r, bs); err != nil {
-			p.Close()
 			if err == io.EOF || err == io.ErrUnexpectedEOF {
 				err = ErrNoMorePackets
 			} else {
 				err = fmt.Errorf("astits: reading %d bytes failed: %w", pb.packetSize, err)
 			}
-			return
+			return err
 		}
 
 		// Parse packet
@@ -142,8 +141,7 @@ func (pb *packetBuffer) next() (p *Packet, err error) {
 			if skip && pb.skipErrCounter < pb.skipErrLimit {
 				pb.skipErrCounter++
 			} else {
-				p.Close()
-				return nil, fmt.Errorf("astits: building packet failed: %w", err)
+				return fmt.Errorf("astits: building packet failed: %w", err)
 			}
 		} else {
 			pb.skipErrCounter = 0
