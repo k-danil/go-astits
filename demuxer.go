@@ -66,6 +66,23 @@ func NewDemuxer(ctx context.Context, r io.Reader, opts ...func(*Demuxer)) (d *De
 	return
 }
 
+func (dmx *Demuxer) GetStats() (ret map[uint64]uint) {
+	if dmx.packetPool == nil || dmx.packetPool.stats == nil {
+		return
+	}
+	var packetSize uint
+	if dmx.packetBuffer != nil {
+		packetSize = dmx.packetBuffer.packetSize
+	}
+
+	ret = make(map[uint64]uint, len(dmx.packetPool.stats))
+	for k, v := range dmx.packetPool.stats {
+		ret[k] = v * packetSize
+	}
+
+	return
+}
+
 // DemuxerOptLogger returns the option to set the logger
 //func DemuxerOptLogger(l astikit.StdLogger) func(*Demuxer) {
 //	return func(d *Demuxer) {

@@ -54,7 +54,8 @@ func (b *packetAccumulator) add(p *Packet) (pl *PacketList) {
 
 // packetPool represents a queue of packets for each PID in the stream
 type packetPool struct {
-	b map[uint64]*packetAccumulator // Indexed by PID
+	b     map[uint64]*packetAccumulator // Indexed by PID
+	stats map[uint64]uint
 
 	programMap *programMap
 }
@@ -62,7 +63,8 @@ type packetPool struct {
 // newPacketPool creates a new packet pool with an optional parser and programMap
 func newPacketPool(programMap *programMap) *packetPool {
 	return &packetPool{
-		b: make(map[uint64]*packetAccumulator),
+		b:     make(map[uint64]*packetAccumulator),
+		stats: make(map[uint64]uint),
 
 		programMap: programMap,
 	}
@@ -87,6 +89,8 @@ func (b *packetPool) addUnlocked(p *Packet) (pl *PacketList) {
 		acc = newPacketAccumulator(p.Header.PID, b.programMap)
 		b.b[uint64(p.Header.PID)] = acc
 	}
+
+	defer func() { b.stats[uint64(p.Header.PID)]++ }()
 
 	// Add to the accumulator
 	return acc.add(p)
