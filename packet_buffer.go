@@ -120,7 +120,6 @@ func rewind(r io.Reader) (n int64, err error) {
 
 // next fetches the next packet from the buffer
 func (pb *packetBuffer) next(p *Packet) (err error) {
-	p.s = pb.packetSize
 	bs := p.bs[:pb.packetSize]
 	bi := astikit.NewBytesIterator(bs)
 
@@ -137,6 +136,7 @@ func (pb *packetBuffer) next(p *Packet) (err error) {
 		}
 
 		// Parse packet
+		p.s = pb.packetSize
 		if skip, err = p.parse(bi, pb.s); err != nil {
 			if skip && pb.skipErrCounter < pb.skipErrLimit {
 				pb.skipErrCounter++
