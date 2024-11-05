@@ -42,6 +42,10 @@ type Packet struct {
 	next *Packet
 }
 
+func (p *Packet) UpdateHeader() {
+	p.Header.putBytes(p.bs[:])
+}
+
 // PacketHeader represents a packet header
 type PacketHeader struct {
 	ContinuityCounter          uint8 // Sequence number of payload packets (0x00 to 0x0F) within each stream (except PID 8191)
@@ -350,7 +354,7 @@ func (cr *ClockReference) parsePCR(i *astikit.BytesIterator) (err error) {
 }
 
 func (p *Packet) write(w *astikit.BitsWriter, bb *[8]byte, targetPacketSize int) (written int, err error) {
-	if written, err = p.Header.write(w, bb); err != nil {
+	if written, err = p.Header.write(w, bb[:]); err != nil {
 		return
 	}
 
@@ -397,7 +401,7 @@ func (p *Packet) write(w *astikit.BitsWriter, bb *[8]byte, targetPacketSize int)
 	return
 }
 
-func (ph *PacketHeader) write(w *astikit.BitsWriter, bb *[8]byte) (int, error) {
+func (ph *PacketHeader) putBytes(bb []byte) {
 	var val uint32
 	val |= uint32(syncByte) << 24
 	val |= uint32(b2u(ph.TransportErrorIndicator)) << 23
@@ -409,7 +413,10 @@ func (ph *PacketHeader) write(w *astikit.BitsWriter, bb *[8]byte) (int, error) {
 	val |= uint32(b2u(ph.HasPayload)) << 4
 	val |= uint32(ph.ContinuityCounter & 0xf)
 	binary.BigEndian.PutUint32(bb[:], val)
+}
 
+func (ph *PacketHeader) write(w *astikit.BitsWriter, bb []byte) (int, error) {
+	ph.putBytes(bb)
 	return mpegTsPacketHeaderSize, w.Write(bb[:4])
 }
 
