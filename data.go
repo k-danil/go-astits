@@ -62,7 +62,7 @@ type MuxerData struct {
 }
 
 // parseData parses a payload spanning over multiple packets and returns a set of data
-func parseData(pl *PacketList, prs PacketsParser, pm *programMap, psiPrev map[uint16][]byte) (ds []*DemuxerData, err error) {
+func parseData(pl *PacketList, prs PacketsParser, pm *programMap, psiPrev *pidMap[[]byte], scratch []*DemuxerData) (ds []*DemuxerData, err error) {
 	defer pl.Close()
 	// Use custom parser first
 	if prs != nil {
@@ -102,7 +102,7 @@ func parseData(pl *PacketList, prs PacketsParser, pm *programMap, psiPrev map[ui
 		// и не эмитим. Подавленный dp безопасно вернуть в пул (в отличие от
 		// распарсенного: дескрипторы держат вьюхи в dp.bs, потому put'а после парса нет).
 		if psiPrev != nil {
-			if prev, ok := psiPrev[pid]; ok && bytes.Equal(prev, dp.bs) {
+			if prev := psiPrev.get(pid); prev != nil && bytes.Equal(*prev, dp.bs) {
 				poolOfPayload.put(dp)
 				return
 			}
@@ -116,7 +116,8 @@ func parseData(pl *PacketList, prs PacketsParser, pm *programMap, psiPrev map[ui
 		}
 
 		if psiPrev != nil {
-			psiPrev[pid] = append(psiPrev[pid][:0], dp.bs...)
+			sec := psiPrev.getOrAdd(pid)
+			*sec = append((*sec)[:0], dp.bs...)
 		}
 
 		// Append data
@@ -140,7 +141,7 @@ func parseData(pl *PacketList, prs PacketsParser, pm *programMap, psiPrev map[ui
 		d.PES = &d.pes
 
 		d.setAdaptationField(af)
-		ds = []*DemuxerData{d}
+		ds = append(scratch[:0], d)
 	}
 	return
 }

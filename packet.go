@@ -100,9 +100,7 @@ func (af *PacketAdaptationField) reset() {
 	af.TransportPrivateData = nil
 	// Чистим только использованный префикс: privBuf детерминирован (нули за
 	// текущим контентом), сравнения/копии не зависят от прошлых пакетов
-	for i := uint8(0); i < af.TransportPrivateDataLength; i++ {
-		af.privBuf[i] = 0
-	}
+	clear(af.privBuf[:af.TransportPrivateDataLength])
 	af.TransportPrivateDataLength = 0
 	af.Length = 0
 	af.StuffingLength = 0

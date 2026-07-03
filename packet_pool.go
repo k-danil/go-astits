@@ -3,7 +3,6 @@ package astits
 // pidSlot — состояние одного PID: аккумулятор пакетов + счётчик статистики.
 type pidSlot struct {
 	q     *PacketList
-	pid   uint16
 	stats uint32
 }
 
@@ -40,12 +39,9 @@ func (s *pidSlot) add(p *Packet, pm *programMap) (pl *PacketList) {
 	return
 }
 
-// packetPool represents a queue of packets for each PID in the stream.
-// Компактный список активных PID: их единицы, линейный скан дешевле и map-хэша
-// на каждый пакет, и зануления плоского [8192]-массива на каждый инстанс
-// (демуксер живёт один чанк — фиксированный футпринт умножается на RPS).
+// packetPool represents a queue of packets for each PID in the stream
 type packetPool struct {
-	slots      []pidSlot
+	slots      pidMap[pidSlot]
 	programMap *programMap
 }
 
@@ -54,20 +50,9 @@ const packetPoolPreallocPIDs = 8
 // newPacketPool creates a new packet pool with an optional parser and programMap
 func newPacketPool(programMap *programMap) *packetPool {
 	return &packetPool{
-		slots:      make([]pidSlot, 0, packetPoolPreallocPIDs),
+		slots:      newPidMap[pidSlot](packetPoolPreallocPIDs),
 		programMap: programMap,
 	}
-}
-
-// slot возвращает слот PID'а; указатель нельзя держать через append (реаллокация)
-func (b *packetPool) slot(pid uint16) *pidSlot {
-	for i := range b.slots {
-		if b.slots[i].pid == pid {
-			return &b.slots[i]
-		}
-	}
-	b.slots = append(b.slots, pidSlot{pid: pid})
-	return &b.slots[len(b.slots)-1]
 }
 
 // addUnlocked adds a new packet to the pool
@@ -83,7 +68,7 @@ func (b *packetPool) addUnlocked(p *Packet) (pl *PacketList) {
 		return
 	}
 
-	slot := b.slot(p.Header.PID)
+	slot := b.slots.getOrAdd(p.Header.PID)
 	slot.stats++
 	return slot.add(p, b.programMap)
 }
@@ -92,20 +77,20 @@ func (b *packetPool) addUnlocked(p *Packet) (pl *PacketList) {
 // inside. PID'ы отдаются по возрастанию — порядок хвостовых данных на EOF
 // совпадает с исходной map-реализацией с сортировкой ключей.
 func (b *packetPool) dumpUnlocked() (pl *PacketList) {
-	min := -1
-	for i := range b.slots {
-		if b.slots[i].q.IsEmpty() {
+	minIdx := -1
+	for i := range b.slots.vals {
+		if b.slots.vals[i].q.IsEmpty() {
 			continue
 		}
-		if min < 0 || b.slots[i].pid < b.slots[min].pid {
-			min = i
+		if minIdx < 0 || b.slots.keys[i] < b.slots.keys[minIdx] {
+			minIdx = i
 		}
 	}
-	if min < 0 {
+	if minIdx < 0 {
 		return
 	}
-	pl = b.slots[min].q
-	b.slots[min].q = nil
+	pl = b.slots.vals[minIdx].q
+	b.slots.vals[minIdx].q = nil
 	return
 }
 

@@ -49,20 +49,13 @@ type Muxer struct {
 	patDataBytes bytes.Buffer
 	pmtDataBytes bytes.Buffer
 
-	esContexts              map[uint32]*esContext
+	esContexts              pidMap[esContext]
 	tablesRetransmitCounter int
 }
 
 type esContext struct {
 	es *PMTElementaryStream
 	cc wrappingCounter
-}
-
-func newEsContext(es *PMTElementaryStream) *esContext {
-	return &esContext{
-		es: es,
-		cc: newWrappingCounter(0b1111), // CC is 4 bits
-	}
 }
 
 func MuxerOptTablesRetransmitPeriod(newPeriod int) func(*Muxer) {
@@ -93,8 +86,6 @@ func NewMuxer(ctx context.Context, w io.Writer, opts ...func(*Muxer)) (m *Muxer)
 
 		patCC: newWrappingCounter(0b1111),
 		pmtCC: newWrappingCounter(0b1111),
-
-		esContexts: map[uint32]*esContext{},
 	}
 
 	m.pkt = make([]byte, m.packetSize)
@@ -129,7 +120,10 @@ func (m *Muxer) AddElementaryStream(es PMTElementaryStream) error {
 
 	m.pmt.ElementaryStreams = append(m.pmt.ElementaryStreams, es)
 
-	m.esContexts[uint32(es.ElementaryPID)] = newEsContext(&es)
+	*m.esContexts.getOrAdd(es.ElementaryPID) = esContext{
+		es: &es,
+		cc: newWrappingCounter(0b1111), // CC is 4 bits
+	}
 	// invalidate pmt cache
 	m.pmtBytes.Reset()
 	m.pmtUpdated = true
@@ -150,7 +144,7 @@ func (m *Muxer) RemoveElementaryStream(pid uint16) error {
 	}
 
 	m.pmt.ElementaryStreams = append(m.pmt.ElementaryStreams[:foundIdx], m.pmt.ElementaryStreams[foundIdx+1:]...)
-	delete(m.esContexts, uint32(pid))
+	m.esContexts.remove(pid)
 	m.pmtBytes.Reset()
 	m.pmtUpdated = true
 	return nil
@@ -163,8 +157,8 @@ func (m *Muxer) SetPCRPID(pid uint16) {
 }
 
 func (m *Muxer) SetCC(pid uint16, cc uint8) error {
-	ctx, ok := m.esContexts[uint32(pid)]
-	if !ok {
+	ctx := m.esContexts.get(pid)
+	if ctx == nil {
 		return ErrPIDNotFound
 	}
 	return ctx.cc.set(int(cc))
@@ -174,8 +168,8 @@ func (m *Muxer) SetCC(pid uint16, cc uint8) error {
 // Currently only PES packets are supported
 // Be aware that after successful call WriteData will set d.AdaptationField.StuffingLength value to zero
 func (m *Muxer) WriteData(d *MuxerData) (bytesWritten int, err error) {
-	ctx, ok := m.esContexts[uint32(d.PID)]
-	if !ok {
+	ctx := m.esContexts.get(d.PID)
+	if ctx == nil {
 		return 0, ErrPIDNotFound
 	}
 

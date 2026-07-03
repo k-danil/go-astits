@@ -1,6 +1,6 @@
 module github.com/asticode/go-astits
 
-go 1.20
+go 1.26
 
 require (
 	github.com/asticode/go-astikit v0.30.0

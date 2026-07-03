@@ -176,8 +176,8 @@ func TestDemuxerRewind(t *testing.T) {
 	assert.Equal(t, int64(0), n)
 	assert.Equal(t, 7, r.Len())
 	assert.Equal(t, 0, len(dmx.dataBuffer))
-	for pid := range dmx.packetPool.slots {
-		assert.Nil(t, dmx.packetPool.slots[pid].q)
+	for i := range dmx.packetPool.slots.vals {
+		assert.Nil(t, dmx.packetPool.slots.vals[i].q)
 	}
 	assert.Nil(t, dmx.packetBuffer)
 }
