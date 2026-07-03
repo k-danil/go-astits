@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"github.com/asticode/go-astikit"
+	"io"
 	"sync"
 )
 
@@ -377,52 +378,40 @@ func (afe *PacketAdaptationExtensionField) parse(i *astikit.BytesIterator) (err 
 	return
 }
 
-func (p *Packet) write(w *astikit.BitsWriter, bb *[8]byte, targetPacketSize int) (written int, err error) {
-	if written, err = p.Header.write(w, bb[:]); err != nil {
-		return
-	}
+// writeBytes собирает пакет целиком в bs (len(bs) = целевой размер пакета) и
+// отдаёт его одним Write — вместо пофилдовой записи через BitsWriter.
+func (p *Packet) writeBytes(bs []byte, w io.Writer) (written int, err error) {
+	p.Header.putBytes(bs[:mpegTsPacketHeaderSize])
+	written = mpegTsPacketHeaderSize
 
 	if p.Header.HasAdaptationField {
 		var n int
-		if n, err = p.AdaptationField.write(w, bb); err != nil {
-			return
+		if n, err = p.AdaptationField.putBytes(bs[written:]); err != nil {
+			return 0, err
 		}
 		written += n
 	}
 
-	if targetPacketSize-written < len(p.Payload) {
+	if len(bs)-written < len(p.Payload) {
 		return 0, fmt.Errorf(
 			"writePacket: can't write %d bytes of payload: only %d is available",
 			len(p.Payload),
-			targetPacketSize-written,
+			len(bs)-written,
 		)
 	}
 
 	if p.Header.HasPayload {
-		if err = w.Write(p.Payload); err != nil {
-			return
-		}
-		written += len(p.Payload)
+		written += copy(bs[written:], p.Payload)
 	}
 
-	for written < targetPacketSize {
-		size := uint8(targetPacketSize - written)
-		fast := size / 8
-		rem := size % 8
-		binary.LittleEndian.PutUint64(bb[:], ^uint64(0))
-		for i := uint8(0); i < fast; i++ {
-			if err = w.Write(bb[:]); err != nil {
-				return 0, err
-			}
-			written += 8
-		}
-		if err = w.Write(bb[:rem]); err != nil {
-			return 0, err
-		}
-		written += int(rem)
+	for i := written; i < len(bs); i++ {
+		bs[i] = 0xff
 	}
 
-	return
+	if _, err = w.Write(bs); err != nil {
+		return 0, err
+	}
+	return len(bs), nil
 }
 
 func (ph *PacketHeader) putBytes(bb []byte) {
@@ -444,9 +433,20 @@ func (ph *PacketHeader) write(w *astikit.BitsWriter, bb []byte) (int, error) {
 	return mpegTsPacketHeaderSize, w.Write(bb[:4])
 }
 
-func (cr *ClockReference) writePCR(w *astikit.BitsWriter, bb *[8]byte) (int, error) {
+func (cr *ClockReference) putPCRBytes(bs []byte) int {
+	var bb [8]byte
 	binary.BigEndian.PutUint64(bb[:], cr.Extension()|cr.Base()<<15|0x7e<<8)
-	return pcrBytesSize, w.Write(bb[2:])
+	copy(bs, bb[2:])
+	return pcrBytesSize
+}
+
+func (cr *ClockReference) putPTSOrDTSBytes(bs []byte, flag uint8) int {
+	bs[0] = flag<<4 | uint8(cr.Base()>>29) | 1
+	bs[1] = uint8(cr.Base() >> 22)
+	bs[2] = uint8(cr.Base()>>14) | 1
+	bs[3] = uint8(cr.Base() >> 7)
+	bs[4] = uint8(cr.Base()<<1) | 1
+	return ptsOrDTSByteLength
 }
 
 func (af *PacketAdaptationField) calcLength() (length uint8) {
@@ -460,91 +460,59 @@ func (af *PacketAdaptationField) calcLength() (length uint8) {
 	return
 }
 
-func (af *PacketAdaptationField) write(w *astikit.BitsWriter, bb *[8]byte) (bytesWritten int, retErr error) {
+// putBytes serializes the adaptation field directly into bs, mirroring the wire
+// format of the former BitsWriter path byte for byte.
+func (af *PacketAdaptationField) putBytes(bs []byte) (n int, err error) {
 	if af.IsOneByteStuffing {
-		bb[0] = 0
-		return 1, w.Write(bb[:1])
+		bs[0] = 0
+		return 1, nil
 	}
 
-	var val uint16
-	val = uint16(af.calcLength()) << 8
-	val |= uint16(b2u(af.DiscontinuityIndicator)) << 7
-	val |= uint16(b2u(af.RandomAccessIndicator)) << 6
-	val |= uint16(b2u(af.ElementaryStreamPriorityIndicator)) << 5
-	val |= uint16(b2u(af.HasPCR)) << 4
-	val |= uint16(b2u(af.HasOPCR)) << 3
-	val |= uint16(b2u(af.HasSplicingCountdown)) << 2
-	val |= uint16(b2u(af.HasTransportPrivateData)) << 1
-	val |= uint16(b2u(af.HasAdaptationExtensionField))
-	binary.BigEndian.PutUint16(bb[:], val)
-	var err error
-	if err = w.Write(bb[:2]); err != nil {
-		return 0, err
+	length := af.calcLength()
+	if int(length)+1 > len(bs) {
+		return 0, ErrShortPacket
 	}
-	bytesWritten += 2
+
+	bs[0] = length
+	var flags uint8
+	flags |= b2u(af.DiscontinuityIndicator) << 7
+	flags |= b2u(af.RandomAccessIndicator) << 6
+	flags |= b2u(af.ElementaryStreamPriorityIndicator) << 5
+	flags |= b2u(af.HasPCR) << 4
+	flags |= b2u(af.HasOPCR) << 3
+	flags |= b2u(af.HasSplicingCountdown) << 2
+	flags |= b2u(af.HasTransportPrivateData) << 1
+	flags |= b2u(af.HasAdaptationExtensionField)
+	bs[1] = flags
+	n = 2
 
 	if af.HasPCR {
-		var n int
-		if n, err = af.PCR.writePCR(w, bb); err != nil {
-			return 0, err
-		}
-		bytesWritten += n
+		n += af.PCR.putPCRBytes(bs[n:])
 	}
 
 	if af.HasOPCR {
-		var n int
-		if n, err = af.OPCR.writePCR(w, bb); err != nil {
-			return 0, err
-		}
-		bytesWritten += n
+		n += af.OPCR.putPCRBytes(bs[n:])
 	}
 
 	if af.HasSplicingCountdown {
-		bb[0] = af.SpliceCountdown
-		if err = w.Write(bb[:1]); err != nil {
-			return 0, err
-		}
-		bytesWritten++
+		bs[n] = af.SpliceCountdown
+		n++
 	}
 
 	if af.HasTransportPrivateData {
-		// we can get length from TransportPrivateData itself, why do we need separate field?
-		bb[0] = af.TransportPrivateDataLength
-		if err = w.Write(bb[:1]); err != nil {
-			return 0, err
-		}
-		bytesWritten++
-		if af.TransportPrivateDataLength > 0 {
-			if err = w.Write(af.TransportPrivateData); err != nil {
-				return 0, err
-			}
-			bytesWritten += len(af.TransportPrivateData)
-		}
+		bs[n] = af.TransportPrivateDataLength
+		n++
+		n += copy(bs[n:], af.TransportPrivateData)
 	}
 
 	if af.HasAdaptationExtensionField {
-		var n int
-		if n, err = af.AdaptationExtensionField.write(w, bb); err != nil {
-			return 0, err
-		}
-		bytesWritten += n
+		n += af.AdaptationExtensionField.putBytes(bs[n:])
 	}
 
-	if af.StuffingLength > 0 {
-		fast := af.StuffingLength / 8
-		rem := af.StuffingLength % 8
-		binary.LittleEndian.PutUint64(bb[:], ^uint64(0))
-		for i := uint8(0); i < fast; i++ {
-			if err = w.Write(bb[:]); err != nil {
-				return 0, err
-			}
-			bytesWritten += 8
-		}
-		if err = w.Write(bb[:rem]); err != nil {
-			return 0, err
-		}
-		bytesWritten += int(rem)
+	for i := 0; i < int(af.StuffingLength); i++ {
+		bs[n+i] = 0xff
 	}
+	n += int(af.StuffingLength)
 
 	return
 }
@@ -560,55 +528,40 @@ func (afe *PacketAdaptationExtensionField) calcLength() (length uint8) {
 	return length
 }
 
-func (afe *PacketAdaptationExtensionField) write(w *astikit.BitsWriter, bb *[8]byte) (bytesWritten int, err error) {
-	bb[0] = afe.calcLength()
-	bb[1] = b2u(afe.HasLegalTimeWindow) << 7
-	bb[1] |= b2u(afe.HasPiecewiseRate) << 6
-	bb[1] |= b2u(afe.HasSeamlessSplice) << 5
-	bb[1] |= 0x1f
-	bytesWritten += 2
+func (afe *PacketAdaptationExtensionField) putBytes(bs []byte) (n int) {
+	bs[0] = afe.calcLength()
+	bs[1] = b2u(afe.HasLegalTimeWindow)<<7 | b2u(afe.HasPiecewiseRate)<<6 | b2u(afe.HasSeamlessSplice)<<5 | 0x1f
+	n = 2
 
 	if afe.HasLegalTimeWindow {
-		i := bytesWritten
-		bb[i] = b2u(afe.LegalTimeWindowIsValid) << 7
-		bb[i] |= uint8(afe.LegalTimeWindowOffset >> 8)
-		bb[i+1] = uint8(afe.LegalTimeWindowOffset)
-		bytesWritten += 2
+		bs[n] = b2u(afe.LegalTimeWindowIsValid)<<7 | uint8(afe.LegalTimeWindowOffset>>8)
+		bs[n+1] = uint8(afe.LegalTimeWindowOffset)
+		n += 2
 	}
 
 	if afe.HasPiecewiseRate {
-		i := bytesWritten
-		bb[i] = 0xC0
-		bb[i] |= uint8(afe.PiecewiseRate >> 16)
-		bb[i+1] = uint8(afe.PiecewiseRate >> 8)
-		bb[i+2] = uint8(afe.PiecewiseRate)
-		bytesWritten += 3
-	}
-
-	if err = w.Write(bb[:bytesWritten]); err != nil {
-		return 0, err
+		bs[n] = 0xC0 | uint8(afe.PiecewiseRate>>16)
+		bs[n+1] = uint8(afe.PiecewiseRate >> 8)
+		bs[n+2] = uint8(afe.PiecewiseRate)
+		n += 3
 	}
 
 	if afe.HasSeamlessSplice {
-		var n int
-		if n, err = afe.DTSNextAccessUnit.writePTSOrDTS(w, bb, afe.SpliceType); err != nil {
-			return 0, err
-		}
-		bytesWritten += n
+		n += afe.DTSNextAccessUnit.putPTSOrDTSBytes(bs[n:], afe.SpliceType)
 	}
 
 	return
 }
 
-func newStuffingAdaptationField(bytesToStuff int) *PacketAdaptationField {
+// stuffingAdaptationField переиспользует scratch-AF муксера: аллокация на каждый
+// пакет со стаффингом уходит, reset() гарантирует чистоту между использованиями
+func (m *Muxer) stuffingAdaptationField(bytesToStuff int) *PacketAdaptationField {
+	m.stuffAF.reset()
 	if bytesToStuff == 1 {
-		return &PacketAdaptationField{
-			IsOneByteStuffing: true,
-		}
-	}
-
-	return &PacketAdaptationField{
+		m.stuffAF.IsOneByteStuffing = true
+	} else {
 		// one byte for length and one for flags
-		StuffingLength: uint8(bytesToStuff - 2),
+		m.stuffAF.StuffingLength = uint8(bytesToStuff - 2)
 	}
+	return &m.stuffAF
 }

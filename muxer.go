@@ -23,9 +23,8 @@ var (
 )
 
 type Muxer struct {
-	ctx        context.Context
-	w          io.Writer
-	bitsWriter *astikit.BitsWriter
+	ctx context.Context
+	w   io.Writer
 
 	packetSize             int
 	tablesRetransmitPeriod int // period in PES packets
@@ -43,13 +42,12 @@ type Muxer struct {
 	patBytes bytes.Buffer
 	pmtBytes bytes.Buffer
 
+	pkt     []byte
+	pes     []byte
+	stuffAF PacketAdaptationField
+
 	patDataBytes bytes.Buffer
 	pmtDataBytes bytes.Buffer
-
-	bb *[8]byte
-
-	buf       bytes.Buffer
-	bufWriter *astikit.BitsWriter
 
 	esContexts              map[uint32]*esContext
 	tablesRetransmitCounter int
@@ -89,8 +87,6 @@ func NewMuxer(ctx context.Context, w io.Writer, opts ...func(*Muxer)) (m *Muxer)
 			ProgramNumber:     programNumberStart,
 		},
 
-		bb: new([8]byte),
-
 		// table version is 5-bit field
 		patVersion: newWrappingCounter(0b11111),
 		pmtVersion: newWrappingCounter(0b11111),
@@ -101,8 +97,8 @@ func NewMuxer(ctx context.Context, w io.Writer, opts ...func(*Muxer)) (m *Muxer)
 		esContexts: map[uint32]*esContext{},
 	}
 
-	m.bufWriter = astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: &m.buf})
-	m.bitsWriter = astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: m.w})
+	m.pkt = make([]byte, m.packetSize)
+	m.pes = make([]byte, m.packetSize)
 
 	// TODO multiple programs support
 	m.pm.setUnlocked(pmtStartPID, programNumberStart)
@@ -223,7 +219,7 @@ func (m *Muxer) WriteData(d *MuxerData) (bytesWritten int, err error) {
 			if bytesAvailable < pesHeaderLengthCurrent {
 				pkt.Header.HasAdaptationField = true
 				if pkt.AdaptationField == nil {
-					pkt.AdaptationField = newStuffingAdaptationField(bytesAvailable)
+					pkt.AdaptationField = m.stuffingAdaptationField(bytesAvailable)
 				} else {
 					pkt.AdaptationField.StuffingLength = uint8(bytesAvailable)
 				}
@@ -236,24 +232,22 @@ func (m *Muxer) WriteData(d *MuxerData) (bytesWritten int, err error) {
 		}
 
 		if pkt.Header.HasPayload {
-			m.buf.Reset()
 			if d.PES.Header.StreamID == 0 {
 				d.PES.Header.StreamID = ctx.es.StreamType.ToPESStreamID()
 			}
 
 			var ntot, npayload int
-			if ntot, npayload, err = d.PES.Header.writePESData(
-				m.bufWriter, m.bb,
+			if ntot, npayload, err = d.PES.Header.putPESData(
+				m.pes[:bytesAvailable],
 				d.PES.Data[payloadBytesWritten:],
 				payloadStart,
-				bytesAvailable,
 			); err != nil {
 				return
 			}
 
 			payloadBytesWritten += npayload
 
-			pkt.Payload = m.buf.Bytes()
+			pkt.Payload = m.pes[:ntot]
 
 			bytesAvailable -= ntot
 			// if we still have some space in packet, we should stuff it with adaptation field stuffing
@@ -261,13 +255,13 @@ func (m *Muxer) WriteData(d *MuxerData) (bytesWritten int, err error) {
 			if bytesAvailable > 0 {
 				pkt.Header.HasAdaptationField = true
 				if pkt.AdaptationField == nil {
-					pkt.AdaptationField = newStuffingAdaptationField(bytesAvailable)
+					pkt.AdaptationField = m.stuffingAdaptationField(bytesAvailable)
 				} else {
 					pkt.AdaptationField.StuffingLength = uint8(bytesAvailable)
 				}
 			}
 
-			if n, err = pkt.write(m.bitsWriter, m.bb, m.packetSize); err != nil {
+			if n, err = pkt.writeBytes(m.pkt, m.w); err != nil {
 				return
 			}
 
@@ -290,7 +284,7 @@ func (m *Muxer) WritePacket(p *Packet) (int, error) {
 	if p.s > 0 {
 		return m.w.Write(p.bs[:p.s])
 	}
-	return p.write(m.bitsWriter, m.bb, m.packetSize)
+	return p.writeBytes(m.pkt, m.w)
 }
 
 func (m *Muxer) retransmitTables(force bool) (n int, err error) {
@@ -367,8 +361,6 @@ func (m *Muxer) generatePAT() (err error) {
 	}
 
 	m.patBytes.Reset()
-	wPacket := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: &m.patBytes})
-
 	pkt := Packet{
 		Header: PacketHeader{
 			HasPayload:                true,
@@ -378,7 +370,7 @@ func (m *Muxer) generatePAT() (err error) {
 		},
 		Payload: m.patDataBytes.Bytes(),
 	}
-	if _, err = pkt.write(wPacket, m.bb, m.packetSize); err != nil {
+	if _, err = pkt.writeBytes(m.pkt, &m.patBytes); err != nil {
 		// FIXME save old PAT and rollback to it here maybe?
 		return
 	}
@@ -431,7 +423,6 @@ func (m *Muxer) generatePMT() (err error) {
 	}
 
 	m.pmtBytes.Reset()
-	wPacket := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: &m.pmtBytes})
 
 	l := m.pmtDataBytes.Len()
 	for i := 0; i <= l/packetMaxPayload; i++ {
@@ -449,7 +440,7 @@ func (m *Muxer) generatePMT() (err error) {
 			},
 			Payload: m.pmtDataBytes.Bytes()[start:stop],
 		}
-		if _, err = pkt.write(wPacket, m.bb, m.packetSize); err != nil {
+		if _, err = pkt.writeBytes(m.pkt, &m.pmtBytes); err != nil {
 			// FIXME save old PMT and rollback to it here maybe?
 			return
 		}

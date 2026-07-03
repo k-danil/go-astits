@@ -1,13 +1,28 @@
 package astits
 
+import "sync"
+
 type PacketList struct {
 	head, tail *Packet
 
 	l, s int
 }
 
+var poolOfPacketList = sync.Pool{
+	New: func() interface{} {
+		return &PacketList{}
+	},
+}
+
 func NewPacketList() *PacketList {
-	return &PacketList{}
+	pl, _ := poolOfPacketList.Get().(*PacketList)
+	return pl
+}
+
+// Close очищает список и возвращает его в пул: только когда ссылок не осталось
+func (pl *PacketList) Close() {
+	pl.Clear()
+	poolOfPacketList.Put(pl)
 }
 
 func (pl *PacketList) PushBack(p *Packet) {

@@ -72,9 +72,8 @@ func TestParsePacket(t *testing.T) {
 func TestWritePacket(t *testing.T) {
 	eb, ep := packet(packetHeader, packetAdaptationField, []byte("payload"), false)
 	buf := &bytes.Buffer{}
-	w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: buf})
-	bb := new([8]byte)
-	n, err := ep.write(w, bb, MpegTsPacketSize)
+	scratch := make([]byte, MpegTsPacketSize)
+	n, err := ep.writeBytes(scratch, buf)
 	assert.NoError(t, err)
 	assert.Equal(t, MpegTsPacketSize, n)
 	assert.Equal(t, n, buf.Len())
@@ -86,13 +85,12 @@ func BenchmarkWritePacket(b *testing.B) {
 	_, ep := packet(packetHeader, packetAdaptationField, []byte("payload"), false)
 	buf := &bytes.Buffer{}
 	buf.Grow(200)
-	w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: buf})
-	bb := new([8]byte)
+	scratch := make([]byte, MpegTsPacketSize)
 
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		buf.Reset()
-		ep.write(w, bb, MpegTsPacketSize)
+		ep.writeBytes(scratch, buf)
 	}
 }
 
@@ -103,9 +101,7 @@ func TestWritePacket_HeaderOnly(t *testing.T) {
 	_, ep := packetShort(shortPacketHeader, nil)
 
 	buf := &bytes.Buffer{}
-	w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: buf})
-	bb := new([8]byte)
-	n, err := ep.write(w, bb, MpegTsPacketSize)
+	n, err := ep.writeBytes(make([]byte, MpegTsPacketSize), buf)
 	assert.NoError(t, err)
 	assert.Equal(t, MpegTsPacketSize, n)
 	assert.Equal(t, n, buf.Len())
@@ -243,28 +239,20 @@ func TestParsePacketAdaptationField(t *testing.T) {
 }
 
 func TestWritePacketAdaptationField(t *testing.T) {
-	buf := &bytes.Buffer{}
-	w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: buf})
 	eb := packetAdaptationFieldBytes(packetAdaptationField)
-	bb := new([8]byte)
-	bytesWritten, err := packetAdaptationField.write(w, bb)
+	bs := make([]byte, MpegTsPacketSize)
+	bytesWritten, err := packetAdaptationField.putBytes(bs)
 	assert.NoError(t, err)
-	assert.Equal(t, bytesWritten, buf.Len())
-	assert.Equal(t, len(eb), buf.Len())
-	assert.Equal(t, eb, buf.Bytes())
+	assert.Equal(t, len(eb), bytesWritten)
+	assert.Equal(t, eb, bs[:bytesWritten])
 }
 
 func BenchmarkWritePacketAdaptationField(b *testing.B) {
-	buf := &bytes.Buffer{}
-	buf.Grow(37)
-	w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: buf})
-
-	bb := new([8]byte)
+	bs := make([]byte, MpegTsPacketSize)
 
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		buf.Reset()
-		packetAdaptationField.write(w, bb)
+		packetAdaptationField.putBytes(bs)
 	}
 }
 
@@ -297,27 +285,18 @@ func BenchmarkParsePCR(b *testing.B) {
 }
 
 func TestWritePCR(t *testing.T) {
-	buf := &bytes.Buffer{}
-	w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: buf})
-	bb := new([8]byte)
-	bytesWritten, err := pcr.writePCR(w, bb)
-	assert.NoError(t, err)
+	bs := make([]byte, pcrBytesSize)
+	bytesWritten := pcr.putPCRBytes(bs)
 	assert.Equal(t, bytesWritten, 6)
-	assert.Equal(t, bytesWritten, buf.Len())
-	assert.Equal(t, pcrBytes(), buf.Bytes())
+	assert.Equal(t, pcrBytes(), bs)
 }
 
 func BenchmarkWritePCR(b *testing.B) {
-	buf := &bytes.Buffer{}
-	buf.Grow(6)
-	w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: buf})
-
-	bb := new([8]byte)
+	bs := make([]byte, pcrBytesSize)
 
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		buf.Reset()
-		pcr.writePCR(w, bb)
+		pcr.putPCRBytes(bs)
 	}
 }
 

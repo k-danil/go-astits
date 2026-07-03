@@ -126,21 +126,16 @@ func TestParseDSMTrickMode(t *testing.T) {
 }
 
 func TestWriteDSMTrickMode(t *testing.T) {
-	bb := new([8]byte)
 	for _, tc := range dsmTrickModeTestCases {
 		t.Run(tc.name, func(t *testing.T) {
 			bufExpected := &bytes.Buffer{}
 			wExpected := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: bufExpected})
 			tc.bytesFunc(wExpected)
 
-			bufActual := &bytes.Buffer{}
-			wActual := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: bufActual})
-
-			n, err := tc.trickMode.writeDSMTrickMode(wActual, bb)
-			assert.NoError(t, err)
+			bs := make([]byte, dsmTrickModeLength)
+			n := tc.trickMode.putBytes(bs)
 			assert.Equal(t, 1, n)
-			assert.Equal(t, n, bufActual.Len())
-			assert.Equal(t, bufExpected.Bytes(), bufActual.Bytes())
+			assert.Equal(t, bufExpected.Bytes(), bs[:n])
 		})
 	}
 }
@@ -183,14 +178,10 @@ func TestParsePTSOrDTS(t *testing.T) {
 }
 
 func TestWritePTSOrDTS(t *testing.T) {
-	buf := &bytes.Buffer{}
-	w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: buf})
-	bb := new([8]byte)
-	n, err := dtsClockReference.writePTSOrDTS(w, bb, uint8(0b0010))
-	assert.NoError(t, err)
+	bs := make([]byte, ptsOrDTSByteLength)
+	n := dtsClockReference.putPTSOrDTSBytes(bs, uint8(0b0010))
 	assert.Equal(t, n, 5)
-	assert.Equal(t, n, buf.Len())
-	assert.Equal(t, dtsBytes("0010"), buf.Bytes())
+	assert.Equal(t, dtsBytes("0010"), bs)
 }
 
 func escrBytes() []byte {
@@ -216,14 +207,10 @@ func TestParseESCR(t *testing.T) {
 }
 
 func TestWriteESCR(t *testing.T) {
-	buf := &bytes.Buffer{}
-	w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: buf})
-	bb := new([8]byte)
-	n, err := clockReference.writeESCR(w, bb)
-	assert.NoError(t, err)
+	bs := make([]byte, escrLength)
+	n := clockReference.putESCRBytes(bs)
 	assert.Equal(t, n, 6)
-	assert.Equal(t, n, buf.Len())
-	assert.Equal(t, escrBytes(), buf.Bytes())
+	assert.Equal(t, escrBytes(), bs)
 }
 
 type pesTestCase struct {
@@ -398,6 +385,16 @@ func pesWithHeader() *PESData {
 	return pesTestCases[1].pesData
 }
 
+// embedPESFixture приводит фикстуру к пост-парсовому виду: OptionalHeader живёт
+// во встроенном хранилище PESHeader
+func embedPESFixture(pd *PESData) *PESData {
+	if pd.Header.OptionalHeader != nil && pd.Header.OptionalHeader != &pd.Header.optionalHeader {
+		pd.Header.optionalHeader = *pd.Header.OptionalHeader
+		pd.Header.OptionalHeader = &pd.Header.optionalHeader
+	}
+	return pd
+}
+
 func TestParsePESData(t *testing.T) {
 	for _, tc := range pesTestCases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -409,13 +406,12 @@ func TestParsePESData(t *testing.T) {
 			d := &PESData{}
 			err := d.parsePESData(astikit.NewBytesIterator(buf.Bytes()))
 			assert.NoError(t, err)
-			assert.Equal(t, tc.pesData, d)
+			assert.Equal(t, embedPESFixture(tc.pesData), d)
 		})
 	}
 }
 
 func TestWritePESData(t *testing.T) {
-	bb := new([8]byte)
 	for _, tc := range pesTestCases {
 		t.Run(tc.name, func(t *testing.T) {
 			bufExpected := bytes.Buffer{}
@@ -424,23 +420,23 @@ func TestWritePESData(t *testing.T) {
 			tc.optionalHeaderBytesFunc(wExpected, false, false)
 			tc.bytesFunc(wExpected, false, false)
 
-			bufActual := bytes.Buffer{}
-			wActual := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: &bufActual})
+			var bufActual bytes.Buffer
+			scratch := make([]byte, MpegTsPacketSize-mpegTsPacketHeaderSize)
 
 			start := true
 			totalBytes := 0
 			payloadPos := 0
 
 			for payloadPos+1 < len(tc.pesData.Data) {
-				n, payloadN, err := tc.pesData.Header.writePESData(
-					wActual, bb,
+				n, payloadN, err := tc.pesData.Header.putPESData(
+					scratch,
 					tc.pesData.Data[payloadPos:],
 					start,
-					MpegTsPacketSize-mpegTsPacketHeaderSize,
 				)
 				assert.NoError(t, err)
 				start = false
 
+				bufActual.Write(scratch[:n])
 				totalBytes += n
 				payloadPos += payloadN
 			}
@@ -460,32 +456,23 @@ func TestWritePESHeader(t *testing.T) {
 			tc.headerBytesFunc(wExpected, false, false)
 			tc.optionalHeaderBytesFunc(wExpected, false, false)
 
-			bufActual := bytes.Buffer{}
-			wActual := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: &bufActual})
-
-			bb := new([8]byte)
-			n, err := tc.pesData.Header.write(wActual, bb, len(tc.pesData.Data))
+			bs := make([]byte, MpegTsPacketSize)
+			n, err := tc.pesData.Header.putBytes(bs, len(tc.pesData.Data))
 			assert.NoError(t, err)
-			assert.Equal(t, n, bufActual.Len())
-			assert.Equal(t, bufExpected.Len(), bufActual.Len())
-			assert.Equal(t, bufExpected.Bytes(), bufActual.Bytes())
+			assert.Equal(t, bufExpected.Len(), n)
+			assert.Equal(t, bufExpected.Bytes(), bs[:n])
 		})
 	}
 }
 
 func BenchmarkWritePESHeader(b *testing.B) {
-	buf := &bytes.Buffer{}
-	buf.Grow(100)
-	w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: buf})
-
-	bb := new([8]byte)
+	bs := make([]byte, MpegTsPacketSize)
 
 	for _, tc := range pesTestCases {
 		b.Run(tc.name, func(b *testing.B) {
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {
-				buf.Reset()
-				tc.pesData.Header.write(w, bb, len(tc.pesData.Data))
+				tc.pesData.Header.putBytes(bs, len(tc.pesData.Data))
 			}
 		})
 	}
@@ -498,15 +485,10 @@ func TestWritePESOptionalHeader(t *testing.T) {
 			wExpected := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: &bufExpected})
 			tc.optionalHeaderBytesFunc(wExpected, false, false)
 
-			bufActual := bytes.Buffer{}
-			wActual := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: &bufActual})
-
-			bb := new([8]byte)
-			n, err := tc.pesData.Header.OptionalHeader.write(wActual, bb)
-			assert.NoError(t, err)
-			assert.Equal(t, n, bufActual.Len())
-			assert.Equal(t, bufExpected.Len(), bufActual.Len())
-			assert.Equal(t, bufExpected.Bytes(), bufActual.Bytes())
+			bs := make([]byte, MpegTsPacketSize)
+			n := tc.pesData.Header.OptionalHeader.putBytes(bs)
+			assert.Equal(t, bufExpected.Len(), n)
+			assert.True(t, bytes.Equal(bufExpected.Bytes(), bs[:n]))
 		})
 	}
 }

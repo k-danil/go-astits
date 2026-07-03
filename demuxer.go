@@ -36,6 +36,7 @@ type Demuxer struct {
 	packetBuffer *packetBuffer
 	packetPool   *packetPool
 	programMap   *programMap
+	psiPrev      map[uint16][]byte // последняя эмитнутая PSI-секция per-PID (дедуп повторов)
 	r            io.Reader
 }
 
@@ -60,6 +61,7 @@ func NewDemuxer(ctx context.Context, r io.Reader, opts ...func(*Demuxer)) (d *De
 		r:                r,
 	}
 	d.packetPool = newPacketPool(d.programMap)
+	d.psiPrev = make(map[uint16][]byte)
 
 	// Apply options
 	for _, opt := range opts {
@@ -70,7 +72,7 @@ func NewDemuxer(ctx context.Context, r io.Reader, opts ...func(*Demuxer)) (d *De
 }
 
 func (dmx *Demuxer) GetStats() (ret map[uint64]uint) {
-	if dmx.packetPool == nil || dmx.packetPool.stats == nil {
+	if dmx.packetPool == nil {
 		return
 	}
 	var packetSize uint
@@ -78,9 +80,11 @@ func (dmx *Demuxer) GetStats() (ret map[uint64]uint) {
 		packetSize = dmx.packetBuffer.packetSize
 	}
 
-	ret = make(map[uint64]uint, len(dmx.packetPool.stats))
-	for k, v := range dmx.packetPool.stats {
-		ret[k] = v * packetSize
+	ret = make(map[uint64]uint, len(dmx.packetPool.slots))
+	for i := range dmx.packetPool.slots {
+		if s := &dmx.packetPool.slots[i]; s.stats > 0 {
+			ret[uint64(s.pid)] = uint(s.stats) * packetSize
+		}
 	}
 
 	return
@@ -217,7 +221,7 @@ func (dmx *Demuxer) nextData() (d *DemuxerData, err error) {
 					}
 
 					// Parse data
-					ds, errParseData := parseData(pl, dmx.optPacketsParser, dmx.programMap)
+					ds, errParseData := parseData(pl, dmx.optPacketsParser, dmx.programMap, dmx.psiPrev)
 					if errParseData != nil {
 						// Log error as there may be some incomplete data here
 						// We still want to try to parse all packets, in case final data is complete
@@ -244,7 +248,7 @@ func (dmx *Demuxer) nextData() (d *DemuxerData, err error) {
 
 		// Parse data
 		var ds []*DemuxerData
-		ds, err = parseData(pl, dmx.optPacketsParser, dmx.programMap)
+		ds, err = parseData(pl, dmx.optPacketsParser, dmx.programMap, dmx.psiPrev)
 		if err != nil {
 			err = fmt.Errorf("astits: building new data failed: %w", err)
 			return
@@ -297,6 +301,7 @@ func (dmx *Demuxer) Rewind() (n int64, err error) {
 	dmx.dataBuffer = []*DemuxerData{}
 	dmx.packetBuffer = nil
 	dmx.packetPool = newPacketPool(dmx.programMap)
+	dmx.psiPrev = make(map[uint16][]byte)
 	if n, err = rewind(dmx.r); err != nil {
 		err = fmt.Errorf("astits: rewinding reader failed: %w", err)
 		return

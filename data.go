@@ -1,6 +1,7 @@
 package astits
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 	"github.com/asticode/go-astikit"
@@ -26,6 +27,7 @@ type DemuxerData struct {
 
 	AdaptationField *PacketAdaptationField
 	af              PacketAdaptationField
+	pes             PESData
 
 	internalData *dataPayload
 
@@ -60,8 +62,8 @@ type MuxerData struct {
 }
 
 // parseData parses a payload spanning over multiple packets and returns a set of data
-func parseData(pl *PacketList, prs PacketsParser, pm *programMap) (ds []*DemuxerData, err error) {
-	defer pl.Clear()
+func parseData(pl *PacketList, prs PacketsParser, pm *programMap, psiPrev map[uint16][]byte) (ds []*DemuxerData, err error) {
+	defer pl.Close()
 	// Use custom parser first
 	if prs != nil {
 		var skip bool
@@ -96,11 +98,25 @@ func parseData(pl *PacketList, prs PacketsParser, pm *programMap) (ds []*Demuxer
 	// Information in a CAT payload is private and dependent on the CA system. Use the PacketsParser
 	// to parse this type of payload
 	case isPSIPayload(pid, pm):
+		// Дедуп повторов PSI: идентичная секция не несёт новой информации — не парсим
+		// и не эмитим. Подавленный dp безопасно вернуть в пул (в отличие от
+		// распарсенного: дескрипторы держат вьюхи в dp.bs, потому put'а после парса нет).
+		if psiPrev != nil {
+			if prev, ok := psiPrev[pid]; ok && bytes.Equal(prev, dp.bs) {
+				poolOfPayload.put(dp)
+				return
+			}
+		}
+
 		// Parse PSI data
 		var psiData *PSIData
 		if psiData, err = parsePSIData(i); err != nil {
 			err = fmt.Errorf("astits: parsing PSI data failed: %w", err)
 			return
+		}
+
+		if psiPrev != nil {
+			psiPrev[pid] = append(psiPrev[pid][:0], dp.bs...)
 		}
 
 		// Append data
@@ -109,21 +125,20 @@ func parseData(pl *PacketList, prs PacketsParser, pm *programMap) (ds []*Demuxer
 			d.setAdaptationField(af)
 		}
 	case isPESPayload(dp.bs):
-		// Parse PES data
-		pesData := &PESData{}
-		if err = pesData.parsePESData(i); err != nil {
-			err = fmt.Errorf("astits: parsing PES data failed: %w", err)
-			return
-		}
-
-		// Append data
 		d := &DemuxerData{
-			PES:               pesData,
 			PID:               pid,
 			ContinuityCounter: cc,
 
 			internalData: dp,
 		}
+
+		// Parse PES data
+		if err = d.pes.parsePESData(i); err != nil {
+			err = fmt.Errorf("astits: parsing PES data failed: %w", err)
+			return
+		}
+		d.PES = &d.pes
+
 		d.setAdaptationField(af)
 		ds = []*DemuxerData{d}
 	}

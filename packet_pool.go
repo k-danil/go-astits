@@ -1,27 +1,15 @@
 package astits
 
-import (
-	"sort"
-)
-
-// packetAccumulator keeps track of packets for a single PID and decides when to flush them
-type packetAccumulator struct {
-	pid        uint16
-	programMap *programMap
-	q          *PacketList
+// pidSlot — состояние одного PID: аккумулятор пакетов + счётчик статистики.
+type pidSlot struct {
+	q     *PacketList
+	pid   uint16
+	stats uint32
 }
 
-// newPacketAccumulator creates a new packet queue for a single PID
-func newPacketAccumulator(pid uint16, programMap *programMap) *packetAccumulator {
-	return &packetAccumulator{
-		pid:        pid,
-		programMap: programMap,
-	}
-}
-
-// add adds a new packet for this PID to the queue
-func (b *packetAccumulator) add(p *Packet) (pl *PacketList) {
-	mps := b.q
+// add accumulates packets of one PID and decides when to flush them
+func (s *pidSlot) add(p *Packet, pm *programMap) (pl *PacketList) {
+	mps := s.q
 
 	if !mps.IsEmpty() {
 		if isSameAsPrevious(mps.Tail(), p) {
@@ -41,33 +29,45 @@ func (b *packetAccumulator) add(p *Packet) (pl *PacketList) {
 	mps.PushBack(p)
 
 	// Check if PSI payload is complete
-	if b.programMap != nil &&
-		(b.pid == PIDPAT || b.programMap.existsUnlocked(b.pid)) &&
+	if pm != nil &&
+		(p.Header.PID == PIDPAT || pm.existsUnlocked(p.Header.PID)) &&
 		isPSIComplete(mps) {
 		pl = mps
 		mps = nil
 	}
 
-	b.q = mps
+	s.q = mps
 	return
 }
 
-// packetPool represents a queue of packets for each PID in the stream
+// packetPool represents a queue of packets for each PID in the stream.
+// Компактный список активных PID: их единицы, линейный скан дешевле и map-хэша
+// на каждый пакет, и зануления плоского [8192]-массива на каждый инстанс
+// (демуксер живёт один чанк — фиксированный футпринт умножается на RPS).
 type packetPool struct {
-	b     map[uint64]*packetAccumulator // Indexed by PID
-	stats map[uint64]uint
-
+	slots      []pidSlot
 	programMap *programMap
 }
+
+const packetPoolPreallocPIDs = 8
 
 // newPacketPool creates a new packet pool with an optional parser and programMap
 func newPacketPool(programMap *programMap) *packetPool {
 	return &packetPool{
-		b:     make(map[uint64]*packetAccumulator),
-		stats: make(map[uint64]uint),
-
+		slots:      make([]pidSlot, 0, packetPoolPreallocPIDs),
 		programMap: programMap,
 	}
+}
+
+// slot возвращает слот PID'а; указатель нельзя держать через append (реаллокация)
+func (b *packetPool) slot(pid uint16) *pidSlot {
+	for i := range b.slots {
+		if b.slots[i].pid == pid {
+			return &b.slots[i]
+		}
+	}
+	b.slots = append(b.slots, pidSlot{pid: pid})
+	return &b.slots[len(b.slots)-1]
 }
 
 // addUnlocked adds a new packet to the pool
@@ -83,33 +83,29 @@ func (b *packetPool) addUnlocked(p *Packet) (pl *PacketList) {
 		return
 	}
 
-	// Make sure accumulator exists
-	acc, ok := b.b[uint64(p.Header.PID)]
-	if !ok {
-		acc = newPacketAccumulator(p.Header.PID, b.programMap)
-		b.b[uint64(p.Header.PID)] = acc
-	}
-
-	defer func() { b.stats[uint64(p.Header.PID)]++ }()
-
-	// Add to the accumulator
-	return acc.add(p)
+	slot := b.slot(p.Header.PID)
+	slot.stats++
+	return slot.add(p, b.programMap)
 }
 
-// dumpUnlocked dumps the packet pool by looking for the first item with packets inside
+// dumpUnlocked dumps the packet pool by looking for the first item with packets
+// inside. PID'ы отдаются по возрастанию — порядок хвостовых данных на EOF
+// совпадает с исходной map-реализацией с сортировкой ключей.
 func (b *packetPool) dumpUnlocked() (pl *PacketList) {
-	var keys []int
-	for k := range b.b {
-		keys = append(keys, int(k))
-	}
-	sort.Ints(keys)
-	for _, k := range keys {
-		pl = b.b[uint64(k)].q
-		delete(b.b, uint64(k))
-		if !pl.IsEmpty() {
-			return
+	min := -1
+	for i := range b.slots {
+		if b.slots[i].q.IsEmpty() {
+			continue
+		}
+		if min < 0 || b.slots[i].pid < b.slots[min].pid {
+			min = i
 		}
 	}
+	if min < 0 {
+		return
+	}
+	pl = b.slots[min].q
+	b.slots[min].q = nil
 	return
 }
 
