@@ -211,9 +211,9 @@ func (dmx *Demuxer) nextData() (d *DemuxerData, err error) {
 	var pl *PacketList
 	for {
 		// Get next packet
-		p = NewPacket()
+		p = dmx.packetPool.getPacket()
 		if err = dmx.nextPacket(p); err != nil {
-			p.Close()
+			dmx.packetPool.recyclePacket(p)
 			// If the end of the stream has been reached, we dump the packet pool
 			if errors.Is(err, ErrNoMorePackets) {
 				for {
@@ -224,6 +224,7 @@ func (dmx *Demuxer) nextData() (d *DemuxerData, err error) {
 
 					// Parse data
 					ds, errParseData := parseData(pl, dmx.optPacketsParser, dmx.programMap, dmx.psiPrev, dmx.dsScratch)
+					dmx.packetPool.recycle(pl)
 					if errParseData != nil {
 						// Log error as there may be some incomplete data here
 						// We still want to try to parse all packets, in case final data is complete
@@ -237,6 +238,9 @@ func (dmx *Demuxer) nextData() (d *DemuxerData, err error) {
 						return
 					}
 				}
+				// Поток дочитан: вернуть фрилист глобальному пулу, иначе
+				// короткоживущий демуксер отдаст пакеты GC
+				dmx.packetPool.drain()
 				return
 			}
 			err = fmt.Errorf("astits: fetching next packet failed: %w", err)
@@ -245,12 +249,16 @@ func (dmx *Demuxer) nextData() (d *DemuxerData, err error) {
 
 		// Add packet to the pool
 		if pl = dmx.packetPool.addUnlocked(p); pl.IsEmpty() {
+			if pl != nil {
+				poolOfPacketList.Put(pl)
+			}
 			continue
 		}
 
 		// Parse data
 		var ds []*DemuxerData
 		ds, err = parseData(pl, dmx.optPacketsParser, dmx.programMap, dmx.psiPrev, dmx.dsScratch)
+		dmx.packetPool.recycle(pl)
 		if err != nil {
 			err = fmt.Errorf("astits: building new data failed: %w", err)
 			return
@@ -298,8 +306,22 @@ func (dmx *Demuxer) updateData(ds []*DemuxerData) (d *DemuxerData) {
 	return
 }
 
+// Close возвращает пулам всё, что демуксер удерживает (буферизованные данные,
+// недособранные списки, фрилист). Использовать демуксер после Close нельзя.
+// Обязателен для демуксеров, брошенных до конца потока.
+func (dmx *Demuxer) Close() {
+	for _, d := range dmx.dataBuffer {
+		d.Close()
+	}
+	dmx.dataBuffer = nil
+	if dmx.packetPool != nil {
+		dmx.packetPool.close()
+	}
+}
+
 // Rewind rewinds the demuxer reader
 func (dmx *Demuxer) Rewind() (n int64, err error) {
+	dmx.Close()
 	dmx.dataBuffer = []*DemuxerData{}
 	dmx.packetBuffer = nil
 	dmx.packetPool = newPacketPool(dmx.programMap)

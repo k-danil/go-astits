@@ -63,7 +63,6 @@ type MuxerData struct {
 
 // parseData parses a payload spanning over multiple packets and returns a set of data
 func parseData(pl *PacketList, prs PacketsParser, pm *programMap, psiPrev *pidMap[[]byte], scratch []*DemuxerData) (ds []*DemuxerData, err error) {
-	defer pl.Close()
 	// Use custom parser first
 	if prs != nil {
 		var skip bool
@@ -92,8 +91,9 @@ func parseData(pl *PacketList, prs PacketsParser, pm *programMap, psiPrev *pidMa
 	// Parse payload
 	switch {
 	case pid == PIDCAT:
-	// Information in a CAT payload is private and dependent on the CA system. Use the PacketsParser
-	// to parse this type of payload
+		// Information in a CAT payload is private and dependent on the CA system. Use the PacketsParser
+		// to parse this type of payload
+		poolOfPayload.put(dp)
 	case isPSIPayload(pid, pm):
 		// Дедуп повторов PSI: идентичная секция не несёт новой информации — не парсим
 		// и не эмитим. Подавленный dp безопасно вернуть в пул (в отличие от
@@ -108,6 +108,7 @@ func parseData(pl *PacketList, prs PacketsParser, pm *programMap, psiPrev *pidMa
 		// Parse PSI data
 		var psiData *PSIData
 		if psiData, err = parsePSIData(astikit.NewBytesIterator(dp.bs)); err != nil {
+			poolOfPayload.put(dp)
 			err = fmt.Errorf("astits: parsing PSI data failed: %w", err)
 			return
 		}
@@ -132,6 +133,7 @@ func parseData(pl *PacketList, prs PacketsParser, pm *programMap, psiPrev *pidMa
 
 		// Parse PES data
 		if err = d.pes.parsePESData(dp.bs); err != nil {
+			poolOfPayload.put(dp)
 			err = fmt.Errorf("astits: parsing PES data failed: %w", err)
 			return
 		}
@@ -139,6 +141,9 @@ func parseData(pl *PacketList, prs PacketsParser, pm *programMap, psiPrev *pidMa
 
 		d.setAdaptationField(af)
 		ds = append(scratch[:0], d)
+	default:
+		// Неизвестный payload: данных не будет, буфер — в пул
+		poolOfPayload.put(dp)
 	}
 	return
 }
