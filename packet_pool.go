@@ -1,6 +1,6 @@
 package astits
 
-// pidSlot — состояние одного PID: аккумулятор пакетов + счётчик статистики.
+// pidSlot is the per-PID state: a packet accumulator plus a stats counter.
 type pidSlot struct {
 	q     *PacketList
 	stats uint32
@@ -43,7 +43,7 @@ func (s *pidSlot) add(p *Packet, b *packetPool) (pl *PacketList) {
 // packetPool represents a queue of packets for each PID in the stream
 type packetPool struct {
 	slots      pidMap[pidSlot]
-	free       *Packet // фрилист демуксера: пакеты не покидают nextData-цикл, sync.Pool не нужен
+	free       *Packet // demuxer-local freelist: packets never leave the nextData loop, no sync.Pool round-trips
 	programMap *programMap
 }
 
@@ -71,8 +71,8 @@ func (b *packetPool) recyclePacket(p *Packet) {
 	b.free = p
 }
 
-// recycleListPackets пришивает цепочку списка к фрилисту одним сцеплением;
-// сам список остаётся у вызывающего
+// recycleListPackets links the whole packet chain onto the freelist in one splice;
+// the list itself stays with the caller
 func (b *packetPool) recycleListPackets(pl *PacketList) {
 	if pl.head != nil {
 		pl.tail.next = b.free
@@ -81,13 +81,13 @@ func (b *packetPool) recycleListPackets(pl *PacketList) {
 	*pl = PacketList{}
 }
 
-// recycle — после parseData: payload'ы уже скопированы, на p.bs никто не смотрит
+// recycle is for after parseData: payloads are already copied, nothing views p.bs
 func (b *packetPool) recycle(pl *PacketList) {
 	b.recycleListPackets(pl)
 	poolOfPacketList.Put(pl)
 }
 
-// close возвращает пулам всё удерживаемое: недособранные списки слотов и фрилист
+// close returns everything held to the pools: unfinished slot lists and the freelist
 func (b *packetPool) close() {
 	for i := range b.slots.vals {
 		if q := b.slots.vals[i].q; q != nil {
@@ -98,8 +98,8 @@ func (b *packetPool) close() {
 	b.drain()
 }
 
-// drain сливает фрилист в глобальный пул — на EOF, чтобы короткоживущий
-// демуксер вернул пакеты, а не отдал их GC
+// drain flushes the freelist into the global pool — on EOF, so that a short-lived
+// demuxer returns its packets instead of feeding them to the GC
 func (b *packetPool) drain() {
 	for p := b.free; p != nil; {
 		next := p.next
@@ -130,8 +130,8 @@ func (b *packetPool) addUnlocked(p *Packet) (pl *PacketList) {
 }
 
 // dumpUnlocked dumps the packet pool by looking for the first item with packets
-// inside. PID'ы отдаются по возрастанию — порядок хвостовых данных на EOF
-// совпадает с исходной map-реализацией с сортировкой ключей.
+// inside. PIDs are yielded in ascending order so that the EOF tail data order
+// matches the original map implementation with sorted keys.
 func (b *packetPool) dumpUnlocked() (pl *PacketList) {
 	minIdx := -1
 	for i := range b.slots.vals {

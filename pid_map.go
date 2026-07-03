@@ -1,9 +1,9 @@
 package astits
 
-// pidMap — компактный ассоциативный контейнер под единицы ключей (PID'ы):
-// ключи в отдельном слайсе — скан умещается в одну кэшлинию, значение трогается
-// только по найденному индексу. Дешевле map-хэша на каждый пакет и зануления
-// плоского массива на каждый короткоживущий инстанс.
+// pidMap is a compact associative container for a handful of keys (PIDs):
+// keys live in a separate slice so a scan fits in a single cache line, and the
+// value is touched only via the found index. Cheaper than a map hash per packet
+// and than zeroing a flat array per short-lived instance.
 type pidMap[V any] struct {
 	keys []uint16
 	vals []V
@@ -16,8 +16,8 @@ func newPidMap[V any](capacity int) pidMap[V] {
 	}
 }
 
-// get возвращает указатель на значение или nil, если ключа нет. Указатель
-// валиден до следующего getOrAdd/remove (append реаллоцирует).
+// get returns a pointer to the value, or nil if the key is absent. The pointer
+// is valid until the next getOrAdd/remove (append reallocates).
 func (m *pidMap[V]) get(key uint16) *V {
 	for i, k := range m.keys {
 		if k == key {

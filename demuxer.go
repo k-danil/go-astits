@@ -238,8 +238,8 @@ func (dmx *Demuxer) nextData() (d *DemuxerData, err error) {
 						return
 					}
 				}
-				// Поток дочитан: вернуть фрилист глобальному пулу, иначе
-				// короткоживущий демуксер отдаст пакеты GC
+				// Stream fully read: return the freelist to the global pool,
+				// otherwise a short-lived demuxer hands its packets to the GC
 				dmx.packetPool.drain()
 				return
 			}
@@ -306,9 +306,9 @@ func (dmx *Demuxer) updateData(ds []*DemuxerData) (d *DemuxerData) {
 	return
 }
 
-// Close возвращает пулам всё, что демуксер удерживает (буферизованные данные,
-// недособранные списки, фрилист). Использовать демуксер после Close нельзя.
-// Обязателен для демуксеров, брошенных до конца потока.
+// Close returns everything the demuxer holds to the pools (buffered data,
+// unfinished lists, the freelist). The demuxer must not be used after Close.
+// Mandatory for demuxers abandoned before the end of the stream.
 func (dmx *Demuxer) Close() {
 	for _, d := range dmx.dataBuffer {
 		d.Close()

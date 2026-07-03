@@ -44,14 +44,14 @@ func TestPSIDedup(t *testing.T) {
 		}
 	}
 
-	// Повторные идентичные секции подавлены: данных столько же, сколько от одной копии
+	// Identical repeated sections are suppressed: same data count as from a single copy
 	single := NewDemuxer(context.Background(), bytes.NewReader(buf.Bytes()[:singleCopyLen]))
 	dmx := NewDemuxer(context.Background(), bytes.NewReader(buf.Bytes()))
 	want := countDatas(single)
 	require.NotZero(t, want)
 	require.Equal(t, want, countDatas(dmx))
 
-	// Rewind сбрасывает кэш — секции эмитятся заново
+	// Rewind resets the cache — sections are emitted again
 	_, err := dmx.Rewind()
 	require.NoError(t, err)
 	require.Equal(t, want, countDatas(dmx))

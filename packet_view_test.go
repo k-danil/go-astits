@@ -86,11 +86,11 @@ func TestZeroCopyViewLifetime(t *testing.T) {
 	require.NoError(t, dmx.NextPacketTo(p))
 	sameBatchView := p.Payload
 
-	// Внутри одного батча вьюхи соседних пакетов живут одновременно
+	// Within one batch, views of neighboring packets are alive simultaneously
 	assert.Equal(t, []byte{0xde, 0xad, 0xbe, 0xef}, firstView[:4])
 	assert.Equal(t, []byte{0xde, 0xad, 0xbe, 0xef}, sameBatchView[:4])
 
-	// Этот вызов рефиллит батч — прежние вьюхи умирают by contract
+	// This call refills the batch — previous views die by contract
 	require.NoError(t, dmx.NextPacketTo(p))
 	assert.Equal(t, uint16(0x102), p.Header.PID)
 }

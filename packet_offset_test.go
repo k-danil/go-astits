@@ -20,7 +20,7 @@ func offsetTestStream(pids []uint16) []byte {
 			PID:               pid,
 		}, []byte{0xde, 0xad, 0xbe, 0xef})
 		cc[pid] = (cc[pid] + 1) & 0xf
-		// packetShort паддит без учёта хедера и отдаёт 192 байта
+		// packetShort pads without accounting for the header and returns 192 bytes
 		buf.Write(b[:MpegTsPacketSize])
 	}
 	return buf.Bytes()

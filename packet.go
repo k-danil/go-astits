@@ -91,15 +91,15 @@ type PacketAdaptationField struct {
 	privBuf [transportPrivateDataMaxSize]byte
 }
 
-// reset clears everything parse может НЕ перезаписать: указатели/слайсы не должны
-// переживать свой пакет, а флаги при af.Length == 0 вообще не парсятся (флагового
-// байта нет) — стейловый HasPCR давал фантомные PCR. Значения PCR/OPCR/privBuf при
-// сброшенных Has-флагах — мусор: читать их без проверки флага нельзя.
+// reset clears everything parse may NOT overwrite: pointers/slices must not outlive
+// their packet, and when af.Length == 0 the flags byte is not parsed at all — a stale
+// HasPCR used to produce phantom PCRs. PCR/OPCR/privBuf values behind cleared Has-flags
+// are garbage: reading them without checking the flag is forbidden anyway.
 func (af *PacketAdaptationField) reset() {
 	af.AdaptationExtensionField = nil
 	af.TransportPrivateData = nil
-	// Чистим только использованный префикс: privBuf детерминирован (нули за
-	// текущим контентом), сравнения/копии не зависят от прошлых пакетов
+	// Clear only the used prefix: privBuf stays deterministic (zeros beyond the
+	// current content), comparisons/copies don't depend on previous packets
 	clear(af.privBuf[:af.TransportPrivateDataLength])
 	af.TransportPrivateDataLength = 0
 	af.Length = 0
@@ -154,8 +154,8 @@ func (p *Packet) Reset() {
 	p.next = nil
 }
 
-// parse parses a packet from bs. Прямой слайс-парс: на горячем per-packet пути нет
-// BytesIterator — его call-обвязка на каждом поле была заметной частью стоимости.
+// parse parses a packet from bs. Direct slice parsing: no BytesIterator on the hot
+// per-packet path — its per-field call overhead was a significant share of the cost.
 func (p *Packet) parse(bs []byte, s PacketSkipper) (skip bool, err error) {
 	if len(bs) < MpegTsPacketSize {
 		return false, ErrShortPacket
@@ -280,14 +280,14 @@ func (af *PacketAdaptationField) parseBytes(bs []byte, o int) (err error) {
 				if end > len(bs) {
 					return ErrShortPacket
 				}
-				// Копия в privBuf: срез больше не смотрит в буфер чтения и
-				// переживает value-copy структуры (с repoint'ом)
+				// Copy into privBuf: the slice no longer views the read buffer and
+				// survives value copies of the struct (with a repoint)
 				af.TransportPrivateData = af.privBuf[:copy(af.privBuf[:], bs[o:end])]
 				o = end
 			}
 		}
 
-		// Adaptation extension: редкий — остаётся на итераторе
+		// Adaptation extension: rare — stays on the iterator
 		if af.HasAdaptationExtensionField {
 			i := astikit.NewBytesIterator(bs)
 			i.Seek(o)
@@ -376,8 +376,8 @@ func (afe *PacketAdaptationExtensionField) parse(i *astikit.BytesIterator) (err 
 	return
 }
 
-// writeBytes собирает пакет целиком в bs (len(bs) = целевой размер пакета) и
-// отдаёт его одним Write — вместо пофилдовой записи через BitsWriter.
+// writeBytes assembles the whole packet in bs (len(bs) = target packet size) and
+// emits it with a single Write — instead of per-field writes through BitsWriter.
 func (p *Packet) writeBytes(bs []byte, w io.Writer) (written int, err error) {
 	p.Header.putBytes(bs[:mpegTsPacketHeaderSize])
 	written = mpegTsPacketHeaderSize
@@ -551,8 +551,8 @@ func (afe *PacketAdaptationExtensionField) putBytes(bs []byte) (n int) {
 	return
 }
 
-// stuffingAdaptationField переиспользует scratch-AF муксера: аллокация на каждый
-// пакет со стаффингом уходит, reset() гарантирует чистоту между использованиями
+// stuffingAdaptationField reuses the muxer's scratch AF: no allocation per stuffed
+// packet, reset() guarantees cleanliness between uses
 func (m *Muxer) stuffingAdaptationField(bytesToStuff int) *PacketAdaptationField {
 	m.stuffAF.reset()
 	if bytesToStuff == 1 {

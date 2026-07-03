@@ -170,7 +170,7 @@ func (pb *packetBuffer) nextView(p *Packet) (err error) {
 			}
 		}
 
-		// parse сам перезаписывает Header и nil'ит AF/Payload — Reset на пакет не нужен
+		// parse overwrites Header and nils AF/Payload itself — no per-packet Reset needed
 		p.Offset = pb.pos
 		pb.pos += int64(ps)
 

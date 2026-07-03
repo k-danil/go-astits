@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/asticode/go-astikit"
-	"github.com/asticode/go-astits"
+	"github.com/k-danil/go-astits"
 )
 
 const (

@@ -56,7 +56,7 @@ type PESData struct {
 // PESHeader represents a packet PES header
 type PESHeader struct {
 	OptionalHeader *PESOptionalHeader
-	optionalHeader PESOptionalHeader // хранилище для OptionalHeader — без аллокации на PES
+	optionalHeader PESOptionalHeader // storage for OptionalHeader — no allocation per PES
 	PacketLength   uint16            // Specifies the number of bytes remaining in the packet after this field. Can be zero. If the PES packet length is set to zero, the PES packet can be of any length. A value of zero for the PES packet length can be used only when the PES packet payload is a video elementary stream.
 	StreamID       uint8             // Examples: Audio streams (0xC0-0xDF), Video streams (0xE0-0xEF)
 }
@@ -587,7 +587,7 @@ func (h *PESOptionalHeaderExtension) putBytes(bs []byte) (n int) {
 	n = 1
 
 	if h.HasPrivateData {
-		// как WriteBytesN: ровно 16 байт, недостающее добивается нулями
+		// like WriteBytesN: exactly 16 bytes, the remainder padded with zeros
 		c := copy(bs[n:n+16], h.PrivateData)
 		for i := n + c; i < n+16; i++ {
 			bs[i] = 0

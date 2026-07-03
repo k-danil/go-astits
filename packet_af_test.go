@@ -21,7 +21,7 @@ func TestPacketEmbeddedAFReuse(t *testing.T) {
 	p := NewPacket()
 	defer p.Close()
 
-	// Полный AF (фикстура: PCR/OPCR/private/extension)
+	// Full AF (fixture: PCR/OPCR/private/extension)
 	bs1, _ := packet(packetHeader, packetAdaptationField, []byte("payload"), false)
 	parseInto(t, p, bs1[:MpegTsPacketSize])
 	require.NotNil(t, p.AdaptationField)
@@ -29,20 +29,20 @@ func TestPacketEmbeddedAFReuse(t *testing.T) {
 	assert.Equal(t, []byte("test"), p.AdaptationField.TransportPrivateData)
 	assert.NotNil(t, p.AdaptationField.AdaptationExtensionField)
 
-	// Пакет без AF: указатель обязан обнулиться
+	// Packet without AF: the pointer must be reset to nil
 	bs2, _ := packetShort(PacketHeader{HasPayload: true, PID: 0x100}, []byte{0xde})
 	parseInto(t, p, bs2[:MpegTsPacketSize])
 	assert.Nil(t, p.AdaptationField)
 
-	// Минимальный AF (только RAI): стейл private/extension из первого парса
-	// не должны протечь
+	// Minimal AF (RAI only): stale private/extension from the first parse
+	// must not leak through
 	minimalAF := make([]byte, MpegTsPacketSize)
 	minimalAF[0] = syncByte
 	minimalAF[1] = 0x01
 	minimalAF[2] = 0x00 // PID 0x100
 	minimalAF[3] = 0x30 // AF+payload, CC=0
 	minimalAF[4] = 0x01 // AF length
-	minimalAF[5] = 0x40 // только RAI
+	minimalAF[5] = 0x40 // RAI only
 	parseInto(t, p, minimalAF)
 	require.NotNil(t, p.AdaptationField)
 	assert.True(t, p.AdaptationField.RandomAccessIndicator)
@@ -50,9 +50,9 @@ func TestPacketEmbeddedAFReuse(t *testing.T) {
 	assert.Nil(t, p.AdaptationField.TransportPrivateData)
 	assert.Nil(t, p.AdaptationField.AdaptationExtensionField)
 
-	// AF c Length=0 (однобайтовый стаффинг): флаговый байт не парсится вовсе —
-	// стейловые Has-флаги предыдущего пакета давали фантомные PCR
-	parseInto(t, p, bs1[:MpegTsPacketSize]) // снова полный AF с PCR
+	// AF with Length=0 (one-byte stuffing): the flags byte is not parsed at all —
+	// stale Has-flags of the previous packet used to produce phantom PCRs
+	parseInto(t, p, bs1[:MpegTsPacketSize]) // full AF with PCR again
 	require.True(t, p.AdaptationField.HasPCR)
 	zeroLenAF := make([]byte, MpegTsPacketSize)
 	zeroLenAF[0] = syncByte
@@ -66,8 +66,8 @@ func TestPacketEmbeddedAFReuse(t *testing.T) {
 	assert.False(t, p.AdaptationField.RandomAccessIndicator)
 }
 
-// Владение AF в DemuxerData: поля обязаны переживать переиспользование пуловых
-// пакетов последующим демуксом. Гоняется по реальному часовому файлу (env-gated).
+// AF ownership in DemuxerData: fields must survive pooled packet reuse by
+// subsequent demuxing. Runs against a real hour-long file (env-gated).
 func TestDemuxerDataOwnsAdaptationField(t *testing.T) {
 	const (
 		retainCount  = 5

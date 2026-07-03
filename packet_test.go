@@ -44,7 +44,7 @@ func packetShort(h PacketHeader, payload []byte) ([]byte, *Packet) {
 func TestParsePacket(t *testing.T) {
 	// Packet not starting with a sync
 	bs := make([]byte, MpegTsPacketSize)
-	bs[1] = 1 // Invalid sync byte, не zero-stuffed
+	bs[1] = 1 // Invalid sync byte, not zero-stuffed
 	p := new(Packet)
 	_, err := p.parse(bs, EmptySkipper)
 	assert.EqualError(t, err, ErrPacketMustStartWithASyncByte.Error())

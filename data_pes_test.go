@@ -385,8 +385,8 @@ func pesWithHeader() *PESData {
 	return pesTestCases[1].pesData
 }
 
-// embedPESFixture приводит фикстуру к пост-парсовому виду: OptionalHeader живёт
-// во встроенном хранилище PESHeader
+// embedPESFixture normalizes a fixture to its post-parse shape: OptionalHeader
+// points into the embedded PESHeader storage
 func embedPESFixture(pd *PESData) *PESData {
 	if pd.Header.OptionalHeader != nil && pd.Header.OptionalHeader != &pd.Header.optionalHeader {
 		pd.Header.optionalHeader = *pd.Header.OptionalHeader

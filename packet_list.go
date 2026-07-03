@@ -19,7 +19,7 @@ func NewPacketList() *PacketList {
 	return pl
 }
 
-// Close очищает список и возвращает его в пул: только когда ссылок не осталось
+// Close clears the list and returns it to the pool: only when no references remain
 func (pl *PacketList) Close() {
 	pl.Clear()
 	poolOfPacketList.Put(pl)

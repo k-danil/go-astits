@@ -41,8 +41,8 @@ func (d *DemuxerData) Close() {
 	}
 }
 
-// setAdaptationField хранит СОБСТВЕННУЮ копию: исходный AF живёт во встроенной
-// структуре пулового пакета, который переиспользуется сразу после parseData.
+// setAdaptationField stores an OWNED copy: the source AF lives in the embedded
+// struct of a pooled packet that is reused right after parseData.
 func (d *DemuxerData) setAdaptationField(src *PacketAdaptationField) {
 	if src == nil {
 		return
@@ -95,9 +95,9 @@ func parseData(pl *PacketList, prs PacketsParser, pm *programMap, psiPrev *pidMa
 		// to parse this type of payload
 		poolOfPayload.put(dp)
 	case isPSIPayload(pid, pm):
-		// Дедуп повторов PSI: идентичная секция не несёт новой информации — не парсим
-		// и не эмитим. Подавленный dp безопасно вернуть в пул (в отличие от
-		// распарсенного: дескрипторы держат вьюхи в dp.bs, потому put'а после парса нет).
+		// PSI repeat dedup: an identical section carries no new information — neither
+		// parse nor emit. A suppressed dp is safe to return to the pool (unlike a parsed
+		// one: descriptors keep views into dp.bs, hence no put after parsing).
 		if psiPrev != nil {
 			if prev := psiPrev.get(pid); prev != nil && bytes.Equal(*prev, dp.bs) {
 				poolOfPayload.put(dp)
@@ -142,7 +142,7 @@ func parseData(pl *PacketList, prs PacketsParser, pm *programMap, psiPrev *pidMa
 		d.setAdaptationField(af)
 		ds = append(scratch[:0], d)
 	default:
-		// Неизвестный payload: данных не будет, буфер — в пул
+		// Unknown payload: no data will be produced, return the buffer to the pool
 		poolOfPayload.put(dp)
 	}
 	return
