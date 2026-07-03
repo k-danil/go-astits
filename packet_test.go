@@ -43,24 +43,23 @@ func packetShort(h PacketHeader, payload []byte) ([]byte, *Packet) {
 
 func TestParsePacket(t *testing.T) {
 	// Packet not starting with a sync
-	buf := &bytes.Buffer{}
-	w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: buf})
-	w.Write(uint16(1)) // Invalid sync byte
+	bs := make([]byte, MpegTsPacketSize)
+	bs[1] = 1 // Invalid sync byte, не zero-stuffed
 	p := new(Packet)
-	_, err := p.parse(astikit.NewBytesIterator(buf.Bytes()), EmptySkipper)
+	_, err := p.parse(bs, EmptySkipper)
 	assert.EqualError(t, err, ErrPacketMustStartWithASyncByte.Error())
 
 	// Valid
 	b, ep := packet(packetHeader, packetAdaptationField, []byte("payload"), true)
 	p = new(Packet)
-	_, err = p.parse(astikit.NewBytesIterator(b), EmptySkipper)
+	_, err = p.parse(b, EmptySkipper)
 	assert.NoError(t, err)
 	assert.Equal(t, p, ep)
 
 	// Skip
 	p = new(Packet)
 	var skip bool
-	skip, err = p.parse(astikit.NewBytesIterator(b), func(_ *Packet) (skip bool) { return true })
+	skip, err = p.parse(b, func(_ *Packet) (skip bool) { return true })
 	assert.NoError(t, err)
 	assert.Equal(t, skip, true)
 }
@@ -113,9 +112,8 @@ func TestWritePacket_HeaderOnly(t *testing.T) {
 
 	// we can't just compare bytes returned by packetShort since they're not completely correct,
 	//  so we just cross-check writePacket with parsePacket
-	i := astikit.NewBytesIterator(buf.Bytes())
 	p := new(Packet)
-	_, err = p.parse(i, EmptySkipper)
+	_, err = p.parse(buf.Bytes(), EmptySkipper)
 	assert.NoError(t, err)
 	assert.Equal(t, ep, p)
 }
@@ -146,9 +144,8 @@ func packetHeaderBytes(h PacketHeader, afControl string) []byte {
 
 func TestParsePacketHeader(t *testing.T) {
 	v := PacketHeader{}
-	err := v.parse(astikit.NewBytesIterator(packetHeaderBytes(packetHeader, "11")))
+	v.parseBytes(packetHeaderBytes(packetHeader, "11"))
 	assert.Equal(t, packetHeader, v)
-	assert.NoError(t, err)
 }
 
 func TestWritePacketHeader(t *testing.T) {
@@ -240,7 +237,7 @@ func packetAdaptationFieldBytes(a *PacketAdaptationField) []byte {
 
 func TestParsePacketAdaptationField(t *testing.T) {
 	af := &PacketAdaptationField{}
-	err := af.parse(astikit.NewBytesIterator(packetAdaptationFieldBytes(packetAdaptationField)))
+	err := af.parseBytes(packetAdaptationFieldBytes(packetAdaptationField), 0)
 	assert.Equal(t, packetAdaptationField, af)
 	assert.NoError(t, err)
 }
@@ -283,22 +280,20 @@ func pcrBytes() []byte {
 }
 
 func TestParsePCR(t *testing.T) {
-	var v ClockReference
-	err := v.parsePCR(astikit.NewBytesIterator(pcrBytes()))
+	v := parsePCRBytes(pcrBytes())
 	assert.Equal(t, pcr, v)
-	assert.NoError(t, err)
 }
 
 func BenchmarkParsePCR(b *testing.B) {
 	b.ReportAllocs()
 
-	r := astikit.NewBytesIterator(pcrBytes())
+	bs := pcrBytes()
 
 	var v ClockReference
 	for i := 0; i < b.N; i++ {
-		r.Seek(0)
-		v.parsePCR(r)
+		v = parsePCRBytes(bs)
 	}
+	_ = v
 }
 
 func TestWritePCR(t *testing.T) {
@@ -334,8 +329,7 @@ func BenchmarkParsePacket(b *testing.B) {
 
 		p := NewPacket()
 		for i := 0; i < b.N; i++ {
-			p.parse(astikit.NewBytesIterator(bs), EmptySkipper)
-			p.Reset()
+			p.parse(bs, EmptySkipper)
 		}
 		p.Close()
 	})

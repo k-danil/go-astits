@@ -155,34 +155,28 @@ func (p *Packet) Reset() {
 	p.next = nil
 }
 
-// parsePacket parses a packet
-func (p *Packet) parse(i *astikit.BytesIterator, s PacketSkipper) (skip bool, err error) {
-	// Get next byte
-	if b, _ := i.NextByte(); b != syncByte {
+// parse parses a packet from bs. Прямой слайс-парс: на горячем per-packet пути нет
+// BytesIterator — его call-обвязка на каждом поле была заметной частью стоимости.
+func (p *Packet) parse(bs []byte, s PacketSkipper) (skip bool, err error) {
+	if len(bs) < MpegTsPacketSize {
+		return false, ErrShortPacket
+	}
+
+	if bs[0] != syncByte {
 		err = ErrPacketMustStartWithASyncByte
 		// Zero-stuffed packet is skippable; check the actual bytes, not p.bs —
 		// in zero-copy mode the packet is a view and p.bs is stale.
-		i.Seek(0)
-		if head, herr := i.NextBytesNoCopy(8); herr == nil {
-			skip = binary.LittleEndian.Uint64(head) == 0
-		}
+		skip = binary.LittleEndian.Uint64(bs[:8]) == 0
 		return
 	}
 
 	// In case packet size is bigger than 188 bytes, we don't care for the first bytes
-	i.Seek(i.Len() - MpegTsPacketSize + 1)
-	offsetStart := i.Offset()
-
-	// Parse header
-	if err = p.Header.parse(i); err != nil {
-		err = fmt.Errorf("astits: parsing packet header failed: %w", err)
-		return
-	}
+	hdr := len(bs) - MpegTsPacketSize + 1
+	p.Header.parseBytes(bs[hdr : hdr+3 : hdr+3])
 
 	// Skip packet
 	if s(p) {
-		skip = true
-		return
+		return true, nil
 	}
 
 	// A reused packet must not leak the previous packet's fields into one
@@ -194,73 +188,49 @@ func (p *Packet) parse(i *astikit.BytesIterator, s PacketSkipper) (skip bool, er
 	if p.Header.HasAdaptationField {
 		p.af.reset()
 		p.AdaptationField = &p.af
-		if err = p.AdaptationField.parse(i); err != nil {
-			err = fmt.Errorf("astits: parsing packet adaptation field failed: %w", err)
+		if err = p.af.parseBytes(bs, hdr+3); err != nil {
 			return
 		}
 	}
 
 	// Build payload
 	if p.Header.HasPayload {
-		i.Seek(p.payloadOffset(offsetStart))
-		if p.Payload, err = i.NextBytesNoCopy(i.Len() - i.Offset()); err != nil {
-			err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
-			return
+		payloadAt := hdr + 3
+		if p.Header.HasAdaptationField {
+			payloadAt += 1 + int(p.af.Length)
 		}
+		if payloadAt > len(bs) {
+			return false, ErrShortPacket
+		}
+		p.Payload = bs[payloadAt:]
 	}
 	return
 }
 
-// payloadOffset returns the payload offset
-func (p *Packet) payloadOffset(offsetStart int) (offset int) {
-	offset = offsetStart + 3
-	if p.Header.HasAdaptationField {
-		offset += 1 + int(p.AdaptationField.Length)
-	}
-	return
+func (ph *PacketHeader) parseBytes(b []byte) {
+	_ = b[2]
+	ph.TransportErrorIndicator = b[0]&0x80 > 0
+	ph.PayloadUnitStartIndicator = b[0]&0x40 > 0
+	ph.TransportPriority = b[0]&0x20 > 0
+	ph.PID = binary.BigEndian.Uint16(b[:2]) & 0x1fff
+	ph.TransportScramblingControl = b[2] >> 6 & 0x3
+	ph.HasAdaptationField = b[2]&0x20 > 0
+	ph.HasPayload = b[2]&0x10 > 0
+	ph.ContinuityCounter = b[2] & 0xf
 }
 
-// parsePacketHeader parses the packet header
-func (ph *PacketHeader) parse(i *astikit.BytesIterator) (err error) {
-	// Get next bytes
-	var bs []byte
-	if bs, err = i.NextBytesNoCopy(3); err != nil || len(bs) < 3 {
-		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
-		return
-	}
-
-	b := bs[2]
-	ph.TransportScramblingControl = b >> 6 & 0x3
-	ph.HasAdaptationField = b&0x20 > 0
-	ph.HasPayload = b&0x10 > 0
-	ph.ContinuityCounter = b & 0xf
-	b = bs[0]
-	ph.TransportErrorIndicator = b&0x80 > 0
-	ph.PayloadUnitStartIndicator = b&0x40 > 0
-	ph.TransportPriority = b&0x20 > 0
-	ph.PID = binary.BigEndian.Uint16(bs[:2]) & 0x1fff
-
-	return
-}
-
-// parsePacketAdaptationField parses the packet adaptation field
-func (af *PacketAdaptationField) parse(i *astikit.BytesIterator) (err error) {
-	// Get next byte
-	var b byte
-	if af.Length, err = i.NextByte(); err != nil {
-		err = fmt.Errorf("astits: fetching next byte failed: %w", err)
-		return
-	}
-
-	afStartOffset := i.Offset()
+func (af *PacketAdaptationField) parseBytes(bs []byte, o int) (err error) {
+	af.Length = bs[o]
+	o++
+	bodyStart := o
 
 	// Valid length
 	if af.Length > 0 {
-		// Get next byte
-		if b, err = i.NextByte(); err != nil {
-			err = fmt.Errorf("astits: fetching next byte failed: %w", err)
-			return
+		if o >= len(bs) {
+			return ErrShortPacket
 		}
+		b := bs[o]
+		o++
 
 		// Flags
 		af.DiscontinuityIndicator = b&0x80 > 0
@@ -274,63 +244,72 @@ func (af *PacketAdaptationField) parse(i *astikit.BytesIterator) (err error) {
 
 		// PCR
 		if af.HasPCR {
-			if err = af.PCR.parsePCR(i); err != nil {
-				err = fmt.Errorf("astits: parsing PCR failed: %w", err)
-				return
+			if o+pcrBytesSize > len(bs) {
+				return ErrShortPacket
 			}
+			af.PCR = parsePCRBytes(bs[o:])
+			o += pcrBytesSize
 		}
 
 		// OPCR
 		if af.HasOPCR {
-			if err = af.OPCR.parsePCR(i); err != nil {
-				err = fmt.Errorf("astits: parsing PCR failed: %w", err)
-				return
+			if o+pcrBytesSize > len(bs) {
+				return ErrShortPacket
 			}
+			af.OPCR = parsePCRBytes(bs[o:])
+			o += pcrBytesSize
 		}
 
 		// Splicing countdown
 		if af.HasSplicingCountdown {
-			if af.SpliceCountdown, err = i.NextByte(); err != nil {
-				err = fmt.Errorf("astits: fetching next byte failed: %w", err)
-				return
+			if o >= len(bs) {
+				return ErrShortPacket
 			}
+			af.SpliceCountdown = bs[o]
+			o++
 		}
 
 		// Transport private data
 		if af.HasTransportPrivateData {
-			// Length
-			if af.TransportPrivateDataLength, err = i.NextByte(); err != nil {
-				err = fmt.Errorf("astits: fetching next byte failed: %w", err)
-				return
+			if o >= len(bs) {
+				return ErrShortPacket
 			}
-
-			// Data
+			af.TransportPrivateDataLength = bs[o]
+			o++
 			if af.TransportPrivateDataLength > 0 {
-				var b []byte
-				if b, err = i.NextBytesNoCopy(int(af.TransportPrivateDataLength)); err != nil {
-					err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
-					return
+				end := o + int(af.TransportPrivateDataLength)
+				if end > len(bs) {
+					return ErrShortPacket
 				}
 				// Копия в privBuf: срез больше не смотрит в буфер чтения и
 				// переживает value-copy структуры (с repoint'ом)
-				af.TransportPrivateData = af.privBuf[:copy(af.privBuf[:], b)]
+				af.TransportPrivateData = af.privBuf[:copy(af.privBuf[:], bs[o:end])]
+				o = end
 			}
 		}
 
-		// Adaptation extension
+		// Adaptation extension: редкий — остаётся на итераторе
 		if af.HasAdaptationExtensionField {
-			// Create extension field
+			i := astikit.NewBytesIterator(bs)
+			i.Seek(o)
 			af.AdaptationExtensionField = &PacketAdaptationExtensionField{}
 			if err = af.AdaptationExtensionField.parse(i); err != nil {
-				err = fmt.Errorf("astits: parsing Extension field failed: %w", err)
-				return
+				return fmt.Errorf("astits: parsing Extension field failed: %w", err)
 			}
+			o = i.Offset()
 		}
 	}
 
-	af.StuffingLength = af.Length - uint8(i.Offset()-afStartOffset)
+	af.StuffingLength = af.Length - uint8(o-bodyStart)
 
-	return
+	return nil
+}
+
+// parsePCRBytes parses a Program Clock Reference
+// Program clock reference, stored as 33 bits base, 6 bits reserved, 9 bits extension.
+func parsePCRBytes(b []byte) ClockReference {
+	pcr := uint64(binary.BigEndian.Uint32(b[:4]))<<16 | uint64(binary.BigEndian.Uint32(b[2:6]))
+	return newClockReference(pcr>>15, pcr&0x1ff)
 }
 
 func (afe *PacketAdaptationExtensionField) parse(i *astikit.BytesIterator) (err error) {
@@ -395,21 +374,6 @@ func (afe *PacketAdaptationExtensionField) parse(i *astikit.BytesIterator) (err 
 			}
 		}
 	}
-	return
-}
-
-// parsePCR parses a Program Clock Reference
-// Program clock reference, stored as 33 bits base, 6 bits reserved, 9 bits extension.
-func (cr *ClockReference) parsePCR(i *astikit.BytesIterator) (err error) {
-	var bs []byte
-	if bs, err = i.NextBytesNoCopy(6); err != nil || len(bs) < 6 {
-		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
-		return
-	}
-
-	bs = bs[:6]
-	pcr := (uint64(binary.BigEndian.Uint32(bs[:4])) << 16) | uint64(binary.BigEndian.Uint32(bs[2:]))
-	*cr = newClockReference(pcr>>15, pcr&0x1ff)
 	return
 }
 

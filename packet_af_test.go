@@ -7,13 +7,12 @@ import (
 	"os"
 	"testing"
 
-	"github.com/asticode/go-astikit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func parseInto(t *testing.T, p *Packet, bs []byte) {
-	skip, err := p.parse(astikit.NewBytesIterator(bs), EmptySkipper)
+	skip, err := p.parse(bs, EmptySkipper)
 	require.NoError(t, err)
 	require.False(t, skip)
 }

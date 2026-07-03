@@ -15,6 +15,7 @@ var (
 	ErrNoMorePackets                = errors.New("astits: no more packets")
 	ErrPacketMustStartWithASyncByte = errors.New("astits: packet must start with a sync byte")
 	ErrZeroCopyNextData             = errors.New("astits: NextData is unavailable with zero-copy packets")
+	ErrShortPacket                  = errors.New("astits: packet too short")
 )
 
 // Demuxer represents a demuxer

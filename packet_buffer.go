@@ -4,8 +4,6 @@ import (
 	"bufio"
 	"fmt"
 	"io"
-
-	"github.com/asticode/go-astikit"
 )
 
 // packetBatch is the zero-copy read buffer: packets are returned as views into bs,
@@ -172,13 +170,12 @@ func (pb *packetBuffer) nextView(p *Packet) (err error) {
 			}
 		}
 
-		bs := pb.batch.next(ps)
-		p.Reset()
+		// parse сам перезаписывает Header и nil'ит AF/Payload — Reset на пакет не нужен
 		p.Offset = pb.pos
 		pb.pos += int64(ps)
 
 		var skip bool
-		if skip, err = p.parse(astikit.NewBytesIterator(bs), pb.s); err != nil {
+		if skip, err = p.parse(pb.batch.next(ps), pb.s); err != nil {
 			if skip && pb.skipErrCounter < pb.skipErrLimit {
 				pb.skipErrCounter++
 			} else {
@@ -201,7 +198,6 @@ func (pb *packetBuffer) next(p *Packet) (err error) {
 	}
 
 	bs := p.bs[:pb.packetSize]
-	bi := astikit.NewBytesIterator(bs)
 
 	var skip bool
 	// Loop to make sure we return a packet even if first packets are skipped
@@ -219,7 +215,7 @@ func (pb *packetBuffer) next(p *Packet) (err error) {
 		p.s = pb.packetSize
 		p.Offset = pb.pos
 		pb.pos += int64(pb.packetSize)
-		if skip, err = p.parse(bi, pb.s); err != nil {
+		if skip, err = p.parse(bs, pb.s); err != nil {
 			if skip && pb.skipErrCounter < pb.skipErrLimit {
 				pb.skipErrCounter++
 			} else {
@@ -232,9 +228,6 @@ func (pb *packetBuffer) next(p *Packet) (err error) {
 		if !skip {
 			break
 		}
-
-		bi.Seek(0)
-		p.Reset()
 	}
 
 	return
