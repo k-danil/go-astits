@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"github.com/asticode/go-astikit"
 	"sync"
-	"unsafe"
 )
 
 // Scrambling Controls
@@ -34,10 +33,16 @@ var poolOfPacket = sync.Pool{
 type Packet struct {
 	bs [M2TsPacketSize]byte
 	s  uint
+	af PacketAdaptationField // AdaptationField points here — no per-packet allocation
 
 	Header          PacketHeader
 	AdaptationField *PacketAdaptationField
 	Payload         []byte // This is only the payload content
+
+	// Offset is the byte offset of the raw packet start (including any M2TS prefix)
+	// within the demuxed stream, counted from the Demuxer's first packet. Packets
+	// dropped by a PacketSkipper advance it too, so it stays a valid byte map.
+	Offset int64
 
 	next *Packet
 }
@@ -58,12 +63,16 @@ type PacketHeader struct {
 	TransportScramblingControl uint8
 }
 
+// transportPrivateDataMaxSize bounds AF private data: the whole AF is at most 183
+// payload bytes.
+const transportPrivateDataMaxSize = 184
+
 // PacketAdaptationField represents a packet adaptation field
 type PacketAdaptationField struct {
 	AdaptationExtensionField          *PacketAdaptationExtensionField
 	OPCR                              ClockReference // Original Program clock reference. Helps when one TS is copied into another
 	PCR                               ClockReference // Program clock reference
-	TransportPrivateData              []byte
+	TransportPrivateData              []byte         // points into privBuf after parse — owned by this struct, survives value copies via repoint
 	TransportPrivateDataLength        uint8
 	Length                            uint8
 	StuffingLength                    uint8 // Only used in writePacketAdaptationField to request stuffing
@@ -77,6 +86,35 @@ type PacketAdaptationField struct {
 	HasSplicingCountdown              bool
 	HasTransportPrivateData           bool
 	HasAdaptationExtensionField       bool
+
+	privBuf [transportPrivateDataMaxSize]byte
+}
+
+// reset clears everything parse может НЕ перезаписать: указатели/слайсы не должны
+// переживать свой пакет, а флаги при af.Length == 0 вообще не парсятся (флагового
+// байта нет) — стейловый HasPCR давал фантомные PCR. Значения PCR/OPCR/privBuf при
+// сброшенных Has-флагах — мусор: читать их без проверки флага нельзя.
+func (af *PacketAdaptationField) reset() {
+	af.AdaptationExtensionField = nil
+	af.TransportPrivateData = nil
+	// Чистим только использованный префикс: privBuf детерминирован (нули за
+	// текущим контентом), сравнения/копии не зависят от прошлых пакетов
+	for i := uint8(0); i < af.TransportPrivateDataLength; i++ {
+		af.privBuf[i] = 0
+	}
+	af.TransportPrivateDataLength = 0
+	af.Length = 0
+	af.StuffingLength = 0
+	af.SpliceCountdown = 0
+	af.IsOneByteStuffing = false
+	af.DiscontinuityIndicator = false
+	af.RandomAccessIndicator = false
+	af.ElementaryStreamPriorityIndicator = false
+	af.HasPCR = false
+	af.HasOPCR = false
+	af.HasSplicingCountdown = false
+	af.HasTransportPrivateData = false
+	af.HasAdaptationExtensionField = false
 }
 
 // PacketAdaptationExtensionField represents a packet adaptation extension field
@@ -106,8 +144,15 @@ func (p *Packet) Close() {
 	poolOfPacket.Put(p)
 }
 
+// Reset deliberately keeps bs: it is fully overwritten by the next read before any
+// parse, and zeroing it per packet doubles the per-packet memory traffic.
 func (p *Packet) Reset() {
-	*p = Packet{}
+	p.s = 0
+	p.Header = PacketHeader{}
+	p.AdaptationField = nil
+	p.Payload = nil
+	p.Offset = 0
+	p.next = nil
 }
 
 // parsePacket parses a packet
@@ -115,7 +160,12 @@ func (p *Packet) parse(i *astikit.BytesIterator, s PacketSkipper) (skip bool, er
 	// Get next byte
 	if b, _ := i.NextByte(); b != syncByte {
 		err = ErrPacketMustStartWithASyncByte
-		skip = *(*uint64)(unsafe.Pointer(&p.bs)) == 0
+		// Zero-stuffed packet is skippable; check the actual bytes, not p.bs —
+		// in zero-copy mode the packet is a view and p.bs is stale.
+		i.Seek(0)
+		if head, herr := i.NextBytesNoCopy(8); herr == nil {
+			skip = binary.LittleEndian.Uint64(head) == 0
+		}
 		return
 	}
 
@@ -135,9 +185,15 @@ func (p *Packet) parse(i *astikit.BytesIterator, s PacketSkipper) (skip bool, er
 		return
 	}
 
+	// A reused packet must not leak the previous packet's fields into one
+	// that has no adaptation field / payload of its own.
+	p.AdaptationField = nil
+	p.Payload = nil
+
 	// Parse adaptation field
 	if p.Header.HasAdaptationField {
-		p.AdaptationField = &PacketAdaptationField{}
+		p.af.reset()
+		p.AdaptationField = &p.af
 		if err = p.AdaptationField.parse(i); err != nil {
 			err = fmt.Errorf("astits: parsing packet adaptation field failed: %w", err)
 			return
@@ -250,10 +306,14 @@ func (af *PacketAdaptationField) parse(i *astikit.BytesIterator) (err error) {
 
 			// Data
 			if af.TransportPrivateDataLength > 0 {
-				if af.TransportPrivateData, err = i.NextBytesNoCopy(int(af.TransportPrivateDataLength)); err != nil {
+				var b []byte
+				if b, err = i.NextBytesNoCopy(int(af.TransportPrivateDataLength)); err != nil {
 					err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 					return
 				}
+				// Копия в privBuf: срез больше не смотрит в буфер чтения и
+				// переживает value-copy структуры (с repoint'ом)
+				af.TransportPrivateData = af.privBuf[:copy(af.privBuf[:], b)]
 			}
 		}
 

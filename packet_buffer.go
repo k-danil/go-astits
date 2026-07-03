@@ -8,17 +8,56 @@ import (
 	"github.com/asticode/go-astikit"
 )
 
+// packetBatch is the zero-copy read buffer: packets are returned as views into bs,
+// valid until the next refill.
+type packetBatch struct {
+	bs  []byte
+	len int
+	off int
+}
+
+func newPacketBatch(packetSize, batchPackets uint) *packetBatch {
+	return &packetBatch{bs: make([]byte, packetSize*batchPackets)}
+}
+
+func (b *packetBatch) empty() bool {
+	return b.off >= b.len
+}
+
+// refill drops a trailing partial packet: the stream either ends there or is torn,
+// exactly like the per-packet ReadFull path treats it.
+func (b *packetBatch) refill(r io.Reader, packetSize int) (err error) {
+	var n int
+	if n, err = io.ReadFull(r, b.bs); n < packetSize {
+		if err == io.EOF || err == io.ErrUnexpectedEOF || err == nil {
+			return ErrNoMorePackets
+		}
+		return fmt.Errorf("astits: reading %d bytes failed: %w", len(b.bs), err)
+	}
+	b.len = n - n%packetSize
+	b.off = 0
+	return nil
+}
+
+func (b *packetBatch) next(packetSize int) (bs []byte) {
+	bs = b.bs[b.off : b.off+packetSize]
+	b.off += packetSize
+	return
+}
+
 // packetBuffer represents a packet buffer
 type packetBuffer struct {
 	packetSize     uint
 	s              PacketSkipper
 	r              io.Reader
+	pos            int64
+	batch          *packetBatch // nil = copy mode
 	skipErrCounter uint
 	skipErrLimit   uint
 }
 
 // newPacketBuffer creates a new packet buffer
-func newPacketBuffer(r io.Reader, packetSize, skipErrLimit uint, s PacketSkipper) (pb *packetBuffer, err error) {
+func newPacketBuffer(r io.Reader, packetSize, skipErrLimit uint, s PacketSkipper, zeroCopyBatch uint) (pb *packetBuffer, err error) {
 	// Init
 	pb = &packetBuffer{
 		packetSize:   packetSize,
@@ -34,6 +73,10 @@ func newPacketBuffer(r io.Reader, packetSize, skipErrLimit uint, s PacketSkipper
 			err = fmt.Errorf("astits: auto detecting packet size failed: %w", err)
 			return
 		}
+	}
+
+	if zeroCopyBatch > 0 {
+		pb.batch = newPacketBatch(pb.packetSize, zeroCopyBatch)
 	}
 	return
 }
@@ -118,8 +161,45 @@ func rewind(r io.Reader) (n int64, err error) {
 	return
 }
 
+// nextView fetches the next packet as a view into the batch buffer: no per-packet
+// read and no copy, the view dies on the refill triggered by a later call.
+func (pb *packetBuffer) nextView(p *Packet) (err error) {
+	ps := int(pb.packetSize)
+	for {
+		if pb.batch.empty() {
+			if err = pb.batch.refill(pb.r, ps); err != nil {
+				return err
+			}
+		}
+
+		bs := pb.batch.next(ps)
+		p.Reset()
+		p.Offset = pb.pos
+		pb.pos += int64(ps)
+
+		var skip bool
+		if skip, err = p.parse(astikit.NewBytesIterator(bs), pb.s); err != nil {
+			if skip && pb.skipErrCounter < pb.skipErrLimit {
+				pb.skipErrCounter++
+			} else {
+				return fmt.Errorf("astits: building packet failed: %w", err)
+			}
+		} else {
+			pb.skipErrCounter = 0
+		}
+
+		if !skip {
+			return nil
+		}
+	}
+}
+
 // next fetches the next packet from the buffer
 func (pb *packetBuffer) next(p *Packet) (err error) {
+	if pb.batch != nil {
+		return pb.nextView(p)
+	}
+
 	bs := p.bs[:pb.packetSize]
 	bi := astikit.NewBytesIterator(bs)
 
@@ -137,6 +217,8 @@ func (pb *packetBuffer) next(p *Packet) (err error) {
 
 		// Parse packet
 		p.s = pb.packetSize
+		p.Offset = pb.pos
+		pb.pos += int64(pb.packetSize)
 		if skip, err = p.parse(bi, pb.s); err != nil {
 			if skip && pb.skipErrCounter < pb.skipErrLimit {
 				pb.skipErrCounter++

@@ -25,6 +25,7 @@ type DemuxerData struct {
 	TOT *TOTData
 
 	AdaptationField *PacketAdaptationField
+	af              PacketAdaptationField
 
 	internalData *dataPayload
 
@@ -36,6 +37,19 @@ func (d *DemuxerData) Close() {
 	if d.internalData != nil {
 		poolOfPayload.put(d.internalData)
 	}
+}
+
+// setAdaptationField хранит СОБСТВЕННУЮ копию: исходный AF живёт во встроенной
+// структуре пулового пакета, который переиспользуется сразу после parseData.
+func (d *DemuxerData) setAdaptationField(src *PacketAdaptationField) {
+	if src == nil {
+		return
+	}
+	d.af = *src
+	if src.TransportPrivateData != nil {
+		d.af.TransportPrivateData = d.af.privBuf[:len(src.TransportPrivateData)]
+	}
+	d.AdaptationField = &d.af
 }
 
 // MuxerData represents a data to be written by Muxer
@@ -91,6 +105,9 @@ func parseData(pl *PacketList, prs PacketsParser, pm *programMap) (ds []*Demuxer
 
 		// Append data
 		ds = psiData.toData(af, pid)
+		for _, d := range ds {
+			d.setAdaptationField(af)
+		}
 	case isPESPayload(dp.bs):
 		// Parse PES data
 		pesData := &PESData{}
@@ -100,14 +117,15 @@ func parseData(pl *PacketList, prs PacketsParser, pm *programMap) (ds []*Demuxer
 		}
 
 		// Append data
-		ds = []*DemuxerData{{
-			AdaptationField:   af,
+		d := &DemuxerData{
 			PES:               pesData,
 			PID:               pid,
 			ContinuityCounter: cc,
 
 			internalData: dp,
-		}}
+		}
+		d.setAdaptationField(af)
+		ds = []*DemuxerData{d}
 	}
 	return
 }

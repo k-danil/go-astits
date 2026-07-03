@@ -14,6 +14,7 @@ const syncByte byte = '\x47'
 var (
 	ErrNoMorePackets                = errors.New("astits: no more packets")
 	ErrPacketMustStartWithASyncByte = errors.New("astits: packet must start with a sync byte")
+	ErrZeroCopyNextData             = errors.New("astits: NextData is unavailable with zero-copy packets")
 )
 
 // Demuxer represents a demuxer
@@ -29,6 +30,7 @@ type Demuxer struct {
 	optSkipErrLimit  uint
 	optPacketsParser PacketsParser
 	optPacketSkipper PacketSkipper
+	optZeroCopyBatch uint
 
 	packetBuffer *packetBuffer
 	packetPool   *packetPool
@@ -122,10 +124,22 @@ func DemuxerOptSkipErrLimit(count int) func(*Demuxer) {
 	}
 }
 
+// DemuxerOptZeroCopyPackets makes NextPacket/NextPacketTo read the stream in batches
+// of batchPackets and return packets as views into the internal buffer: no per-packet
+// read call and no copy. A packet's memory (Payload, adaptation private data) is only
+// valid until the NextPacket/NextPacketTo call that triggers the next batch refill —
+// consume it immediately. NextData is unavailable in this mode (it accumulates packets
+// across refills) and returns ErrZeroCopyNextData.
+func DemuxerOptZeroCopyPackets(batchPackets uint) func(*Demuxer) {
+	return func(d *Demuxer) {
+		d.optZeroCopyBatch = batchPackets
+	}
+}
+
 func (dmx *Demuxer) nextPacket(p *Packet) (err error) {
 	// Create packet buffer if not exists
 	if dmx.packetBuffer == nil {
-		if dmx.packetBuffer, err = newPacketBuffer(dmx.r, dmx.optPacketSize, dmx.optSkipErrLimit, dmx.optPacketSkipper); err != nil {
+		if dmx.packetBuffer, err = newPacketBuffer(dmx.r, dmx.optPacketSize, dmx.optSkipErrLimit, dmx.optPacketSkipper, dmx.optZeroCopyBatch); err != nil {
 			err = fmt.Errorf("astits: creating packet buffer failed: %w", err)
 			return
 		}
@@ -172,6 +186,12 @@ func (dmx *Demuxer) NextPacketTo(p *Packet) (err error) {
 }
 
 func (dmx *Demuxer) nextData() (d *DemuxerData, err error) {
+	// packetPool accumulates packets across batch refills, which would alias
+	// reused view memory — hard error instead of silent corruption.
+	if dmx.optZeroCopyBatch > 0 {
+		return nil, ErrZeroCopyNextData
+	}
+
 	// Check data buffer
 	if len(dmx.dataBuffer) > 0 {
 		d = dmx.dataBuffer[0]

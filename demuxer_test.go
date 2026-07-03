@@ -55,6 +55,7 @@ func TestDemuxerNextPacket(t *testing.T) {
 	b2, p2 := packet(packetHeader, packetAdaptationField, []byte("2"), true)
 	copy(p2.bs[:], b2)
 	p2.s = uint(len(b2))
+	p2.Offset = int64(len(b1))
 	w.Write(b2)
 	dmx = NewDemuxer(context.Background(), bytes.NewReader(buf.Bytes()))
 
@@ -98,10 +99,11 @@ func TestDemuxerNextData(t *testing.T) {
 			ds = append(ds, d)
 		}
 	}
-	assert.Equal(t, psi.toData(
-		p.AdaptationField,
-		PIDPAT,
-	), ds)
+	want := psi.toData(p.AdaptationField, PIDPAT)
+	for _, d := range want {
+		d.setAdaptationField(p.AdaptationField)
+	}
+	assert.Equal(t, want, ds)
 	assert.Equal(t, map[uint64]uint16{0x3: 0x2, 0x5: 0x4}, dmx.programMap.p)
 
 	// No more packets

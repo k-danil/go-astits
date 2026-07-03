@@ -19,11 +19,13 @@ func packet(h PacketHeader, a *PacketAdaptationField, i []byte, packet192bytes b
 	w.Write(packetAdaptationFieldBytes(a))                          // Adaptation field
 	var payload = append(i, bytes.Repeat([]byte{0}, 147-len(i))...) // Payload
 	w.Write(payload)
-	return buf.Bytes(), &Packet{
-		AdaptationField: packetAdaptationField,
-		Header:          packetHeader,
-		Payload:         payload,
+	pk := &Packet{
+		Header:  packetHeader,
+		Payload: payload,
 	}
+	pk.af = *packetAdaptationField
+	pk.AdaptationField = &pk.af
+	return buf.Bytes(), pk
 }
 
 func packetShort(h PacketHeader, payload []byte) ([]byte, *Packet) {
@@ -154,7 +156,7 @@ func TestWritePacketHeader(t *testing.T) {
 	w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: buf})
 	bb := new([8]byte)
 	header := append([]byte{syncByte}, packetHeaderBytes(packetHeader, "11")...)
-	bytesWritten, err := packetHeader.write(w, bb)
+	bytesWritten, err := packetHeader.write(w, bb[:])
 	assert.NoError(t, err)
 	assert.Equal(t, bytesWritten, 4)
 	assert.Equal(t, bytesWritten, buf.Len())
@@ -171,7 +173,7 @@ func BenchmarkWritePacketHeader(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		buf.Reset()
-		packetHeader.write(w, bb)
+		packetHeader.write(w, bb[:])
 	}
 }
 
@@ -201,6 +203,7 @@ var packetAdaptationField = &PacketAdaptationField{
 	SpliceCountdown:                   2,
 	TransportPrivateDataLength:        4,
 	TransportPrivateData:              []byte("test"),
+	privBuf:                           [transportPrivateDataMaxSize]byte{'t', 'e', 's', 't'},
 	StuffingLength:                    5,
 }
 
