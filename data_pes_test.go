@@ -201,7 +201,7 @@ func escrBytes() []byte {
 
 func TestParseESCR(t *testing.T) {
 	var v ClockReference
-	err := v.parseESCR(astikit.NewBytesIterator(escrBytes()))
+	_, err := v.parseESCRBytes(escrBytes(), 0)
 	assert.Equal(t, v, clockReference)
 	assert.NoError(t, err)
 }
@@ -404,7 +404,7 @@ func TestParsePESData(t *testing.T) {
 			tc.optionalHeaderBytesFunc(w, true, true)
 			tc.bytesFunc(w, true, true)
 			d := &PESData{}
-			err := d.parsePESData(astikit.NewBytesIterator(buf.Bytes()))
+			err := d.parsePESData(buf.Bytes())
 			assert.NoError(t, err)
 			assert.Equal(t, embedPESFixture(tc.pesData), d)
 		})
@@ -510,7 +510,7 @@ func BenchmarkParsePESData(b *testing.B) {
 		b.Run(tc.name, func(b *testing.B) {
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {
-				d.parsePESData(astikit.NewBytesIterator(bss[ti]))
+				d.parsePESData(bss[ti])
 				*d = PESData{}
 			}
 		})

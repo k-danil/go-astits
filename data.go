@@ -84,9 +84,6 @@ func parseData(pl *PacketList, prs PacketsParser, pm *programMap, psiPrev *pidMa
 		c += copy(dp.bs[c:], p.Payload)
 	}
 
-	// Create reader
-	i := astikit.NewBytesIterator(dp.bs)
-
 	fp := pl.Head()
 	pid := fp.Header.PID
 	af := fp.AdaptationField
@@ -110,7 +107,7 @@ func parseData(pl *PacketList, prs PacketsParser, pm *programMap, psiPrev *pidMa
 
 		// Parse PSI data
 		var psiData *PSIData
-		if psiData, err = parsePSIData(i); err != nil {
+		if psiData, err = parsePSIData(astikit.NewBytesIterator(dp.bs)); err != nil {
 			err = fmt.Errorf("astits: parsing PSI data failed: %w", err)
 			return
 		}
@@ -134,7 +131,7 @@ func parseData(pl *PacketList, prs PacketsParser, pm *programMap, psiPrev *pidMa
 		}
 
 		// Parse PES data
-		if err = d.pes.parsePESData(i); err != nil {
+		if err = d.pes.parsePESData(dp.bs); err != nil {
 			err = fmt.Errorf("astits: parsing PES data failed: %w", err)
 			return
 		}
