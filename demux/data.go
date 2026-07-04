@@ -83,8 +83,7 @@ func parseData(pl *ts.PacketList, prs PacketsParser, pm *pidmap.Map[uint16], psi
 		poolOfPayload.put(dp)
 	case isPSIPayload(pid, pm):
 		// PSI repeat dedup: an identical section carries no new information — neither
-		// parse nor emit. A suppressed dp is safe to return to the pool (unlike a parsed
-		// one: descriptors keep views into dp.bs, hence no put after parsing).
+		// parse nor emit.
 		if psiPrev != nil {
 			if prev := psiPrev.Get(pid); prev != nil && bytes.Equal(*prev, dp.bs) {
 				poolOfPayload.put(dp)
@@ -92,9 +91,11 @@ func parseData(pl *ts.PacketList, prs PacketsParser, pm *pidmap.Map[uint16], psi
 			}
 		}
 
-		// Parse PSI data
+		// Parse PSI data; parsed tables own their payloads (guarded by
+		// TestParseOwnsInput), so dp goes back to the pool either way
 		var psiData *psi.Data
-		if psiData, err = psi.Parse(dp.bs); err != nil {
+		psiData, err = psi.Parse(dp.bs)
+		if err != nil {
 			poolOfPayload.put(dp)
 			err = fmt.Errorf("astits: parsing PSI data failed: %w", err)
 			return
@@ -104,6 +105,7 @@ func parseData(pl *ts.PacketList, prs PacketsParser, pm *pidmap.Map[uint16], psi
 			sec := psiPrev.GetOrAdd(pid)
 			*sec = append((*sec)[:0], dp.bs...)
 		}
+		poolOfPayload.put(dp)
 
 		// Append data
 		ds = psiToData(psiData, af, pid)

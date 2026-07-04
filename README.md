@@ -58,7 +58,12 @@ How:
 - **`Packet.Offset`** — a byte map of the stream, correct even with a skipper installed.
 - **PSI dedup**: byte-identical repeats of PAT/PMT/… are neither parsed nor emitted.
 - **Data ownership**: `AdaptationField`/`TransportPrivateData` inside `demux.Data` are
-  owned copies; retaining data on the consumer side is safe from pool reuse.
+  owned copies, parsed PSI tables and descriptors own their payloads (guarded by
+  dedicated ownership tests); retaining data on the consumer side is safe from pool reuse.
+- **Hardened parsers**: fuzz targets for every direct parser plus randomized byte-exact
+  roundtrip properties; corrupt input never panics and yields errors matchable with
+  `errors.Is` — `ts.ErrInvalidData` classifies any corrupt-input failure,
+  `psi.ErrCRC32Mismatch` flags checksum errors.
 - **`Demuxer.Close()`** — deterministic resource return for demuxers abandoned before EOF;
   `Rewind()` cleans up after itself.
 - **Muxer**: raw packet passthrough (`WritePacket` of `Packet.Raw()` with `UpdateHeader`),
@@ -75,15 +80,12 @@ How:
   forbidden in this mode (`ErrZeroCopyNextData`).
 - **PSI dedup changes emission semantics**: a repeated section with identical bytes is not
   delivered to the consumer. The first occurrence and any change are.
-- **The PSI path retains its payload buffer forever** (descriptors are views into it):
-  a deliberate leak of one buffer per section change.
 - `demux.Data` is large (~1 KB due to embedded structs): cheap to allocate, expensive to
   retain by the thousands.
 - Requires **Go ≥ 1.26**.
 
 ## Roadmap
 
-- Fuzz and roundtrip tests for parsers/serializers; typed errors.
 - Per-PID byte accumulator: view-compatible `NextData`, one copy less.
-- Full `demux.Data` pooling and PSI ownership (descriptor copying).
+- Full `demux.Data` pooling.
 - Packet-level primitives: in-place PCR patching, PID rewrite over `Raw()`.

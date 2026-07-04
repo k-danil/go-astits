@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/k-danil/go-astits/v2/internal/bitstest"
 )
@@ -715,4 +716,31 @@ func BenchmarkParseDescriptor(b *testing.B) {
 			}
 		})
 	}
+}
+
+// Parsed descriptors must own their payloads: no field may keep a view into
+// the input buffer, it goes back to a pool right after parsing.
+func TestParseOwnsInput(t *testing.T) {
+	buf := bytes.Buffer{}
+	buf.Write([]byte{0x00, 0x00})
+	w := bitstest.NewWriter(&buf)
+	for _, tc := range descriptorTestTable {
+		tc.bytesFunc(w)
+	}
+	src := buf.Bytes()
+	l := len(src) - 2
+	src[0] = byte(l>>8) | 0xf0
+	src[1] = byte(l)
+
+	pristine := append([]byte(nil), src...)
+	reference, _, err := Parse(pristine)
+	require.NoError(t, err)
+
+	parsed, _, err := Parse(src)
+	require.NoError(t, err)
+	for i := range src {
+		src[i] = 0xa5
+	}
+
+	assert.Equal(t, reference, parsed)
 }
