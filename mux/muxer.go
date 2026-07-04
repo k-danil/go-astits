@@ -46,16 +46,23 @@ type Muxer struct {
 	pmtBytes bytes.Buffer
 
 	pkt     []byte
-	pes     []byte
 	stuffAF ts.PacketAdaptationField
 	pktArr  [ts.PacketSize]byte
-	pesArr  [ts.PacketSize]byte
 
 	patData []byte
 	pmtData []byte
 
 	esContexts              pidmap.Map[esContext]
 	tablesRetransmitCounter int
+
+	// Inline storage, each paired with a field above to keep a fresh muxer's
+	// tables and small maps off the heap.
+	pmKeysArr [4]uint16    // pm keys
+	pmValsArr [4]uint16    // pm vals
+	esKeysArr [8]uint16    // esContexts keys
+	esValsArr [8]esContext // esContexts vals
+	patArr    [ts.PacketSize]byte
+	pmtArr    [ts.PacketSize]byte
 }
 
 type esContext struct {
@@ -93,7 +100,10 @@ func New(ctx context.Context, w io.Writer, opts ...func(*Muxer)) (m *Muxer) {
 	}
 
 	m.pkt = m.pktArr[:]
-	m.pes = m.pesArr[:]
+	m.pm = pidmap.Map[uint16]{Keys: m.pmKeysArr[:0], Vals: m.pmValsArr[:0]}
+	m.esContexts = pidmap.Map[esContext]{Keys: m.esKeysArr[:0], Vals: m.esValsArr[:0]}
+	m.patData = m.patArr[:0]
+	m.pmtData = m.pmtArr[:0]
 
 	// TODO multiple programs support
 	m.pm.Set(pmtStartPID, programNumberStart)
@@ -234,18 +244,14 @@ func (m *Muxer) WriteData(d *Data) (bytesWritten int, err error) {
 				d.PES.Header.StreamID = ctx.es.StreamType.ToPESStreamID()
 			}
 
-			var ntot, npayload int
-			if ntot, npayload, err = d.PES.Header.Put(
-				m.pes[:bytesAvailable],
+			// Size the chunk analytically so the AF stuffing is finalized
+			// before serialization; the PES then lands in the packet tail
+			// (payloadOffset = packetSize - ntot) with no scratch copy.
+			ntot, npayload := d.PES.Header.CalcDataLength(
 				d.PES.Data[payloadBytesWritten:],
 				payloadStart,
-			); err != nil {
-				return
-			}
-
-			payloadBytesWritten += npayload
-
-			pkt.Payload = m.pes[:ntot]
+				bytesAvailable,
+			)
 
 			bytesAvailable -= ntot
 			// if we still have some space in packet, we should stuff it with adaptation field stuffing
@@ -259,9 +265,26 @@ func (m *Muxer) WriteData(d *Data) (bytesWritten int, err error) {
 				}
 			}
 
-			if _, err = pkt.Put(m.pkt); err != nil {
+			payloadOffset := m.packetSize - ntot
+			if _, _, err = d.PES.Header.Put(
+				m.pkt[payloadOffset:m.packetSize],
+				d.PES.Data[payloadBytesWritten:],
+				payloadStart,
+			); err != nil {
 				return
 			}
+			payloadBytesWritten += npayload
+
+			// Assemble header + AF ahead of the payload directly in m.pkt;
+			// bypassing pkt.Put keeps the already-placed payload from being
+			// copied a second time.
+			pkt.Header.Put(m.pkt)
+			if pkt.Header.HasAdaptationField {
+				if _, err = pkt.AdaptationField.Put(m.pkt[ts.HeaderSize:]); err != nil {
+					return
+				}
+			}
+
 			if n, err = m.w.Write(m.pkt); err != nil {
 				return
 			}

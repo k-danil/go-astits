@@ -59,10 +59,12 @@ type Demuxer struct {
 
 	// Inline storage, each paired with a field above to keep the common small
 	// case off the heap.
-	tblArr    [8]tableEvent // tblQueue
-	unitsArr  [2]unit       // acc.add result
-	pmKeysArr [4]uint16     // programMap keys
-	pmValsArr [4]uint16     // programMap vals
+	tblArr     [8]tableEvent // tblQueue
+	unitsArr   [2]unit       // acc.add result
+	pmKeysArr  [4]uint16     // programMap keys
+	pmValsArr  [4]uint16     // programMap vals
+	psiKeysArr [8]uint16     // psiPrev keys
+	psiValsArr [8]psiCache   // psiPrev vals
 }
 
 // New creates a new transport stream demuxer based on a reader
@@ -73,6 +75,7 @@ func New(ctx context.Context, r io.Reader, opts ...func(*Demuxer)) (d *Demuxer) 
 		r:                r,
 	}
 	d.programMap = pidmap.Map[uint16]{Keys: d.pmKeysArr[:0], Vals: d.pmValsArr[:0]}
+	d.psiPrev = pidmap.Map[psiCache]{Keys: d.psiKeysArr[:0], Vals: d.psiValsArr[:0]}
 	d.tblQueue = d.tblArr[:0]
 
 	for _, opt := range opts {
@@ -333,7 +336,7 @@ func (dmx *Demuxer) Rewind() (n int64, err error) {
 	dmx.Close()
 	dmx.packetBuffer = nil
 	dmx.tblQueue = dmx.tblArr[:0]
-	dmx.psiPrev = pidmap.Map[psiCache]{}
+	dmx.psiPrev = pidmap.Map[psiCache]{Keys: dmx.psiKeysArr[:0], Vals: dmx.psiValsArr[:0]}
 	dmx.acc.init(&dmx.programMap, dmx.optDVBTables)
 	if n, err = ts.Rewind(dmx.r); err != nil {
 		err = fmt.Errorf("astits: rewinding reader failed: %w", err)

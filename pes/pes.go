@@ -380,22 +380,25 @@ func parseDSMTrickMode(i byte) (m *DSMTrickMode) {
 	return
 }
 
-// will count how many total bytes and payload bytes will be written when writePESData is called with the same arguments
-// should be used by the caller of writePESData to determine AF stuffing size needed to be applied
-// since the length of video PES packets are often zero, we can't just stuff it with 0xff-s at the end
-func (h *Header) calcPESDataLength(payloadLeft []byte, isPayloadStart bool, bytesAvailable int) (totalBytes, payloadBytes int) {
-	totalBytes += HeaderSize
+// CalcDataLength returns how many total and payload bytes Put would write for
+// the same arguments. The counts must stay identical to Put so a muxer can
+// finalize the AF stuffing before serializing the PES. Only the first packet
+// of a unit carries the PES header.
+func (h *Header) CalcDataLength(payloadLeft []byte, isPayloadStart bool, bytesAvailable int) (totalBytes, payloadBytes int) {
+	headerBytes := 0
 	if isPayloadStart {
-		totalBytes += h.OptionalHeader.CalcLength()
+		headerBytes = HeaderSize
+		if hasPESOptionalHeader(h.StreamID) {
+			headerBytes += h.OptionalHeader.CalcLength()
+		}
 	}
-	bytesAvailable -= totalBytes
 
-	if len(payloadLeft) < bytesAvailable {
+	payloadBytes = bytesAvailable - headerBytes
+	if len(payloadLeft) < payloadBytes {
 		payloadBytes = len(payloadLeft)
-	} else {
-		payloadBytes = bytesAvailable
 	}
 
+	totalBytes = headerBytes + payloadBytes
 	return
 }
 
