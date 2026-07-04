@@ -14,17 +14,17 @@ const (
 	AudioTypeVisualImpairedCommentary = 0x3
 )
 
-// ISO639LanguageAndAudioType represents an ISO639 language descriptor
-// https://github.com/gfto/bitstream/blob/master/mpeg/psi/desc_0a.h
-// FIXME (barbashov) according to Chapter 2.6.18 ISO/IEC 13818-1:2015 there could be not one, but multiple such descriptors
+// ISO639LanguageAndAudioType represents an ISO639 language descriptor:
+// a list of language+audio-type entries (Chapter 2.6.18 ISO/IEC 13818-1:2015)
 type ISO639LanguageAndAudioType struct {
-	Language [3]byte
-	Header   Header
-	Type     uint8
+	Header Header
+	Items  []ISO639Item
 }
 
-// In some actual cases, the length is 3 and the language is described in only 2 bytes
-//
+type ISO639Item struct {
+	Language [3]byte
+	Type     uint8
+}
 
 func newDescriptorISO639LanguageAndAudioType(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
 	// Get next bytes
@@ -37,19 +37,36 @@ func newDescriptorISO639LanguageAndAudioType(i *bytesiter.Iterator, h Header, of
 	// Create descriptor
 	d := &ISO639LanguageAndAudioType{
 		Header: h,
-		Type:   bs[len(bs)-1],
+		Items:  make([]ISO639Item, 0, len(bs)/4),
 	}
-	copy(d.Language[:], bs)
 	dd = d
+
+	for len(bs) >= 4 {
+		var it ISO639Item
+		copy(it.Language[:], bs[:3])
+		it.Type = bs[3]
+		d.Items = append(d.Items, it)
+		bs = bs[4:]
+	}
+	// Degenerate entries happen in the wild: length 3 with a 2-byte language
+	if len(bs) > 0 {
+		var it ISO639Item
+		copy(it.Language[:], bs[:len(bs)-1])
+		it.Type = bs[len(bs)-1]
+		d.Items = append(d.Items, it)
+	}
 	return
 }
 
-func (*ISO639LanguageAndAudioType) CalcLength() int {
-	return 3 + 1 // language code + type
+func (d *ISO639LanguageAndAudioType) CalcLength() int {
+	return 4 * len(d.Items) // language code + type each
 }
 
 func (d *ISO639LanguageAndAudioType) Append(dst []byte) []byte {
 	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
-	dst = append(dst, d.Language[:]...)
-	return append(dst, d.Type)
+	for _, it := range d.Items {
+		dst = append(dst, it.Language[:]...)
+		dst = append(dst, it.Type)
+	}
+	return dst
 }

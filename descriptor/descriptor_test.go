@@ -76,17 +76,21 @@ var descriptorTestTable = []descriptorTest{
 		"ISO639LanguageAndAudioType",
 		func(w *bitstest.Writer) {
 			_ = w.Write(uint8(TagISO639LanguageAndAudioType)) // Tag
-			_ = w.Write(uint8(4))                             // Length
-			_ = w.Write([]byte("eng"))                        // Language
-			_ = w.Write(uint8(AudioTypeCleanEffects))         // Audio type
+			_ = w.Write(uint8(8))                             // Length
+			_ = w.Write([]byte("eng"))                        // Language #1
+			_ = w.Write(uint8(AudioTypeCleanEffects))         // Audio type #1
+			_ = w.Write([]byte("rus"))                        // Language #2
+			_ = w.Write(uint8(AudioTypeHearingImpaired))      // Audio type #2
 		},
 		&ISO639LanguageAndAudioType{
 			Header: Header{
 				Tag:    TagISO639LanguageAndAudioType,
-				Length: 4,
+				Length: 8,
 			},
-			Language: [3]byte{0x65, 0x6e, 0x67}, // eng
-			Type:     AudioTypeCleanEffects,
+			Items: []ISO639Item{
+				{Language: [3]byte{'e', 'n', 'g'}, Type: AudioTypeCleanEffects},
+				{Language: [3]byte{'r', 'u', 's'}, Type: AudioTypeHearingImpaired},
+			},
 		}},
 	{
 		"MaximumBitrate",

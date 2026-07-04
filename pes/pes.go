@@ -2,6 +2,7 @@ package pes
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 
 	"github.com/k-danil/go-astits/v2/internal/util"
@@ -310,14 +311,18 @@ func (h *OptionalHeaderExtension) parseBytes(bs []byte, o int) (err error) {
 		o += 16
 	}
 
-	// Pack field length
+	// Pack header: PackField is its length, the body itself is not modeled —
+	// skip it so the following fields parse from the right offset
 	if h.HasPackHeaderField {
 		if o >= len(bs) {
 			return ts.ErrShortPacket
 		}
 		h.PackField = bs[o]
 		o++
-		// TODO it's only a length of pack_header, should read it all. now it's wrong
+		o += int(h.PackField)
+		if o > len(bs) {
+			return ts.ErrShortPacket
+		}
 	}
 
 	// Program packet sequence counter
@@ -416,9 +421,20 @@ func (h *Header) Put(bs []byte, payloadLeft []byte, isPayloadStart bool) (totalB
 	return
 }
 
+// ErrUnsupportedHeaderWrite rejects serialization of optional header features
+// whose write path is not implemented: silently dropping them would produce a
+// header whose flags disagree with its content.
+var ErrUnsupportedHeaderWrite = errors.New("astits: writing PES headers with CRC or pack_header is not implemented")
+
 func (h *Header) putBytes(bs []byte, payloadSize int) (n int, err error) {
 	if len(bs) < HeaderSize {
 		return 0, ts.ErrShortPacket
+	}
+	if hasPESOptionalHeader(h.StreamID) && h.OptionalHeader != nil {
+		if h.OptionalHeader.HasCRC ||
+			(h.OptionalHeader.Extension != nil && h.OptionalHeader.Extension.HasPackHeaderField) {
+			return 0, ErrUnsupportedHeaderWrite
+		}
 	}
 	binary.BigEndian.PutUint32(bs, uint32(h.StreamID)|0x1<<8)
 	pesPacketLength := 0

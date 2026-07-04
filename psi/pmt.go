@@ -137,7 +137,8 @@ func (d *PMT) CalcSectionLength() int {
 }
 
 func (d *PMT) appendSection(dst []byte) []byte {
-	// TODO split into sections
+	// A PMT must fit a single section by spec (section_number shall be 0x00);
+	// oversize data is rejected by the section length guard.
 
 	dst = append(dst, 0xe0|byte(d.PCRPID>>8)&0x1f, byte(d.PCRPID))
 	dst = descriptor.AppendWithLength(dst, d.ProgramDescriptors)

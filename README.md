@@ -67,7 +67,8 @@ How:
 - **`Demuxer.Close()`** — deterministic resource return for demuxers abandoned before EOF;
   `Rewind()` cleans up after itself.
 - **Muxer**: raw packet passthrough (`WritePacket` of `Packet.Raw()` with `UpdateHeader`),
-  `SetCC`, table retransmission from cache.
+  `SetCC`, table retransmission from cache; PAT spans sections and packets when needed,
+  oversize sections are rejected (`psi.ErrSectionOverflow`) instead of silently corrupted.
 
 ## Problems and deliberate trade-offs
 

@@ -35,6 +35,13 @@ var ErrCRC32Mismatch = errclass.New("astits: CRC32 mismatch", ts.ErrInvalidData)
 // ErrTableNotImplemented reports a table type whose serialization is not implemented.
 var ErrTableNotImplemented = errors.New("astits: table serialization is not implemented")
 
+// ErrSectionOverflow reports table data that does not fit the 1021-byte section
+// limit; only PAT may span multiple sections, a PMT must fit one by spec.
+var ErrSectionOverflow = errors.New("astits: section data does not fit a single section")
+
+// maxSectionLength bounds the section_length field (12 bits, capped by spec).
+const maxSectionLength = 1021
+
 type TableID uint8
 
 const (
@@ -499,6 +506,9 @@ func (s *Section) appendSection(dst []byte) ([]byte, error) {
 	}
 
 	sectionLength := s.calcPSISectionLength()
+	if sectionLength > maxSectionLength {
+		return dst, fmt.Errorf("astits: section length %d exceeds %d: %w", sectionLength, maxSectionLength, ErrSectionOverflow)
+	}
 	crcStart := len(dst)
 
 	dst = append(dst, uint8(s.Header.TableID))

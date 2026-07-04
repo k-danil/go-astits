@@ -130,8 +130,11 @@ var roundtripGenerators = map[string]func(r *rand.Rand) Descriptor{
 		return d
 	},
 	"ISO639": func(r *rand.Rand) Descriptor {
-		return &ISO639LanguageAndAudioType{Header: Header{Tag: TagISO639LanguageAndAudioType},
-			Language: randLang(r), Type: uint8(r.UintN(256))}
+		d := &ISO639LanguageAndAudioType{Header: Header{Tag: TagISO639LanguageAndAudioType}}
+		for i := uint(0); i < 1+r.UintN(4); i++ {
+			d.Items = append(d.Items, ISO639Item{Language: randLang(r), Type: uint8(r.UintN(256))})
+		}
+		return d
 	},
 	"LocalTimeOffset": func(r *rand.Rand) Descriptor {
 		d := &LocalTimeOffset{Header: Header{Tag: TagLocalTimeOffset}}

@@ -3,10 +3,14 @@ package mux
 import (
 	"bytes"
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
+	"github.com/k-danil/go-astits/v2/demux"
+	"github.com/k-danil/go-astits/v2/descriptor"
 	"github.com/k-danil/go-astits/v2/internal/bitstest"
 	"github.com/k-danil/go-astits/v2/pes"
 	"github.com/k-danil/go-astits/v2/psi"
@@ -336,4 +340,63 @@ func TestMuxer_WritePayload(t *testing.T) {
 	bs := buf.Bytes()
 	assert.Equal(t, patExpectedBytes(0, 0), bs[:ts.PacketSize])
 	assert.Equal(t, pmtExpectedBytesVideoAndAudio(0, 0), bs[ts.PacketSize:ts.PacketSize*2])
+}
+
+// A PAT with more programs than fit one section must span sections and
+// packets, and survive a full mux->demux cycle.
+func TestWriteTablesMultiSectionPAT(t *testing.T) {
+	buf := &bytes.Buffer{}
+	m := New(context.Background(), buf)
+	require.NoError(t, m.AddElementaryStream(psi.ElementaryStream{
+		ElementaryPID: 0x123,
+		StreamType:    psi.StreamTypeH264Video,
+	}))
+	m.SetPCRPID(0x123)
+
+	const extraPrograms = 300
+	for i := 0; i < extraPrograms; i++ {
+		m.pm.Set(uint16(0x200+i), uint16(i+1))
+	}
+	m.pmUpdated = true
+
+	_, err := m.WriteTables()
+	require.NoError(t, err)
+
+	dmx := demux.New(context.Background(), bytes.NewReader(buf.Bytes()), demux.WithPacketSize(ts.PacketSize))
+	got := map[uint16]uint16{}
+	for {
+		d, derr := dmx.NextData()
+		if errors.Is(derr, ts.ErrNoMorePackets) {
+			break
+		}
+		require.NoError(t, derr)
+		if d.PAT != nil {
+			for _, p := range d.PAT.Programs {
+				got[p.ProgramMapID] = p.ProgramNumber
+			}
+		}
+		d.Close()
+	}
+	assert.Len(t, got, extraPrograms+1)
+	assert.Equal(t, uint16(42+1), got[uint16(0x200+42)])
+}
+
+func TestWriteTablesSectionOverflow(t *testing.T) {
+	m := New(context.Background(), &bytes.Buffer{})
+	for i := 0; i < 5; i++ {
+		require.NoError(t, m.AddElementaryStream(psi.ElementaryStream{
+			ElementaryPID: uint16(0x100 + i),
+			StreamType:    psi.StreamTypeH264Video,
+			ElementaryStreamDescriptors: []descriptor.Descriptor{
+				&descriptor.UserDefined{
+					Header: descriptor.Header{Tag: descriptor.Tag(0x80)},
+					Data:   bytes.Repeat([]byte{0xab}, 220),
+				},
+			},
+		}))
+	}
+	m.SetPCRPID(0x100)
+
+	_, err := m.WriteTables()
+	assert.ErrorIs(t, err, psi.ErrSectionOverflow)
 }

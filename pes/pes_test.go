@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/k-danil/go-astits/v2/internal/bitstest"
 	"github.com/k-danil/go-astits/v2/ts"
@@ -387,6 +388,17 @@ func TestParsePESData(t *testing.T) {
 	}
 }
 
+// writableHeader clears the flags whose write path is guarded by
+// ErrUnsupportedHeaderWrite, keeping the rest of the fixture intact.
+func writableHeader(h Header) Header {
+	if h.OptionalHeader != nil {
+		oh := *h.OptionalHeader
+		oh.HasCRC = false
+		h.OptionalHeader = &oh
+	}
+	return h
+}
+
 func TestWritePESData(t *testing.T) {
 	for _, tc := range pesTestCases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -403,8 +415,9 @@ func TestWritePESData(t *testing.T) {
 			totalBytes := 0
 			payloadPos := 0
 
+			wh := writableHeader(tc.pesData.Header)
 			for payloadPos+1 < len(tc.pesData.Data) {
-				n, payloadN, err := tc.pesData.Header.Put(
+				n, payloadN, err := wh.Put(
 					scratch,
 					tc.pesData.Data[payloadPos:],
 					start,
@@ -433,7 +446,8 @@ func TestWritePESHeader(t *testing.T) {
 			tc.optionalHeaderBytesFunc(wExpected, false, false)
 
 			bs := make([]byte, ts.PacketSize)
-			n, err := tc.pesData.Header.putBytes(bs, len(tc.pesData.Data))
+			wh := writableHeader(tc.pesData.Header)
+			n, err := wh.putBytes(bs, len(tc.pesData.Data))
 			assert.NoError(t, err)
 			assert.Equal(t, bufExpected.Len(), n)
 			assert.Equal(t, bufExpected.Bytes(), bs[:n])
@@ -445,10 +459,11 @@ func BenchmarkWritePESHeader(b *testing.B) {
 	bs := make([]byte, ts.PacketSize)
 
 	for _, tc := range pesTestCases {
+		wh := writableHeader(tc.pesData.Header)
 		b.Run(tc.name, func(b *testing.B) {
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {
-				tc.pesData.Header.putBytes(bs, len(tc.pesData.Data))
+				wh.putBytes(bs, len(tc.pesData.Data))
 			}
 		})
 	}
@@ -491,4 +506,56 @@ func BenchmarkParsePESData(b *testing.B) {
 			}
 		})
 	}
+}
+
+// The pack_header body is length-prefixed and unmodeled: the parser must skip
+// it so the fields after it stay aligned.
+func TestParseOptionalHeaderSkipsPackHeader(t *testing.T) {
+	buf := bytes.Buffer{}
+	w := bitstest.NewWriter(&buf)
+	w.Write("10")               // Marker bits
+	w.Write("00")               // Scrambling control
+	w.Write("0")                // Priority
+	w.Write("0")                // Data alignment indicator
+	w.Write("0")                // Copyright
+	w.Write("0")                // Original or copy
+	w.Write("00")               // PTS/DTS indicator
+	w.Write("0")                // ESCR flag
+	w.Write("0")                // ES rate flag
+	w.Write("0")                // DSM trick mode flag
+	w.Write("0")                // Additional copy flag
+	w.Write("0")                // CRC flag
+	w.Write("1")                // Extension flag
+	w.Write(uint8(9))           // Header length
+	w.Write("0")                // Private data flag
+	w.Write("1")                // Pack header field flag
+	w.Write("0")                // Program packet sequence counter flag
+	w.Write("1")                // PSTD buffer flag
+	w.Write("111")              // Dummy
+	w.Write("0")                // Extension 2 flag
+	w.Write(uint8(4))           // Pack field: pack_header length
+	w.Write(uint32(0xdeadbeef)) // pack_header body to be skipped
+	w.Write("0111010101010101") // PSTD buffer
+
+	var h OptionalHeader
+	_, err := h.parseBytes(buf.Bytes(), 0)
+	require.NoError(t, err)
+	assert.True(t, h.HasExtension)
+	assert.Equal(t, uint8(4), h.Extension.PackField)
+	assert.True(t, h.Extension.HasPSTDBuffer)
+	assert.Equal(t, uint8(1), h.Extension.PSTDBufferScale)
+	assert.Equal(t, uint16(0x1555), h.Extension.PSTDBufferSize)
+}
+
+func TestPutUnsupportedHeader(t *testing.T) {
+	h := Header{
+		StreamID:       0xc0,
+		OptionalHeader: &OptionalHeader{MarkerBits: 2, HasCRC: true},
+	}
+	_, _, err := h.Put(make([]byte, 256), []byte("data"), true)
+	assert.ErrorIs(t, err, ErrUnsupportedHeaderWrite)
+
+	h.OptionalHeader = &OptionalHeader{MarkerBits: 2, Extension: &OptionalHeaderExtension{HasPackHeaderField: true}, HasExtension: true}
+	_, _, err = h.Put(make([]byte, 256), []byte("data"), true)
+	assert.ErrorIs(t, err, ErrUnsupportedHeaderWrite)
 }

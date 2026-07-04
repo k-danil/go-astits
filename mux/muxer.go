@@ -341,31 +341,43 @@ func (m *Muxer) WriteTables() (bytesWritten int, err error) {
 	return
 }
 
+// maxPATProgramsPerSection is how many 4-byte program entries fit a section
+// next to the syntax header and CRC32.
+const maxPATProgramsPerSection = (1021 - 5 - 4) / 4
+
 func (m *Muxer) generatePAT() (err error) {
 	if m.pmUpdated {
 		d := toPATData(&m.pm)
 
-		psiData := psi.Data{
-			Sections: []psi.Section{
-				{
-					Header: psi.SectionHeader{
-						SectionLength:          uint16(d.CalcSectionLength()),
-						SectionSyntaxIndicator: true,
-						TableID:                psi.TableID(d.TransportStreamID),
-					},
-					Syntax: &psi.SectionSyntax{
-						Data: d,
-						Header: psi.SectionSyntaxHeader{
-							CurrentNextIndicator: true,
-							// TODO support for PAT tables longer than 1 TS packet
-							//LastSectionNumber:    0,
-							//SectionNumber:        0,
-							TableIDExtension: d.TransportStreamID,
-							VersionNumber:    uint8(m.patVersion.inc()),
-						},
+		numSections := (len(d.Programs) + maxPATProgramsPerSection - 1) / maxPATProgramsPerSection
+		if numSections == 0 {
+			numSections = 1
+		}
+		version := uint8(m.patVersion.inc())
+
+		psiData := psi.Data{Sections: make([]psi.Section, 0, numSections)}
+		for si := 0; si < numSections; si++ {
+			part := &psi.PAT{TransportStreamID: d.TransportStreamID}
+			end := min((si+1)*maxPATProgramsPerSection, len(d.Programs))
+			part.Programs = d.Programs[si*maxPATProgramsPerSection : end]
+
+			psiData.Sections = append(psiData.Sections, psi.Section{
+				Header: psi.SectionHeader{
+					SectionLength:          uint16(part.CalcSectionLength()),
+					SectionSyntaxIndicator: true,
+					TableID:                psi.TableID(d.TransportStreamID),
+				},
+				Syntax: &psi.SectionSyntax{
+					Data: part,
+					Header: psi.SectionSyntaxHeader{
+						CurrentNextIndicator: true,
+						SectionNumber:        uint8(si),
+						LastSectionNumber:    uint8(numSections - 1),
+						TableIDExtension:     d.TransportStreamID,
+						VersionNumber:        version,
 					},
 				},
-			},
+			})
 		}
 
 		if m.patData, err = psiData.Append(m.patData[:0]); err != nil {
@@ -376,20 +388,25 @@ func (m *Muxer) generatePAT() (err error) {
 	}
 
 	m.patBytes.Reset()
-	pkt := ts.Packet{
-		Header: ts.PacketHeader{
-			HasPayload:                true,
-			PayloadUnitStartIndicator: true,
-			PID:                       ts.PIDPAT,
-			ContinuityCounter:         uint8(m.patCC.inc()),
-		},
-		Payload: m.patData,
+
+	l := len(m.patData)
+	for i := 0; i <= l/packetMaxPayload; i++ {
+		start := i * packetMaxPayload
+		stop := min(start+packetMaxPayload, l)
+		pkt := ts.Packet{
+			Header: ts.PacketHeader{
+				HasPayload:                true,
+				PayloadUnitStartIndicator: i == 0,
+				PID:                       ts.PIDPAT,
+				ContinuityCounter:         uint8(m.patCC.inc()),
+			},
+			Payload: m.patData[start:stop],
+		}
+		if _, err = pkt.Put(m.pkt); err != nil {
+			return
+		}
+		m.patBytes.Write(m.pkt)
 	}
-	if _, err = pkt.Put(m.pkt); err != nil {
-		// FIXME save old PAT and rollback to it here maybe?
-		return
-	}
-	m.patBytes.Write(m.pkt)
 
 	return
 }
@@ -455,7 +472,6 @@ func (m *Muxer) generatePMT() (err error) {
 			Payload: m.pmtData[start:stop],
 		}
 		if _, err = pkt.Put(m.pkt); err != nil {
-			// FIXME save old PMT and rollback to it here maybe?
 			return
 		}
 		m.pmtBytes.Write(m.pkt)
