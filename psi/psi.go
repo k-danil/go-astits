@@ -252,6 +252,9 @@ func (h *SectionHeader) parsePSISectionHeader(i *bytesiter.Iterator) (offsets ps
 	if h.TableID.hasCRC32() {
 		offsets.sectionsEnd -= 4
 	}
+	if offsets.sectionsEnd < offsets.sectionsStart {
+		err = fmt.Errorf("astits: section length %d is too short", h.SectionLength)
+	}
 	return
 }
 

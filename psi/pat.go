@@ -26,10 +26,16 @@ type PATProgram struct {
 
 // parsePATSection parses a PAT section
 func parsePATSection(i *bytesiter.Iterator, offsetSectionsEnd int, tableIDExtension uint16) (d *PAT, err error) {
+	// The syntax header may have overrun a lying section length
+	n := (offsetSectionsEnd - i.Offset()) / patSectionEntryBytesSize
+	if n < 0 {
+		return nil, fmt.Errorf("astits: PAT section end %d is before its start", offsetSectionsEnd)
+	}
+
 	// Create data
 	d = &PAT{
 		TransportStreamID: tableIDExtension,
-		Programs:          make([]PATProgram, (offsetSectionsEnd-i.Offset())/4),
+		Programs:          make([]PATProgram, n),
 	}
 
 	// Loop until end of section data is reached

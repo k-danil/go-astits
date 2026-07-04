@@ -20,10 +20,10 @@ func TestPSIDedup(t *testing.T) {
 	cc := uint8(0)
 	writePSI := func() {
 		b1, _ := packet(ts.PacketHeader{ContinuityCounter: cc, PayloadUnitStartIndicator: true, PID: ts.PIDPAT}, &ts.PacketAdaptationField{}, b[:147], true)
-		w.Write(b1)
+		_ = w.Write(b1)
 		cc++
 		b2, _ := packet(ts.PacketHeader{ContinuityCounter: cc, PID: ts.PIDPAT}, &ts.PacketAdaptationField{}, b[147:], true)
-		w.Write(b2)
+		_ = w.Write(b2)
 		cc++
 	}
 	singleCopyLen := 0

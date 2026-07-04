@@ -14,13 +14,13 @@ var ptsClockReference = NewClockReference(5726623061, 0)
 func ptsBytes(flag string) []byte {
 	buf := &bytes.Buffer{}
 	w := bitstest.NewWriter(buf)
-	w.Write(flag)              // Flag
-	w.Write("101")             // 32...30
-	w.Write("1")               // Dummy
-	w.Write("010101010101010") // 29...15
-	w.Write("1")               // Dummy
-	w.Write("101010101010101") // 14...0
-	w.Write("1")               // Dummy
+	_ = w.Write(flag)              // Flag
+	_ = w.Write("101")             // 32...30
+	_ = w.Write("1")               // Dummy
+	_ = w.Write("010101010101010") // 29...15
+	_ = w.Write("1")               // Dummy
+	_ = w.Write("101010101010101") // 14...0
+	_ = w.Write("1")               // Dummy
 	return buf.Bytes()
 }
 
@@ -29,28 +29,28 @@ var dtsClockReference = NewClockReference(5726623060, 0)
 func dtsBytes(flag string) []byte {
 	buf := &bytes.Buffer{}
 	w := bitstest.NewWriter(buf)
-	w.Write(flag)              // Flag
-	w.Write("101")             // 32...30
-	w.Write("1")               // Dummy
-	w.Write("010101010101010") // 29...15
-	w.Write("1")               // Dummy
-	w.Write("101010101010100") // 14...0
-	w.Write("1")               // Dummy
+	_ = w.Write(flag)              // Flag
+	_ = w.Write("101")             // 32...30
+	_ = w.Write("1")               // Dummy
+	_ = w.Write("010101010101010") // 29...15
+	_ = w.Write("1")               // Dummy
+	_ = w.Write("101010101010100") // 14...0
+	_ = w.Write("1")               // Dummy
 	return buf.Bytes()
 }
 
 func escrBytes() []byte {
 	buf := &bytes.Buffer{}
 	w := bitstest.NewWriter(buf)
-	w.Write("11")              // Dummy
-	w.Write("011")             // 32...30
-	w.Write("1")               // Dummy
-	w.Write("000010111110000") // 29...15
-	w.Write("1")               // Dummy
-	w.Write("000010111001111") // 14...0
-	w.Write("1")               // Dummy
-	w.Write("000111010")       // Ext
-	w.Write("1")               // Dummy
+	_ = w.Write("11")              // Dummy
+	_ = w.Write("011")             // 32...30
+	_ = w.Write("1")               // Dummy
+	_ = w.Write("000010111110000") // 29...15
+	_ = w.Write("1")               // Dummy
+	_ = w.Write("000010111001111") // 14...0
+	_ = w.Write("1")               // Dummy
+	_ = w.Write("000111010")       // Ext
+	_ = w.Write("1")               // Dummy
 	return buf.Bytes()
 }
 

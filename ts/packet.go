@@ -100,8 +100,9 @@ func (af *PacketAdaptationField) Reset() {
 	af.AdaptationExtensionField = nil
 	af.TransportPrivateData = nil
 	// Clear only the used prefix: privBuf stays deterministic (zeros beyond the
-	// current content), comparisons/copies don't depend on previous packets
-	clear(af.privBuf[:af.TransportPrivateDataLength])
+	// current content), comparisons/copies don't depend on previous packets.
+	// The length is clamped: the field is writable by the user.
+	clear(af.privBuf[:min(int(af.TransportPrivateDataLength), len(af.privBuf))])
 	af.TransportPrivateDataLength = 0
 	af.Length = 0
 	af.StuffingLength = 0
@@ -312,8 +313,14 @@ func (af *PacketAdaptationField) Parse(bs []byte) (n int, err error) {
 			if o >= len(bs) {
 				return o, ErrShortPacket
 			}
-			af.TransportPrivateDataLength = bs[o]
+			// Validate against privBuf before storing: a poisoned length would
+			// crash the Reset of a pooled packet later.
+			l := bs[o]
 			o++
+			if int(l) > len(af.privBuf) {
+				return o, ErrShortPacket
+			}
+			af.TransportPrivateDataLength = l
 			if af.TransportPrivateDataLength > 0 {
 				end := o + int(af.TransportPrivateDataLength)
 				if end > len(bs) {
@@ -337,9 +344,15 @@ func (af *PacketAdaptationField) Parse(bs []byte) (n int, err error) {
 		}
 	}
 
-	af.StuffingLength = af.Length - uint8(o-bodyStart)
+	// The whole field is 1+Length bytes; the declared length must cover the
+	// parsed body, the remainder is stuffing.
+	end := bodyStart + int(af.Length)
+	if end > len(bs) || end < o {
+		return o, ErrShortPacket
+	}
+	af.StuffingLength = uint8(end - o)
 
-	return o, nil
+	return end, nil
 }
 
 // Parse parses an adaptation extension field starting at its length byte.

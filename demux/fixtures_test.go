@@ -13,14 +13,14 @@ const syncByte byte = '\x47'
 func packet(h ts.PacketHeader, a *ts.PacketAdaptationField, i []byte, packet192bytes bool) ([]byte, *ts.Packet) {
 	buf := &bytes.Buffer{}
 	w := bitstest.NewWriter(buf)
-	w.Write(syncByte) // Sync byte
+	_ = w.Write(syncByte) // Sync byte
 	if packet192bytes {
-		w.Write([]byte("test")) // Sometimes packets are 192 bytes
+		_ = w.Write([]byte("test")) // Sometimes packets are 192 bytes
 	}
-	w.Write(packetHeaderBytes(h, "11"))                             // Header
-	w.Write(packetAdaptationFieldBytes(a))                          // Adaptation field
+	_ = w.Write(packetHeaderBytes(h, "11"))                         // Header
+	_ = w.Write(packetAdaptationFieldBytes(a))                      // Adaptation field
 	var payload = append(i, bytes.Repeat([]byte{0}, 147-len(i))...) // Payload
-	w.Write(payload)
+	_ = w.Write(payload)
 	pk := &ts.Packet{
 		Header:  packetHeader,
 		Payload: payload,
@@ -32,10 +32,10 @@ func packet(h ts.PacketHeader, a *ts.PacketAdaptationField, i []byte, packet192b
 func packetShort(h ts.PacketHeader, payload []byte) ([]byte, *ts.Packet) {
 	buf := &bytes.Buffer{}
 	w := bitstest.NewWriter(buf)
-	w.Write(syncByte)                   // Sync byte
-	w.Write(packetHeaderBytes(h, "01")) // Header
+	_ = w.Write(syncByte)                   // Sync byte
+	_ = w.Write(packetHeaderBytes(h, "01")) // Header
 	p := append(payload, bytes.Repeat([]byte{0}, ts.PacketSize-buf.Len())...)
-	w.Write(p)
+	_ = w.Write(p)
 	return buf.Bytes(), &ts.Packet{
 		Header:  h,
 		Payload: payload,
@@ -56,13 +56,13 @@ var packetHeader = ts.PacketHeader{
 func packetHeaderBytes(h ts.PacketHeader, afControl string) []byte {
 	buf := &bytes.Buffer{}
 	w := bitstest.NewWriter(buf)
-	w.Write(h.TransportErrorIndicator)                // Transport error indicator
-	w.Write(h.PayloadUnitStartIndicator)              // Payload unit start indicator
-	w.Write("1")                                      // Transport priority
-	w.Write(fmt.Sprintf("%.13b", h.PID))              // PID
-	w.Write("10")                                     // Scrambling control
-	w.Write(afControl)                                // Adaptation field control
-	w.Write(fmt.Sprintf("%.4b", h.ContinuityCounter)) // Continuity counter
+	_ = w.Write(h.TransportErrorIndicator)                // Transport error indicator
+	_ = w.Write(h.PayloadUnitStartIndicator)              // Payload unit start indicator
+	_ = w.Write("1")                                      // Transport priority
+	_ = w.Write(fmt.Sprintf("%.13b", h.PID))              // PID
+	_ = w.Write("10")                                     // Scrambling control
+	_ = w.Write(afControl)                                // Adaptation field control
+	_ = w.Write(fmt.Sprintf("%.4b", h.ContinuityCounter)) // Continuity counter
 	return buf.Bytes()
 }
 
@@ -98,31 +98,31 @@ var packetAdaptationField = &ts.PacketAdaptationField{
 func packetAdaptationFieldBytes(a *ts.PacketAdaptationField) []byte {
 	buf := &bytes.Buffer{}
 	w := bitstest.NewWriter(buf)
-	w.Write(uint8(36))                // Length
-	w.Write(a.DiscontinuityIndicator) // Discontinuity indicator
-	w.Write("1")                      // Random access indicator
-	w.Write("1")                      // Elementary stream priority indicator
-	w.Write("1")                      // PCR flag
-	w.Write("1")                      // OPCR flag
-	w.Write("1")                      // Splicing point flag
-	w.Write("1")                      // Transport data flag
-	w.Write("1")                      // Adaptation field extension flag
-	w.Write(pcrBytes())               // PCR
-	w.Write(pcrBytes())               // OPCR
-	w.Write(uint8(2))                 // Splice countdown
-	w.Write(uint8(4))                 // Transport private data length
-	w.Write([]byte("test"))           // Transport private data
-	w.Write(uint8(11))                // Adaptation extension length
-	w.Write("1")                      // LTW flag
-	w.Write("1")                      // Piecewise rate flag
-	w.Write("1")                      // Seamless splice flag
-	w.Write("11111")                  // Reserved
-	w.Write("1")                      // LTW valid flag
-	w.Write("010101010101010")        // LTW offset
-	w.Write("11")                     // Piecewise rate reserved
-	w.Write("1010101010101010101010") // Piecewise rate
-	w.Write(dtsBytes("0010"))         // Splice type + DTS next access unit
-	w.WriteN(^uint64(0), 40)          // Stuffing bytes
+	_ = w.Write(uint8(36))                // Length
+	_ = w.Write(a.DiscontinuityIndicator) // Discontinuity indicator
+	_ = w.Write("1")                      // Random access indicator
+	_ = w.Write("1")                      // Elementary stream priority indicator
+	_ = w.Write("1")                      // PCR flag
+	_ = w.Write("1")                      // OPCR flag
+	_ = w.Write("1")                      // Splicing point flag
+	_ = w.Write("1")                      // Transport data flag
+	_ = w.Write("1")                      // Adaptation field extension flag
+	_ = w.Write(pcrBytes())               // PCR
+	_ = w.Write(pcrBytes())               // OPCR
+	_ = w.Write(uint8(2))                 // Splice countdown
+	_ = w.Write(uint8(4))                 // Transport private data length
+	_ = w.Write([]byte("test"))           // Transport private data
+	_ = w.Write(uint8(11))                // Adaptation extension length
+	_ = w.Write("1")                      // LTW flag
+	_ = w.Write("1")                      // Piecewise rate flag
+	_ = w.Write("1")                      // Seamless splice flag
+	_ = w.Write("11111")                  // Reserved
+	_ = w.Write("1")                      // LTW valid flag
+	_ = w.Write("010101010101010")        // LTW offset
+	_ = w.Write("11")                     // Piecewise rate reserved
+	_ = w.Write("1010101010101010101010") // Piecewise rate
+	_ = w.Write(dtsBytes("0010"))         // Splice type + DTS next access unit
+	_ = w.WriteN(^uint64(0), 40)          // Stuffing bytes
 	return buf.Bytes()
 }
 
@@ -133,22 +133,22 @@ var dtsClockReference = ts.NewClockReference(5726623060, 0)
 func dtsBytes(flag string) []byte {
 	buf := &bytes.Buffer{}
 	w := bitstest.NewWriter(buf)
-	w.Write(flag)              // Flag
-	w.Write("101")             // 32...30
-	w.Write("1")               // Dummy
-	w.Write("010101010101010") // 29...15
-	w.Write("1")               // Dummy
-	w.Write("101010101010100") // 14...0
-	w.Write("1")               // Dummy
+	_ = w.Write(flag)              // Flag
+	_ = w.Write("101")             // 32...30
+	_ = w.Write("1")               // Dummy
+	_ = w.Write("010101010101010") // 29...15
+	_ = w.Write("1")               // Dummy
+	_ = w.Write("101010101010100") // 14...0
+	_ = w.Write("1")               // Dummy
 	return buf.Bytes()
 }
 
 func pcrBytes() []byte {
 	buf := &bytes.Buffer{}
 	w := bitstest.NewWriter(buf)
-	w.Write("101010101010101010101010101010101") // Base
-	w.Write("111111")                            // Reserved
-	w.Write("101010101")                         // Extension
+	_ = w.Write("101010101010101010101010101010101") // Base
+	_ = w.Write("111111")                            // Reserved
+	_ = w.Write("101010101")                         // Extension
 	return buf.Bytes()
 }
 

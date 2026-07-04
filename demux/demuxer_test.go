@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -53,10 +54,10 @@ func TestDemuxerNextPacket(t *testing.T) {
 	buf := &bytes.Buffer{}
 	w := bitstest.NewWriter(buf)
 	b1, p1 := packet(packetHeader, packetAdaptationField, []byte("1"), true)
-	w.Write(b1)
+	_ = w.Write(b1)
 	b2, p2 := packet(packetHeader, packetAdaptationField, []byte("2"), true)
 	p2.Offset = int64(len(b1))
-	w.Write(b2)
+	_ = w.Write(b2)
 	dmx = New(context.Background(), bytes.NewReader(buf.Bytes()))
 
 	// First packet
@@ -89,9 +90,9 @@ func TestDemuxerNextData(t *testing.T) {
 	w := bitstest.NewWriter(buf)
 	b := psiBytes()
 	b1, _ := packet(ts.PacketHeader{ContinuityCounter: uint8(0), PayloadUnitStartIndicator: true, PID: ts.PIDPAT}, &ts.PacketAdaptationField{}, b[:147], true)
-	w.Write(b1)
+	_ = w.Write(b1)
 	b2, _ := packet(ts.PacketHeader{ContinuityCounter: uint8(1), PID: ts.PIDPAT}, &ts.PacketAdaptationField{}, b[147:], true)
-	w.Write(b2)
+	_ = w.Write(b2)
 	dmx := New(context.Background(), bytes.NewReader(buf.Bytes()))
 	p, err := dmx.NextPacket()
 	assert.NoError(t, err)
@@ -200,9 +201,9 @@ func BenchmarkDemuxer_NextData(b *testing.B) {
 	w := bitstest.NewWriter(buf)
 	bs := psiBytes()
 	b1, _ := packet(ts.PacketHeader{ContinuityCounter: uint8(0), PayloadUnitStartIndicator: true, PID: ts.PIDPAT}, &ts.PacketAdaptationField{}, bs[:147], true)
-	w.Write(b1)
+	_ = w.Write(b1)
 	b2, _ := packet(ts.PacketHeader{ContinuityCounter: uint8(1), PID: ts.PIDPAT}, &ts.PacketAdaptationField{}, bs[147:], true)
-	w.Write(b2)
+	_ = w.Write(b2)
 
 	r := bytes.NewReader(buf.Bytes())
 	dmx := New(context.Background(), r)
@@ -221,15 +222,46 @@ func BenchmarkDemuxer_NextData(b *testing.B) {
 	}
 }
 
+func fuzzSeedStream() []byte {
+	buf := &bytes.Buffer{}
+	w := bitstest.NewWriter(buf)
+	bs := psiBytes()
+	b1, _ := packet(ts.PacketHeader{ContinuityCounter: uint8(0), PayloadUnitStartIndicator: true, PID: ts.PIDPAT}, &ts.PacketAdaptationField{}, bs[:147], true)
+	w.Write(b1)
+	b2, _ := packet(ts.PacketHeader{ContinuityCounter: uint8(1), PID: ts.PIDPAT}, &ts.PacketAdaptationField{}, bs[147:], true)
+	w.Write(b2)
+	return buf.Bytes()
+}
+
 func FuzzDemuxer(f *testing.F) {
+	f.Add(fuzzSeedStream())
+	f.Add(bytes.Repeat([]byte{0x47}, 188*3))
 	f.Fuzz(func(t *testing.T, b []byte) {
 		r := bytes.NewReader(b)
 		dmx := New(context.Background(), r, WithPacketSize(188))
 		for {
 			_, err := dmx.NextData()
-			if err == ts.ErrNoMorePackets {
+			if errors.Is(err, ts.ErrNoMorePackets) {
 				break
 			}
 		}
+		dmx.Close()
+	})
+}
+
+// FuzzDemuxerView exercises packet size autodetection and the zero-copy batch path.
+func FuzzDemuxerView(f *testing.F) {
+	f.Add(fuzzSeedStream())
+	f.Add(bytes.Repeat([]byte{0x47}, 188*3))
+	f.Fuzz(func(t *testing.T, b []byte) {
+		dmx := New(context.Background(), bytes.NewReader(b), WithZeroCopyPackets(4))
+		p := ts.NewPacket()
+		defer p.Close()
+		for {
+			if err := dmx.NextPacketTo(p); err != nil {
+				break
+			}
+		}
+		dmx.Close()
 	})
 }

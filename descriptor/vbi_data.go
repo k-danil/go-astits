@@ -41,14 +41,13 @@ type VBIDataDescriptor struct {
 
 func newDescriptorVBIData(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
 	// Create descriptor
-	d := &VBIData{
-		Header:   h,
-		Services: make([]VBIDataService, (offsetEnd-i.Offset())/3),
-	}
+	d := &VBIData{Header: h}
 	dd = d
 
-	// Loop
-	for idx := range d.Services {
+	// Loop: services are variable-size (id, length, payload)
+	for i.Offset() < offsetEnd {
+		var svc VBIDataService
+
 		// Get next byte
 		var b byte
 		if b, err = i.NextByte(); err != nil {
@@ -57,7 +56,7 @@ func newDescriptorVBIData(i *bytesiter.Iterator, h Header, offsetEnd int) (dd De
 		}
 
 		// Data service ID
-		d.Services[idx].DataServiceID = b
+		svc.DataServiceID = b
 
 		// Get next byte
 		if b, err = i.NextByte(); err != nil {
@@ -77,21 +76,33 @@ func newDescriptorVBIData(i *bytesiter.Iterator, h Header, offsetEnd int) (dd De
 				return
 			}
 
-			if d.Services[idx].DataServiceID <= VBIDataServiceIDMonochrome442Samples &&
-				d.Services[idx].DataServiceID != 0x0 && d.Services[idx].DataServiceID != 0x3 {
+			if svc.DataServiceID <= VBIDataServiceIDMonochrome442Samples &&
+				svc.DataServiceID != 0x0 && svc.DataServiceID != 0x3 {
 				// Append data
-				d.Services[idx].Descriptors = append(d.Services[idx].Descriptors, VBIDataDescriptor{
+				svc.Descriptors = append(svc.Descriptors, VBIDataDescriptor{
 					FieldParity: b&0x20 > 0,
 					LineOffset:  b & 0x1f,
 				})
 			}
 		}
+
+		d.Services = append(d.Services, svc)
 	}
 	return
 }
 
 func (d *VBIData) CalcLength() int {
-	return 3 * len(d.Services)
+	var ret int
+	for _, item := range d.Services {
+		ret += 2 // service id and length
+		if item.DataServiceID <= VBIDataServiceIDMonochrome442Samples &&
+			item.DataServiceID != 0x0 && item.DataServiceID != 0x3 {
+			ret += len(item.Descriptors) // each descriptor is 1 byte
+		} else {
+			ret++ // one reserved byte
+		}
+	}
+	return ret
 }
 
 func (d *VBIData) Append(dst []byte) []byte {

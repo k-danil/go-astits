@@ -15,7 +15,7 @@ func NewWriter(w io.Writer) *Writer {
 	return &Writer{w: w}
 }
 
-func (w *Writer) writeBit(set bool) {
+func (w *Writer) WriteBit(set bool) {
 	w.cache <<= 1
 	if set {
 		w.cache |= 1
@@ -28,9 +28,9 @@ func (w *Writer) writeBit(set bool) {
 	}
 }
 
-func (w *Writer) writeBits(v uint64, n int) {
+func (w *Writer) WriteBits(v uint64, n int) {
 	for i := n - 1; i >= 0; i-- {
-		w.writeBit(v>>i&1 == 1)
+		w.WriteBit(v>>i&1 == 1)
 	}
 }
 
@@ -40,21 +40,21 @@ func (w *Writer) Write(v any) error {
 	switch t := v.(type) {
 	case string:
 		for _, r := range t {
-			w.writeBit(r == '1')
+			w.WriteBit(r == '1')
 		}
 	case bool:
-		w.writeBit(t)
+		w.WriteBit(t)
 	case uint8:
-		w.writeBits(uint64(t), 8)
+		w.WriteBits(uint64(t), 8)
 	case uint16:
-		w.writeBits(uint64(t), 16)
+		w.WriteBits(uint64(t), 16)
 	case uint32:
-		w.writeBits(uint64(t), 32)
+		w.WriteBits(uint64(t), 32)
 	case uint64:
-		w.writeBits(t, 64)
+		w.WriteBits(t, 64)
 	case []byte:
 		for _, b := range t {
-			w.writeBits(uint64(b), 8)
+			w.WriteBits(uint64(b), 8)
 		}
 	default:
 		panic("bitstest: unsupported type")
@@ -66,13 +66,13 @@ func (w *Writer) Write(v any) error {
 func (w *Writer) WriteN(v any, n int) error {
 	switch t := v.(type) {
 	case uint8:
-		w.writeBits(uint64(t), n)
+		w.WriteBits(uint64(t), n)
 	case uint16:
-		w.writeBits(uint64(t), n)
+		w.WriteBits(uint64(t), n)
 	case uint32:
-		w.writeBits(uint64(t), n)
+		w.WriteBits(uint64(t), n)
 	case uint64:
-		w.writeBits(t, n)
+		w.WriteBits(t, n)
 	default:
 		panic("bitstest: unsupported type")
 	}

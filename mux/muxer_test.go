@@ -18,35 +18,35 @@ const syncByte byte = '\x47'
 func patExpectedBytes(versionNumber uint8, cc uint8) []byte {
 	buf := bytes.Buffer{}
 	w := bitstest.NewWriter(&buf)
-	w.Write(syncByte)
-	w.Write("010") // no transport error, payload start, no priority
-	w.WriteN(ts.PIDPAT, 13)
-	w.Write("0001") // no scrambling, no AF, payload present
-	w.WriteN(cc, 4)
+	_ = w.Write(syncByte)
+	_ = w.Write("010") // no transport error, payload start, no priority
+	_ = w.WriteN(ts.PIDPAT, 13)
+	_ = w.Write("0001") // no scrambling, no AF, payload present
+	_ = w.WriteN(cc, 4)
 
-	w.Write(uint16(0))       // Table ID
-	w.Write("1011")          // Syntax section indicator, private bit, reserved
-	w.WriteN(uint16(13), 12) // Section length
+	_ = w.Write(uint16(0))       // Table ID
+	_ = w.Write("1011")          // Syntax section indicator, private bit, reserved
+	_ = w.WriteN(uint16(13), 12) // Section length
 
-	w.Write(uint16(psi.TableIDPAT))
-	w.Write("11")              // Reserved bits
-	w.WriteN(versionNumber, 5) // Version number
-	w.Write("1")               // Current/next indicator
-	w.Write(uint8(0))          // Section number
-	w.Write(uint8(0))          // Last section number
+	_ = w.Write(uint16(psi.TableIDPAT))
+	_ = w.Write("11")              // Reserved bits
+	_ = w.WriteN(versionNumber, 5) // Version number
+	_ = w.Write("1")               // Current/next indicator
+	_ = w.Write(uint8(0))          // Section number
+	_ = w.Write(uint8(0))          // Last section number
 
-	w.Write(programNumberStart)
-	w.Write("111") // reserved
-	w.WriteN(pmtStartPID, 13)
+	_ = w.Write(programNumberStart)
+	_ = w.Write("111") // reserved
+	_ = w.WriteN(pmtStartPID, 13)
 
 	// CRC32
 	if versionNumber == 0 {
-		w.Write([]byte{0x71, 0x10, 0xd8, 0x78})
+		_ = w.Write([]byte{0x71, 0x10, 0xd8, 0x78})
 	} else {
-		w.Write([]byte{0xef, 0xbe, 0x08, 0x5a})
+		_ = w.Write([]byte{0xef, 0xbe, 0x08, 0x5a})
 	}
 
-	w.Write(bytes.Repeat([]byte{0xff}, 167))
+	_ = w.Write(bytes.Repeat([]byte{0xff}, 167))
 
 	return buf.Bytes()
 }
@@ -76,39 +76,39 @@ func TestMuxer_generatePAT(t *testing.T) {
 func pmtExpectedBytesVideoOnly(versionNumber, cc uint8) []byte {
 	buf := bytes.Buffer{}
 	w := bitstest.NewWriter(&buf)
-	w.Write(syncByte)
-	w.Write("010") // no transport error, payload start, no priority
-	w.WriteN(pmtStartPID, 13)
-	w.Write("0001") // no scrambling, no AF, payload present
-	w.WriteN(cc, 4)
+	_ = w.Write(syncByte)
+	_ = w.Write("010") // no transport error, payload start, no priority
+	_ = w.WriteN(pmtStartPID, 13)
+	_ = w.Write("0001") // no scrambling, no AF, payload present
+	_ = w.WriteN(cc, 4)
 
-	w.Write(uint16(psi.TableIDPMT)) // Table ID
-	w.Write("1011")                 // Syntax section indicator, private bit, reserved
-	w.WriteN(uint16(18), 12)        // Section length
+	_ = w.Write(uint16(psi.TableIDPMT)) // Table ID
+	_ = w.Write("1011")                 // Syntax section indicator, private bit, reserved
+	_ = w.WriteN(uint16(18), 12)        // Section length
 
-	w.Write(programNumberStart)
-	w.Write("11")              // Reserved bits
-	w.WriteN(versionNumber, 5) // Version number
-	w.Write("1")               // Current/next indicator
-	w.Write(uint8(0))          // Section number
-	w.Write(uint8(0))          // Last section number
+	_ = w.Write(programNumberStart)
+	_ = w.Write("11")              // Reserved bits
+	_ = w.WriteN(versionNumber, 5) // Version number
+	_ = w.Write("1")               // Current/next indicator
+	_ = w.Write(uint8(0))          // Section number
+	_ = w.Write(uint8(0))          // Last section number
 
-	w.Write("111")               // reserved
-	w.WriteN(uint16(0x1234), 13) // PCR PID
+	_ = w.Write("111")               // reserved
+	_ = w.WriteN(uint16(0x1234), 13) // PCR PID
 
-	w.Write("1111")         // reserved
-	w.WriteN(uint16(0), 12) // program info length
+	_ = w.Write("1111")         // reserved
+	_ = w.WriteN(uint16(0), 12) // program info length
 
-	w.Write(uint8(psi.StreamTypeH264Video))
-	w.Write("111") // reserved
-	w.WriteN(uint16(0x1234), 13)
+	_ = w.Write(uint8(psi.StreamTypeH264Video))
+	_ = w.Write("111") // reserved
+	_ = w.WriteN(uint16(0x1234), 13)
 
-	w.Write("1111")         // reserved
-	w.WriteN(uint16(0), 12) // es info length
+	_ = w.Write("1111")         // reserved
+	_ = w.WriteN(uint16(0), 12) // es info length
 
-	w.Write([]byte{0x31, 0x48, 0x5b, 0xa2}) // CRC32
+	_ = w.Write([]byte{0x31, 0x48, 0x5b, 0xa2}) // CRC32
 
-	w.Write(bytes.Repeat([]byte{0xff}, 162))
+	_ = w.Write(bytes.Repeat([]byte{0xff}, 162))
 
 	return buf.Bytes()
 }
@@ -116,49 +116,49 @@ func pmtExpectedBytesVideoOnly(versionNumber, cc uint8) []byte {
 func pmtExpectedBytesVideoAndAudio(versionNumber uint8, cc uint8) []byte {
 	buf := bytes.Buffer{}
 	w := bitstest.NewWriter(&buf)
-	w.Write(syncByte)
-	w.Write("010") // no transport error, payload start, no priority
-	w.WriteN(pmtStartPID, 13)
-	w.Write("0001") // no scrambling, no AF, payload present
-	w.WriteN(cc, 4)
+	_ = w.Write(syncByte)
+	_ = w.Write("010") // no transport error, payload start, no priority
+	_ = w.WriteN(pmtStartPID, 13)
+	_ = w.Write("0001") // no scrambling, no AF, payload present
+	_ = w.WriteN(cc, 4)
 
-	w.Write(uint16(psi.TableIDPMT)) // Table ID
-	w.Write("1011")                 // Syntax section indicator, private bit, reserved
-	w.WriteN(uint16(23), 12)        // Section length
+	_ = w.Write(uint16(psi.TableIDPMT)) // Table ID
+	_ = w.Write("1011")                 // Syntax section indicator, private bit, reserved
+	_ = w.WriteN(uint16(23), 12)        // Section length
 
-	w.Write(programNumberStart)
-	w.Write("11")              // Reserved bits
-	w.WriteN(versionNumber, 5) // Version number
-	w.Write("1")               // Current/next indicator
-	w.Write(uint8(0))          // Section number
-	w.Write(uint8(0))          // Last section number
+	_ = w.Write(programNumberStart)
+	_ = w.Write("11")              // Reserved bits
+	_ = w.WriteN(versionNumber, 5) // Version number
+	_ = w.Write("1")               // Current/next indicator
+	_ = w.Write(uint8(0))          // Section number
+	_ = w.Write(uint8(0))          // Last section number
 
-	w.Write("111")               // reserved
-	w.WriteN(uint16(0x1234), 13) // PCR PID
+	_ = w.Write("111")               // reserved
+	_ = w.WriteN(uint16(0x1234), 13) // PCR PID
 
-	w.Write("1111")         // reserved
-	w.WriteN(uint16(0), 12) // program info length
+	_ = w.Write("1111")         // reserved
+	_ = w.WriteN(uint16(0), 12) // program info length
 
-	w.Write(uint8(psi.StreamTypeH264Video))
-	w.Write("111") // reserved
-	w.WriteN(uint16(0x1234), 13)
-	w.Write("1111")         // reserved
-	w.WriteN(uint16(0), 12) // es info length
+	_ = w.Write(uint8(psi.StreamTypeH264Video))
+	_ = w.Write("111") // reserved
+	_ = w.WriteN(uint16(0x1234), 13)
+	_ = w.Write("1111")         // reserved
+	_ = w.WriteN(uint16(0), 12) // es info length
 
-	w.Write(uint8(psi.StreamTypeADTS))
-	w.Write("111") // reserved
-	w.WriteN(uint16(0x0234), 13)
-	w.Write("1111")         // reserved
-	w.WriteN(uint16(0), 12) // es info length
+	_ = w.Write(uint8(psi.StreamTypeADTS))
+	_ = w.Write("111") // reserved
+	_ = w.WriteN(uint16(0x0234), 13)
+	_ = w.Write("1111")         // reserved
+	_ = w.WriteN(uint16(0), 12) // es info length
 
 	// CRC32
 	if versionNumber == 0 {
-		w.Write([]byte{0x29, 0x52, 0xc4, 0x50})
+		_ = w.Write([]byte{0x29, 0x52, 0xc4, 0x50})
 	} else {
-		w.Write([]byte{0x06, 0xf4, 0xa6, 0xea})
+		_ = w.Write([]byte{0x06, 0xf4, 0xa6, 0xea})
 	}
 
-	w.Write(bytes.Repeat([]byte{0xff}, 157))
+	_ = w.Write(bytes.Repeat([]byte{0xff}, 157))
 
 	return buf.Bytes()
 }

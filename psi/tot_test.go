@@ -18,9 +18,9 @@ var tot = &TOT{
 func totBytes() []byte {
 	buf := &bytes.Buffer{}
 	w := bitstest.NewWriter(buf)
-	w.Write(dvbTimeBytes) // UTC time
-	w.Write("0000")       // Reserved
-	descriptorsBytes(w)   // Service #1 descriptors
+	_ = w.Write(dvbTimeBytes) // UTC time
+	_ = w.Write("0000")       // Reserved
+	descriptorsBytes(w)       // Service #1 descriptors
 	return buf.Bytes()
 }
 

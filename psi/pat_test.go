@@ -21,12 +21,12 @@ var pat = &PAT{
 func patBytes() []byte {
 	buf := &bytes.Buffer{}
 	w := bitstest.NewWriter(buf)
-	w.Write(uint16(2))       // Program #1 number
-	w.Write("111")           // Program #1 reserved bits
-	w.Write("0000000000011") // Program #1 map ID
-	w.Write(uint16(4))       // Program #2 number
-	w.Write("111")           // Program #2 reserved bits
-	w.Write("0000000000101") // Program #3 map ID
+	_ = w.Write(uint16(2))       // Program #1 number
+	_ = w.Write("111")           // Program #1 reserved bits
+	_ = w.Write("0000000000011") // Program #1 map ID
+	_ = w.Write(uint16(4))       // Program #2 number
+	_ = w.Write("111")           // Program #2 reserved bits
+	_ = w.Write("0000000000101") // Program #3 map ID
 	return buf.Bytes()
 }
 

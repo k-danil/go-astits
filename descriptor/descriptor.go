@@ -103,6 +103,12 @@ func parseDescriptors(i *bytesiter.Iterator) (o []Descriptor, err error) {
 				// Seek in iterator to make sure we move to the end of the descriptor since its content may be
 				// corrupted
 				i.Seek(offsetDescriptorEnd)
+			} else if h.Tag >= userDefinedTagsStart && h.Tag != 0xff {
+				// A zero-length descriptor is valid wire: represent it instead of
+				// leaving a nil entry in the returned slice
+				o[idx] = &UserDefined{Header: h}
+			} else {
+				o[idx] = &Unknown{Header: h}
 			}
 		}
 	}

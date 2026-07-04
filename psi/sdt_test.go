@@ -26,15 +26,15 @@ var sdt = &SDT{
 func sdtBytes() []byte {
 	buf := &bytes.Buffer{}
 	w := bitstest.NewWriter(buf)
-	w.Write(uint16(2))  // Original network ID
-	w.Write(uint8(0))   // Reserved for future use
-	w.Write(uint16(3))  // Service #1 id
-	w.Write("000000")   // Service #1 reserved for future use
-	w.Write("1")        // Service #1 EIT schedule flag
-	w.Write("1")        // Service #1 EIT present/following flag
-	w.Write("101")      // Service #1 running status
-	w.Write("1")        // Service #1 free CA mode
-	descriptorsBytes(w) // Service #1 descriptors
+	_ = w.Write(uint16(2)) // Original network ID
+	_ = w.Write(uint8(0))  // Reserved for future use
+	_ = w.Write(uint16(3)) // Service #1 id
+	_ = w.Write("000000")  // Service #1 reserved for future use
+	_ = w.Write("1")       // Service #1 EIT schedule flag
+	_ = w.Write("1")       // Service #1 EIT present/following flag
+	_ = w.Write("101")     // Service #1 running status
+	_ = w.Write("1")       // Service #1 free CA mode
+	descriptorsBytes(w)    // Service #1 descriptors
 	return buf.Bytes()
 }
 

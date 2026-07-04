@@ -28,8 +28,8 @@ var dsmTrickModeSlow = &DSMTrickMode{
 func dsmTrickModeSlowBytes() []byte {
 	buf := &bytes.Buffer{}
 	w := bitstest.NewWriter(buf)
-	w.Write("001")   // Control
-	w.Write("10101") // Repeat control
+	_ = w.Write("001")   // Control
+	_ = w.Write("10101") // Repeat control
 	return buf.Bytes()
 }
 
@@ -43,10 +43,10 @@ var dsmTrickModeTestCases = []dsmTrickModeTestCase{
 	{
 		"fast_forward",
 		func(w *bitstest.Writer) {
-			w.Write("000") // Control
-			w.Write("10")  // Field ID
-			w.Write("1")   // Intra slice refresh
-			w.Write("11")  // Frequency truncation
+			_ = w.Write("000") // Control
+			_ = w.Write("10")  // Field ID
+			_ = w.Write("1")   // Intra slice refresh
+			_ = w.Write("11")  // Frequency truncation
 		},
 		&DSMTrickMode{
 			FieldID:             2,
@@ -58,8 +58,8 @@ var dsmTrickModeTestCases = []dsmTrickModeTestCase{
 	{
 		"slow_motion",
 		func(w *bitstest.Writer) {
-			w.Write("001")
-			w.Write("10101")
+			_ = w.Write("001")
+			_ = w.Write("10101")
 		},
 		&DSMTrickMode{
 			RepeatControl:    0b10101,
@@ -69,9 +69,9 @@ var dsmTrickModeTestCases = []dsmTrickModeTestCase{
 	{
 		"freeze_frame",
 		func(w *bitstest.Writer) {
-			w.Write("010") // Control
-			w.Write("10")  // Field ID
-			w.Write("111") // Reserved
+			_ = w.Write("010") // Control
+			_ = w.Write("10")  // Field ID
+			_ = w.Write("111") // Reserved
 		},
 		&DSMTrickMode{
 			FieldID:          2,
@@ -81,10 +81,10 @@ var dsmTrickModeTestCases = []dsmTrickModeTestCase{
 	{
 		"fast_reverse",
 		func(w *bitstest.Writer) {
-			w.Write("011") // Control
-			w.Write("10")  // Field ID
-			w.Write("1")   // Intra slice refresh
-			w.Write("11")  // Frequency truncation
+			_ = w.Write("011") // Control
+			_ = w.Write("10")  // Field ID
+			_ = w.Write("1")   // Intra slice refresh
+			_ = w.Write("11")  // Frequency truncation
 		},
 		&DSMTrickMode{
 			FieldID:             2,
@@ -96,8 +96,8 @@ var dsmTrickModeTestCases = []dsmTrickModeTestCase{
 	{
 		"slow_reverse",
 		func(w *bitstest.Writer) {
-			w.Write("100")
-			w.Write("01010")
+			_ = w.Write("100")
+			_ = w.Write("01010")
 		},
 		&DSMTrickMode{
 			RepeatControl:    0b01010,
@@ -107,8 +107,8 @@ var dsmTrickModeTestCases = []dsmTrickModeTestCase{
 	{
 		"reserved",
 		func(w *bitstest.Writer) {
-			w.Write("101")
-			w.Write("11111")
+			_ = w.Write("101")
+			_ = w.Write("11111")
 		},
 		&DSMTrickMode{
 			TrickModeControl: 5, // reserved
@@ -147,13 +147,13 @@ var ptsClockReference = ts.NewClockReference(5726623061, 0)
 func ptsBytes(flag string) []byte {
 	buf := &bytes.Buffer{}
 	w := bitstest.NewWriter(buf)
-	w.Write(flag)              // Flag
-	w.Write("101")             // 32...30
-	w.Write("1")               // Dummy
-	w.Write("010101010101010") // 29...15
-	w.Write("1")               // Dummy
-	w.Write("101010101010101") // 14...0
-	w.Write("1")               // Dummy
+	_ = w.Write(flag)              // Flag
+	_ = w.Write("101")             // 32...30
+	_ = w.Write("1")               // Dummy
+	_ = w.Write("010101010101010") // 29...15
+	_ = w.Write("1")               // Dummy
+	_ = w.Write("101010101010101") // 14...0
+	_ = w.Write("1")               // Dummy
 	return buf.Bytes()
 }
 
@@ -164,28 +164,28 @@ var clockReference = ts.NewClockReference(3271034319, 58)
 func dtsBytes(flag string) []byte {
 	buf := &bytes.Buffer{}
 	w := bitstest.NewWriter(buf)
-	w.Write(flag)              // Flag
-	w.Write("101")             // 32...30
-	w.Write("1")               // Dummy
-	w.Write("010101010101010") // 29...15
-	w.Write("1")               // Dummy
-	w.Write("101010101010100") // 14...0
-	w.Write("1")               // Dummy
+	_ = w.Write(flag)              // Flag
+	_ = w.Write("101")             // 32...30
+	_ = w.Write("1")               // Dummy
+	_ = w.Write("010101010101010") // 29...15
+	_ = w.Write("1")               // Dummy
+	_ = w.Write("101010101010100") // 14...0
+	_ = w.Write("1")               // Dummy
 	return buf.Bytes()
 }
 
 func escrBytes() []byte {
 	buf := &bytes.Buffer{}
 	w := bitstest.NewWriter(buf)
-	w.Write("11")              // Dummy
-	w.Write("011")             // 32...30
-	w.Write("1")               // Dummy
-	w.Write("000010111110000") // 29...15
-	w.Write("1")               // Dummy
-	w.Write("000010111001111") // 14...0
-	w.Write("1")               // Dummy
-	w.Write("000111010")       // Ext
-	w.Write("1")               // Dummy
+	_ = w.Write("11")              // Dummy
+	_ = w.Write("011")             // 32...30
+	_ = w.Write("1")               // Dummy
+	_ = w.Write("000010111110000") // 29...15
+	_ = w.Write("1")               // Dummy
+	_ = w.Write("000010111001111") // 14...0
+	_ = w.Write("1")               // Dummy
+	_ = w.Write("000111010")       // Ext
+	_ = w.Write("1")               // Dummy
 	return buf.Bytes()
 }
 
@@ -201,15 +201,15 @@ var pesTestCases = []pesTestCase{
 	{
 		"without_header",
 		func(w *bitstest.Writer, withStuffing bool, withCRC bool) {
-			w.Write("000000000000000000000001")   // Prefix
-			w.Write(uint8(StreamIDPaddingStream)) // Stream ID
-			w.Write(uint16(4))                    // Packet length
+			_ = w.Write("000000000000000000000001")   // Prefix
+			_ = w.Write(uint8(StreamIDPaddingStream)) // Stream ID
+			_ = w.Write(uint16(4))                    // Packet length
 		},
 		func(w *bitstest.Writer, withStuffing bool, withCRC bool) {
 			// do nothing here
 		},
 		func(w *bitstest.Writer, withStuffing bool, withCRC bool) {
-			w.Write([]byte("data")) // Data
+			_ = w.Write([]byte("data")) // Data
 		},
 		&Data{
 			Data: []byte("data"),
@@ -233,9 +233,9 @@ var pesTestCases = []pesTestCase{
 				packetLength -= 2
 			}
 
-			w.Write("000000000000000000000001") // Prefix
-			w.Write(uint8(1))                   // Stream ID
-			w.Write(uint16(packetLength))       // Packet length
+			_ = w.Write("000000000000000000000001") // Prefix
+			_ = w.Write(uint8(1))                   // Stream ID
+			_ = w.Write(uint16(packetLength))       // Packet length
 
 		},
 		func(w *bitstest.Writer, withStuffing bool, withCRC bool) {
@@ -250,51 +250,51 @@ var pesTestCases = []pesTestCase{
 				optionalHeaderLength -= 2
 			}
 
-			w.Write("10")                        // Marker bits
-			w.Write("01")                        // Scrambling control
-			w.Write("1")                         // Priority
-			w.Write("1")                         // Data alignment indicator
-			w.Write("1")                         // Copyright
-			w.Write("1")                         // Original or copy
-			w.Write("11")                        // PTS/DTS indicator
-			w.Write("1")                         // ESCR flag
-			w.Write("1")                         // ES rate flag
-			w.Write("1")                         // DSM trick mode flag
-			w.Write("1")                         // Additional copy flag
-			w.Write(withCRC)                     // CRC flag
-			w.Write("1")                         // Extension flag
-			w.Write(uint8(optionalHeaderLength)) // Header length
-			w.Write(ptsBytes("0011"))            // PTS
-			w.Write(dtsBytes("0001"))            // DTS
-			w.Write(escrBytes())                 // ESCR
-			w.Write("101010101010101010101011")  // ES rate
-			w.Write(dsmTrickModeSlowBytes())     // DSM trick mode
-			w.Write("11111111")                  // Additional copy info
+			_ = w.Write("10")                        // Marker bits
+			_ = w.Write("01")                        // Scrambling control
+			_ = w.Write("1")                         // Priority
+			_ = w.Write("1")                         // Data alignment indicator
+			_ = w.Write("1")                         // Copyright
+			_ = w.Write("1")                         // Original or copy
+			_ = w.Write("11")                        // PTS/DTS indicator
+			_ = w.Write("1")                         // ESCR flag
+			_ = w.Write("1")                         // ES rate flag
+			_ = w.Write("1")                         // DSM trick mode flag
+			_ = w.Write("1")                         // Additional copy flag
+			_ = w.Write(withCRC)                     // CRC flag
+			_ = w.Write("1")                         // Extension flag
+			_ = w.Write(uint8(optionalHeaderLength)) // Header length
+			_ = w.Write(ptsBytes("0011"))            // PTS
+			_ = w.Write(dtsBytes("0001"))            // DTS
+			_ = w.Write(escrBytes())                 // ESCR
+			_ = w.Write("101010101010101010101011")  // ES rate
+			_ = w.Write(dsmTrickModeSlowBytes())     // DSM trick mode
+			_ = w.Write("11111111")                  // Additional copy info
 			if withCRC {
-				w.Write(uint16(4)) // CRC
+				_ = w.Write(uint16(4)) // CRC
 			}
 			// Extension starts here
-			w.Write("1")                        // Private data flag
-			w.Write("0")                        // Pack header field flag
-			w.Write("1")                        // Program packet sequence counter flag
-			w.Write("1")                        // PSTD buffer flag
-			w.Write("111")                      // Dummy
-			w.Write("1")                        // Extension 2 flag
-			w.Write([]byte("1234567890123456")) // Private data
+			_ = w.Write("1")                        // Private data flag
+			_ = w.Write("0")                        // Pack header field flag
+			_ = w.Write("1")                        // Program packet sequence counter flag
+			_ = w.Write("1")                        // PSTD buffer flag
+			_ = w.Write("111")                      // Dummy
+			_ = w.Write("1")                        // Extension 2 flag
+			_ = w.Write([]byte("1234567890123456")) // Private data
 			//w.Write(uint8(5))                   // Pack field
-			w.Write("1101010111010101")   // Packet sequence counter
-			w.Write("0111010101010101")   // PSTD buffer
-			w.Write("10001010")           // Extension 2 header
-			w.Write([]byte("extension2")) // Extension 2 data
+			_ = w.Write("1101010111010101")   // Packet sequence counter
+			_ = w.Write("0111010101010101")   // PSTD buffer
+			_ = w.Write("10001010")           // Extension 2 header
+			_ = w.Write([]byte("extension2")) // Extension 2 data
 			if withStuffing {
-				w.Write(stuffing) // Optional header stuffing bytes
+				_ = w.Write(stuffing) // Optional header stuffing bytes
 			}
 		},
 		func(w *bitstest.Writer, withStuffing bool, withCRC bool) {
 			stuffing := []byte("stuff")
-			w.Write([]byte("data")) // Data
+			_ = w.Write([]byte("data")) // Data
 			if withStuffing {
-				w.Write(stuffing) // Stuffing
+				_ = w.Write(stuffing) // Stuffing
 			}
 		},
 		&Data{

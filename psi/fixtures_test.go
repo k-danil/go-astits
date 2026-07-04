@@ -17,10 +17,10 @@ var descriptors = []descriptor.Descriptor{
 }
 
 func descriptorsBytes(w *bitstest.Writer) {
-	w.Write("000000000011")                        // Overall length
-	w.Write(uint8(descriptor.TagStreamIdentifier)) // Tag
-	w.Write(uint8(1))                              // Length
-	w.Write(uint8(7))                              // Component tag
+	_ = w.Write("000000000011")                        // Overall length
+	_ = w.Write(uint8(descriptor.TagStreamIdentifier)) // Tag
+	_ = w.Write(uint8(1))                              // Length
+	_ = w.Write(uint8(7))                              // Component tag
 }
 
 var (

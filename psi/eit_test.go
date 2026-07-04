@@ -29,16 +29,16 @@ var eit = &EIT{
 func eitBytes() []byte {
 	buf := &bytes.Buffer{}
 	w := bitstest.NewWriter(buf)
-	w.Write(uint16(2))               // Transport stream ID
-	w.Write(uint16(3))               // Original network ID
-	w.Write(uint8(4))                // Segment last section number
-	w.Write(uint8(5))                // Last table id
-	w.Write(uint16(6))               // Event #1 id
-	w.Write(dvbTimeBytes)            // Event #1 start time
-	w.Write(dvbDurationSecondsBytes) // Event #1 duration
-	w.Write("111")                   // Event #1 running status
-	w.Write("1")                     // Event #1 free CA mode
-	descriptorsBytes(w)              // Event #1 descriptors
+	_ = w.Write(uint16(2))               // Transport stream ID
+	_ = w.Write(uint16(3))               // Original network ID
+	_ = w.Write(uint8(4))                // Segment last section number
+	_ = w.Write(uint8(5))                // Last table id
+	_ = w.Write(uint16(6))               // Event #1 id
+	_ = w.Write(dvbTimeBytes)            // Event #1 start time
+	_ = w.Write(dvbDurationSecondsBytes) // Event #1 duration
+	_ = w.Write("111")                   // Event #1 running status
+	_ = w.Write("1")                     // Event #1 free CA mode
+	descriptorsBytes(w)                  // Event #1 descriptors
 	return buf.Bytes()
 }
 

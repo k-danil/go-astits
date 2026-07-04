@@ -99,57 +99,57 @@ var psi = &Data{
 func psiBytes() []byte {
 	buf := &bytes.Buffer{}
 	w := bitstest.NewWriter(buf)
-	w.Write(uint8(4))                      // Pointer field
-	w.Write([]byte("test"))                // Pointer field bytes
-	w.Write(uint8(78))                     // EIT table ID
-	w.Write("1")                           // EIT syntax section indicator
-	w.Write("1")                           // EIT private bit
-	w.Write("11")                          // EIT reserved
-	w.Write("000000011110")                // EIT section length
-	w.Write(psiSectionSyntaxHeaderBytes()) // EIT syntax section header
-	w.Write(eitBytes())                    // EIT data
-	w.Write(uint32(0x7ffc6102))            // EIT CRC32
-	w.Write(uint8(64))                     // NIT table ID
-	w.Write("1")                           // NIT syntax section indicator
-	w.Write("1")                           // NIT private bit
-	w.Write("11")                          // NIT reserved
-	w.Write("000000011001")                // NIT section length
-	w.Write(psiSectionSyntaxHeaderBytes()) // NIT syntax section header
-	w.Write(nitBytes())                    // NIT data
-	w.Write(uint32(0xfebaa941))            // NIT CRC32
-	w.Write(uint8(0))                      // PAT table ID
-	w.Write("1")                           // PAT syntax section indicator
-	w.Write("1")                           // PAT private bit
-	w.Write("11")                          // PAT reserved
-	w.Write("000000010001")                // PAT section length
-	w.Write(psiSectionSyntaxHeaderBytes()) // PAT syntax section header
-	w.Write(patBytes())                    // PAT data
-	w.Write(uint32(0x60739f61))            // PAT CRC32
-	w.Write(uint8(2))                      // PMT table ID
-	w.Write("1")                           // PMT syntax section indicator
-	w.Write("1")                           // PMT private bit
-	w.Write("11")                          // PMT reserved
-	w.Write("000000011000")                // PMT section length
-	w.Write(psiSectionSyntaxHeaderBytes()) // PMT syntax section header
-	w.Write(pmtBytes())                    // PMT data
-	w.Write(uint32(0xc68442e8))            // PMT CRC32
-	w.Write(uint8(66))                     // SDT table ID
-	w.Write("1")                           // SDT syntax section indicator
-	w.Write("1")                           // SDT private bit
-	w.Write("11")                          // SDT reserved
-	w.Write("000000010100")                // SDT section length
-	w.Write(psiSectionSyntaxHeaderBytes()) // SDT syntax section header
-	w.Write(sdtBytes())                    // SDT data
-	w.Write(uint32(0xef3751d6))            // SDT CRC32
-	w.Write(uint8(115))                    // TOT table ID
-	w.Write("1")                           // TOT syntax section indicator
-	w.Write("1")                           // TOT private bit
-	w.Write("11")                          // TOT reserved
-	w.Write("000000001110")                // TOT section length
-	w.Write(totBytes())                    // TOT data
-	w.Write(uint32(0x6969b13))             // TOT CRC32
-	w.Write(uint8(254))                    // Unknown table ID
-	w.Write(uint8(0))                      // PAT table ID
+	_ = w.Write(uint8(4))                      // Pointer field
+	_ = w.Write([]byte("test"))                // Pointer field bytes
+	_ = w.Write(uint8(78))                     // EIT table ID
+	_ = w.Write("1")                           // EIT syntax section indicator
+	_ = w.Write("1")                           // EIT private bit
+	_ = w.Write("11")                          // EIT reserved
+	_ = w.Write("000000011110")                // EIT section length
+	_ = w.Write(psiSectionSyntaxHeaderBytes()) // EIT syntax section header
+	_ = w.Write(eitBytes())                    // EIT data
+	_ = w.Write(uint32(0x7ffc6102))            // EIT CRC32
+	_ = w.Write(uint8(64))                     // NIT table ID
+	_ = w.Write("1")                           // NIT syntax section indicator
+	_ = w.Write("1")                           // NIT private bit
+	_ = w.Write("11")                          // NIT reserved
+	_ = w.Write("000000011001")                // NIT section length
+	_ = w.Write(psiSectionSyntaxHeaderBytes()) // NIT syntax section header
+	_ = w.Write(nitBytes())                    // NIT data
+	_ = w.Write(uint32(0xfebaa941))            // NIT CRC32
+	_ = w.Write(uint8(0))                      // PAT table ID
+	_ = w.Write("1")                           // PAT syntax section indicator
+	_ = w.Write("1")                           // PAT private bit
+	_ = w.Write("11")                          // PAT reserved
+	_ = w.Write("000000010001")                // PAT section length
+	_ = w.Write(psiSectionSyntaxHeaderBytes()) // PAT syntax section header
+	_ = w.Write(patBytes())                    // PAT data
+	_ = w.Write(uint32(0x60739f61))            // PAT CRC32
+	_ = w.Write(uint8(2))                      // PMT table ID
+	_ = w.Write("1")                           // PMT syntax section indicator
+	_ = w.Write("1")                           // PMT private bit
+	_ = w.Write("11")                          // PMT reserved
+	_ = w.Write("000000011000")                // PMT section length
+	_ = w.Write(psiSectionSyntaxHeaderBytes()) // PMT syntax section header
+	_ = w.Write(pmtBytes())                    // PMT data
+	_ = w.Write(uint32(0xc68442e8))            // PMT CRC32
+	_ = w.Write(uint8(66))                     // SDT table ID
+	_ = w.Write("1")                           // SDT syntax section indicator
+	_ = w.Write("1")                           // SDT private bit
+	_ = w.Write("11")                          // SDT reserved
+	_ = w.Write("000000010100")                // SDT section length
+	_ = w.Write(psiSectionSyntaxHeaderBytes()) // SDT syntax section header
+	_ = w.Write(sdtBytes())                    // SDT data
+	_ = w.Write(uint32(0xef3751d6))            // SDT CRC32
+	_ = w.Write(uint8(115))                    // TOT table ID
+	_ = w.Write("1")                           // TOT syntax section indicator
+	_ = w.Write("1")                           // TOT private bit
+	_ = w.Write("11")                          // TOT reserved
+	_ = w.Write("000000001110")                // TOT section length
+	_ = w.Write(totBytes())                    // TOT data
+	_ = w.Write(uint32(0x6969b13))             // TOT CRC32
+	_ = w.Write(uint8(254))                    // Unknown table ID
+	_ = w.Write(uint8(0))                      // PAT table ID
 	return buf.Bytes()
 }
 
@@ -157,14 +157,14 @@ func TestParsePSIData(t *testing.T) {
 	// Invalid CRC32
 	buf := &bytes.Buffer{}
 	w := bitstest.NewWriter(buf)
-	w.Write(uint8(0))       // Pointer field
-	w.Write(uint8(115))     // TOT table ID
-	w.Write("1")            // TOT syntax section indicator
-	w.Write("1")            // TOT private bit
-	w.Write("11")           // TOT reserved
-	w.Write("000000001110") // TOT section length
-	w.Write(totBytes())     // TOT data
-	w.Write(uint32(32))     // TOT CRC32
+	_ = w.Write(uint8(0))       // Pointer field
+	_ = w.Write(uint8(115))     // TOT table ID
+	_ = w.Write("1")            // TOT syntax section indicator
+	_ = w.Write("1")            // TOT private bit
+	_ = w.Write("11")           // TOT reserved
+	_ = w.Write("000000001110") // TOT section length
+	_ = w.Write(totBytes())     // TOT data
+	_ = w.Write(uint32(32))     // TOT CRC32
 	_, err := Parse(buf.Bytes())
 	assert.EqualError(t, err, "astits: parsing PSI table failed: astits: Table CRC32 20 != computed CRC32 6969b13")
 
@@ -184,11 +184,11 @@ var psiSectionHeader = SectionHeader{
 func psiSectionHeaderBytes() []byte {
 	buf := &bytes.Buffer{}
 	w := bitstest.NewWriter(buf)
-	w.Write(uint8(0))       // Table ID
-	w.Write("1")            // Syntax section indicator
-	w.Write("1")            // Private bit
-	w.Write("11")           // Reserved
-	w.Write("101010101010") // Section length
+	_ = w.Write(uint8(0))       // Table ID
+	_ = w.Write("1")            // Syntax section indicator
+	_ = w.Write("1")            // Private bit
+	_ = w.Write("11")           // Reserved
+	_ = w.Write("101010101010") // Section length
 	return buf.Bytes()
 }
 
@@ -196,9 +196,9 @@ func TestParsePSISectionHeader(t *testing.T) {
 	// Unknown table type
 	buf := &bytes.Buffer{}
 	w := bitstest.NewWriter(buf)
-	w.Write(uint8(254)) // Table ID
-	w.Write("1")        // Syntax section indicator
-	w.Write("0000000")  // Finish the byte
+	_ = w.Write(uint8(254)) // Table ID
+	_ = w.Write("1")        // Syntax section indicator
+	_ = w.Write("0000000")  // Finish the byte
 	var d SectionHeader
 	_, _, err := d.parsePSISectionHeader(bytesiter.New(buf.Bytes()))
 	assert.Equal(t, d, SectionHeader{
@@ -250,12 +250,12 @@ var psiSectionSyntaxHeader = SectionSyntaxHeader{
 func psiSectionSyntaxHeaderBytes() []byte {
 	buf := &bytes.Buffer{}
 	w := bitstest.NewWriter(buf)
-	w.Write(uint16(1)) // Table ID extension
-	w.Write("11")      // Reserved bits
-	w.Write("10101")   // Version number
-	w.Write("1")       // Current/next indicator
-	w.Write(uint8(2))  // Section number
-	w.Write(uint8(3))  // Last section number
+	_ = w.Write(uint16(1)) // Table ID extension
+	_ = w.Write("11")      // Reserved bits
+	_ = w.Write("10101")   // Version number
+	_ = w.Write("1")       // Current/next indicator
+	_ = w.Write(uint8(2))  // Section number
+	_ = w.Write(uint8(3))  // Last section number
 	return buf.Bytes()
 }
 
@@ -276,16 +276,16 @@ var psiDataTestCases = []psiDataTestCase{
 	{
 		"PAT",
 		func(w *bitstest.Writer) {
-			w.Write(uint8(4))                      // Pointer field
-			w.Write([]byte{0, 0, 0, 0})            // Pointer field bytes
-			w.Write(uint8(0))                      // PAT table ID
-			w.Write("1")                           // PAT syntax section indicator
-			w.Write("1")                           // PAT private bit
-			w.Write("11")                          // PAT reserved
-			w.Write("000000010001")                // PAT section length
-			w.Write(psiSectionSyntaxHeaderBytes()) // PAT syntax section header
-			w.Write(patBytes())                    // PAT data
-			w.Write(uint32(0x60739f61))            // PAT CRC32
+			_ = w.Write(uint8(4))                      // Pointer field
+			_ = w.Write([]byte{0, 0, 0, 0})            // Pointer field bytes
+			_ = w.Write(uint8(0))                      // PAT table ID
+			_ = w.Write("1")                           // PAT syntax section indicator
+			_ = w.Write("1")                           // PAT private bit
+			_ = w.Write("11")                          // PAT reserved
+			_ = w.Write("000000010001")                // PAT section length
+			_ = w.Write(psiSectionSyntaxHeaderBytes()) // PAT syntax section header
+			_ = w.Write(patBytes())                    // PAT data
+			_ = w.Write(uint32(0x60739f61))            // PAT CRC32
 		},
 		&Data{
 			PointerField: 4,
@@ -309,16 +309,16 @@ var psiDataTestCases = []psiDataTestCase{
 	{
 		"PMT",
 		func(w *bitstest.Writer) {
-			w.Write(uint8(4))                      // Pointer field
-			w.Write([]byte{0, 0, 0, 0})            // Pointer field bytes
-			w.Write(uint8(2))                      // PMT table ID
-			w.Write("1")                           // PMT syntax section indicator
-			w.Write("1")                           // PMT private bit
-			w.Write("11")                          // PMT reserved
-			w.Write("000000011000")                // PMT section length
-			w.Write(psiSectionSyntaxHeaderBytes()) // PMT syntax section header
-			w.Write(pmtBytes())                    // PMT data
-			w.Write(uint32(0xc68442e8))            // PMT CRC32
+			_ = w.Write(uint8(4))                      // Pointer field
+			_ = w.Write([]byte{0, 0, 0, 0})            // Pointer field bytes
+			_ = w.Write(uint8(2))                      // PMT table ID
+			_ = w.Write("1")                           // PMT syntax section indicator
+			_ = w.Write("1")                           // PMT private bit
+			_ = w.Write("11")                          // PMT reserved
+			_ = w.Write("000000011000")                // PMT section length
+			_ = w.Write(psiSectionSyntaxHeaderBytes()) // PMT syntax section header
+			_ = w.Write(pmtBytes())                    // PMT data
+			_ = w.Write(uint32(0xc68442e8))            // PMT CRC32
 		},
 		&Data{
 			PointerField: 4,

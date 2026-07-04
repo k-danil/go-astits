@@ -3,11 +3,9 @@ package dvb
 import (
 	"encoding/binary"
 	"fmt"
-	"math"
 	"time"
 
 	"github.com/k-danil/go-astits/v2/internal/bytesiter"
-	"github.com/k-danil/go-astits/v2/internal/util"
 )
 
 // ParseTime parses a DVB time
@@ -26,26 +24,15 @@ func ParseTime(i *bytesiter.Iterator) (t time.Time, err error) {
 	}
 
 	// Date
-	mjd := float64(binary.BigEndian.Uint16(bs))
-	ytf := math.Floor((mjd - 15078.2) / 365.25)
-	mtf := math.Floor((mjd - 14956.1 - math.Floor(ytf*365.25)) / 30.6001)
-	mt := int(mtf)
-	var d = int(mjd - 14956 - math.Floor(ytf*365.25) - math.Floor(mtf*30.6001))
-
-	kb := mt>>1 == 7
-	k := int(util.B2U(kb))
-	y := int(ytf) + k
-	m := mt - 1 - k*12
+	day := mjdEpoch.Add(time.Duration(binary.BigEndian.Uint16(bs)) * 24 * time.Hour)
 
 	if bs, err = i.NextBytesNoCopy(3); err != nil || len(bs) < 3 {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return
 	}
-	t = time.Date(1900+y, time.Month(m), d,
-		int(parseDurationByte(bs[0])),
-		int(parseDurationByte(bs[1])),
-		int(parseDurationByte(bs[2])),
-		0, time.UTC)
+	t = day.Add(time.Duration(parseDurationByte(bs[0]))*time.Hour +
+		time.Duration(parseDurationByte(bs[1]))*time.Minute +
+		time.Duration(parseDurationByte(bs[2]))*time.Second)
 
 	return
 }
@@ -79,19 +66,13 @@ func parseDurationByte(i byte) time.Duration {
 	return time.Duration(i>>4*10 + i&0xf)
 }
 
+// mjdEpoch is 1858-11-17 UTC, day zero of the Modified Julian Date scale.
+var mjdEpoch = time.Date(1858, time.November, 17, 0, 0, 0, 0, time.UTC)
+
 func AppendTime(dst []byte, t time.Time) []byte {
-	year := t.Year() - 1900
-	month := t.Month()
-	day := t.Day()
-
-	l := 0
-	if month <= time.February {
-		l = 1
-	}
-
-	mjd := 14956 + day + int(float64(year-l)*365.25) + int(float64(int(month)+1+l*12)*30.6001)
-
+	t = t.UTC()
 	d := t.Sub(t.Truncate(24 * time.Hour))
+	mjd := int(t.Add(-d).Sub(mjdEpoch) / (24 * time.Hour))
 
 	dst = append(dst, byte(mjd>>8), byte(mjd))
 	return AppendDurationSeconds(dst, d)

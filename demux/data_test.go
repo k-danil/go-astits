@@ -108,9 +108,9 @@ func TestIsPSIPayload(t *testing.T) {
 func TestIsPESPayload(t *testing.T) {
 	buf := &bytes.Buffer{}
 	w := bitstest.NewWriter(buf)
-	w.Write("000000000000000100000000")
+	_ = w.Write("000000000000000100000000")
 	assert.False(t, isPESPayload(buf.Bytes()))
 	buf.Reset()
-	w.Write("00000000000000000000000100000000")
+	_ = w.Write("00000000000000000000000100000000")
 	assert.True(t, isPESPayload(buf.Bytes()))
 }

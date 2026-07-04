@@ -27,10 +27,10 @@ var descriptors = []Descriptor{
 }
 
 func descriptorsBytes(w *bitstest.Writer) {
-	w.Write("000000000011")             // Overall length
-	w.Write(uint8(TagStreamIdentifier)) // Tag
-	w.Write(uint8(1))                   // Length
-	w.Write(uint8(7))                   // Component tag
+	_ = w.Write("000000000011")             // Overall length
+	_ = w.Write(uint8(TagStreamIdentifier)) // Tag
+	_ = w.Write(uint8(1))                   // Length
+	_ = w.Write(uint8(7))                   // Component tag
 }
 
 type descriptorTest struct {
@@ -43,18 +43,18 @@ var descriptorTestTable = []descriptorTest{
 	{
 		"AC3",
 		func(w *bitstest.Writer) {
-			w.Write(uint8(TagAC3))  // Tag
-			w.Write(uint8(9))       // Length
-			w.Write("1")            // Component type flag
-			w.Write("1")            // BSID flag
-			w.Write("1")            // MainID flag
-			w.Write("1")            // ASVC flag
-			w.Write("1111")         // Reserved flags
-			w.Write(uint8(1))       // Component type
-			w.Write(uint8(2))       // BSID
-			w.Write(uint8(3))       // MainID
-			w.Write(uint8(4))       // ASVC
-			w.Write([]byte("info")) // Additional info
+			_ = w.Write(uint8(TagAC3))  // Tag
+			_ = w.Write(uint8(9))       // Length
+			_ = w.Write("1")            // Component type flag
+			_ = w.Write("1")            // BSID flag
+			_ = w.Write("1")            // MainID flag
+			_ = w.Write("1")            // ASVC flag
+			_ = w.Write("1111")         // Reserved flags
+			_ = w.Write(uint8(1))       // Component type
+			_ = w.Write(uint8(2))       // BSID
+			_ = w.Write(uint8(3))       // MainID
+			_ = w.Write(uint8(4))       // ASVC
+			_ = w.Write([]byte("info")) // Additional info
 		},
 		&AC3{
 			Header: Header{
@@ -74,10 +74,10 @@ var descriptorTestTable = []descriptorTest{
 	{
 		"ISO639LanguageAndAudioType",
 		func(w *bitstest.Writer) {
-			w.Write(uint8(TagISO639LanguageAndAudioType)) // Tag
-			w.Write(uint8(4))                             // Length
-			w.Write([]byte("eng"))                        // Language
-			w.Write(uint8(AudioTypeCleanEffects))         // Audio type
+			_ = w.Write(uint8(TagISO639LanguageAndAudioType)) // Tag
+			_ = w.Write(uint8(4))                             // Length
+			_ = w.Write([]byte("eng"))                        // Language
+			_ = w.Write(uint8(AudioTypeCleanEffects))         // Audio type
 		},
 		&ISO639LanguageAndAudioType{
 			Header: Header{
@@ -90,9 +90,9 @@ var descriptorTestTable = []descriptorTest{
 	{
 		"MaximumBitrate",
 		func(w *bitstest.Writer) {
-			w.Write(uint8(TagMaximumBitrate))   // Tag
-			w.Write(uint8(3))                   // Length
-			w.Write("110000000000000000000001") // Maximum bitrate
+			_ = w.Write(uint8(TagMaximumBitrate))   // Tag
+			_ = w.Write(uint8(3))                   // Length
+			_ = w.Write("110000000000000000000001") // Maximum bitrate
 		},
 		&MaximumBitrate{
 			Header: Header{
@@ -103,9 +103,9 @@ var descriptorTestTable = []descriptorTest{
 	{
 		"NetworkName",
 		func(w *bitstest.Writer) {
-			w.Write(uint8(TagNetworkName)) // Tag
-			w.Write(uint8(4))              // Length
-			w.Write([]byte("name"))        // Name
+			_ = w.Write(uint8(TagNetworkName)) // Tag
+			_ = w.Write(uint8(4))              // Length
+			_ = w.Write([]byte("name"))        // Name
 		},
 		&NetworkName{
 			Header: Header{
@@ -116,13 +116,13 @@ var descriptorTestTable = []descriptorTest{
 	{
 		"Service",
 		func(w *bitstest.Writer) {
-			w.Write(uint8(TagService))                          // Tag
-			w.Write(uint8(18))                                  // Length
-			w.Write(uint8(ServiceTypeDigitalTelevisionService)) // Type
-			w.Write(uint8(8))                                   // Provider name length
-			w.Write([]byte("provider"))                         // Provider name
-			w.Write(uint8(7))                                   // Service name length
-			w.Write([]byte("service"))                          // Service name
+			_ = w.Write(uint8(TagService))                          // Tag
+			_ = w.Write(uint8(18))                                  // Length
+			_ = w.Write(uint8(ServiceTypeDigitalTelevisionService)) // Type
+			_ = w.Write(uint8(8))                                   // Provider name length
+			_ = w.Write([]byte("provider"))                         // Provider name
+			_ = w.Write(uint8(7))                                   // Service name length
+			_ = w.Write([]byte("service"))                          // Service name
 		},
 		&Service{
 			Header: Header{
@@ -136,13 +136,13 @@ var descriptorTestTable = []descriptorTest{
 	{
 		"ShortEvent",
 		func(w *bitstest.Writer) {
-			w.Write(uint8(TagShortEvent)) // Tag
-			w.Write(uint8(14))            // Length
-			w.Write([]byte("eng"))        // Language code
-			w.Write(uint8(5))             // Event name length
-			w.Write([]byte("event"))      // Event name
-			w.Write(uint8(4))             // Text length
-			w.Write([]byte("text"))
+			_ = w.Write(uint8(TagShortEvent)) // Tag
+			_ = w.Write(uint8(14))            // Length
+			_ = w.Write([]byte("eng"))        // Language code
+			_ = w.Write(uint8(5))             // Event name length
+			_ = w.Write([]byte("event"))      // Event name
+			_ = w.Write(uint8(4))             // Text length
+			_ = w.Write([]byte("text"))
 		},
 		&ShortEvent{
 			Header: Header{
@@ -156,9 +156,9 @@ var descriptorTestTable = []descriptorTest{
 	{
 		"StreamIdentifier",
 		func(w *bitstest.Writer) {
-			w.Write(uint8(TagStreamIdentifier)) // Tag
-			w.Write(uint8(1))                   // Length
-			w.Write(uint8(2))                   // Component tag
+			_ = w.Write(uint8(TagStreamIdentifier)) // Tag
+			_ = w.Write(uint8(1))                   // Length
+			_ = w.Write(uint8(2))                   // Component tag
 		},
 		&StreamIdentifier{
 			Header: Header{
@@ -169,16 +169,16 @@ var descriptorTestTable = []descriptorTest{
 	{
 		"Subtitling",
 		func(w *bitstest.Writer) {
-			w.Write(uint8(TagSubtitling)) // Tag
-			w.Write(uint8(16))            // Length
-			w.Write([]byte("lg1"))        // Item #1 language
-			w.Write(uint8(1))             // Item #1 type
-			w.Write(uint16(2))            // Item #1 composition page
-			w.Write(uint16(3))            // Item #1 ancillary page
-			w.Write([]byte("lg2"))        // Item #2 language
-			w.Write(uint8(4))             // Item #2 type
-			w.Write(uint16(5))            // Item #2 composition page
-			w.Write(uint16(6))            // Item #2 ancillary page
+			_ = w.Write(uint8(TagSubtitling)) // Tag
+			_ = w.Write(uint8(16))            // Length
+			_ = w.Write([]byte("lg1"))        // Item #1 language
+			_ = w.Write(uint8(1))             // Item #1 type
+			_ = w.Write(uint16(2))            // Item #1 composition page
+			_ = w.Write(uint16(3))            // Item #1 ancillary page
+			_ = w.Write([]byte("lg2"))        // Item #2 language
+			_ = w.Write(uint8(4))             // Item #2 type
+			_ = w.Write(uint16(5))            // Item #2 composition page
+			_ = w.Write(uint16(6))            // Item #2 ancillary page
 		},
 		&Subtitling{
 			Header: Header{
@@ -202,16 +202,16 @@ var descriptorTestTable = []descriptorTest{
 	{
 		"Teletext",
 		func(w *bitstest.Writer) {
-			w.Write(uint8(TagTeletext)) // Tag
-			w.Write(uint8(10))          // Length
-			w.Write([]byte("lg1"))      // Item #1 language
-			w.Write("00001")            // Item #1 type
-			w.Write("010")              // Item #1 magazine
-			w.Write("00010010")         // Item #1 page number
-			w.Write([]byte("lg2"))      // Item #2 language
-			w.Write("00011")            // Item #2 type
-			w.Write("100")              // Item #2 magazine
-			w.Write("00100011")         // Item #2 page number
+			_ = w.Write(uint8(TagTeletext)) // Tag
+			_ = w.Write(uint8(10))          // Length
+			_ = w.Write([]byte("lg1"))      // Item #1 language
+			_ = w.Write("00001")            // Item #1 type
+			_ = w.Write("010")              // Item #1 magazine
+			_ = w.Write("00010010")         // Item #1 page number
+			_ = w.Write([]byte("lg2"))      // Item #2 language
+			_ = w.Write("00011")            // Item #2 type
+			_ = w.Write("100")              // Item #2 magazine
+			_ = w.Write("00100011")         // Item #2 page number
 		},
 		&Teletext{
 			Header: Header{
@@ -235,18 +235,18 @@ var descriptorTestTable = []descriptorTest{
 	{
 		"ExtendedEvent",
 		func(w *bitstest.Writer) {
-			w.Write(uint8(TagExtendedEvent)) // Tag
-			w.Write(uint8(30))               // Length
-			w.Write("0001")                  // Number
-			w.Write("0010")                  // Last descriptor number
-			w.Write([]byte("lan"))           // ISO 639 language code
-			w.Write(uint8(20))               // Length of items
-			w.Write(uint8(11))               // Item #1 description length
-			w.Write([]byte("description"))   // Item #1 description
-			w.Write(uint8(7))                // Item #1 content length
-			w.Write([]byte("content"))       // Item #1 content
-			w.Write(uint8(4))                // Text length
-			w.Write([]byte("text"))          // Text
+			_ = w.Write(uint8(TagExtendedEvent)) // Tag
+			_ = w.Write(uint8(30))               // Length
+			_ = w.Write("0001")                  // Number
+			_ = w.Write("0010")                  // Last descriptor number
+			_ = w.Write([]byte("lan"))           // ISO 639 language code
+			_ = w.Write(uint8(20))               // Length of items
+			_ = w.Write(uint8(11))               // Item #1 description length
+			_ = w.Write([]byte("description"))   // Item #1 description
+			_ = w.Write(uint8(7))                // Item #1 content length
+			_ = w.Write([]byte("content"))       // Item #1 content
+			_ = w.Write(uint8(4))                // Text length
+			_ = w.Write([]byte("text"))          // Text
 		},
 		&ExtendedEvent{
 			Header: Header{
@@ -265,24 +265,24 @@ var descriptorTestTable = []descriptorTest{
 	{
 		"EnhancedAC3",
 		func(w *bitstest.Writer) {
-			w.Write(uint8(TagEnhancedAC3)) // Tag
-			w.Write(uint8(12))             // Length
-			w.Write("1")                   // Component type flag
-			w.Write("1")                   // BSID flag
-			w.Write("1")                   // MainID flag
-			w.Write("1")                   // ASVC flag
-			w.Write("1")                   // Mix info exists
-			w.Write("1")                   // SubStream1 flag
-			w.Write("1")                   // SubStream2 flag
-			w.Write("1")                   // SubStream3 flag
-			w.Write(uint8(1))              // Component type
-			w.Write(uint8(2))              // BSID
-			w.Write(uint8(3))              // MainID
-			w.Write(uint8(4))              // ASVC
-			w.Write(uint8(5))              // SubStream1
-			w.Write(uint8(6))              // SubStream2
-			w.Write(uint8(7))              // SubStream3
-			w.Write([]byte("info"))        // Additional info
+			_ = w.Write(uint8(TagEnhancedAC3)) // Tag
+			_ = w.Write(uint8(12))             // Length
+			_ = w.Write("1")                   // Component type flag
+			_ = w.Write("1")                   // BSID flag
+			_ = w.Write("1")                   // MainID flag
+			_ = w.Write("1")                   // ASVC flag
+			_ = w.Write("1")                   // Mix info exists
+			_ = w.Write("1")                   // SubStream1 flag
+			_ = w.Write("1")                   // SubStream2 flag
+			_ = w.Write("1")                   // SubStream3 flag
+			_ = w.Write(uint8(1))              // Component type
+			_ = w.Write(uint8(2))              // BSID
+			_ = w.Write(uint8(3))              // MainID
+			_ = w.Write(uint8(4))              // ASVC
+			_ = w.Write(uint8(5))              // SubStream1
+			_ = w.Write(uint8(6))              // SubStream2
+			_ = w.Write(uint8(7))              // SubStream3
+			_ = w.Write([]byte("info"))        // Additional info
 		},
 		&EnhancedAC3{
 			Header: Header{
@@ -309,15 +309,15 @@ var descriptorTestTable = []descriptorTest{
 	{
 		"Extension",
 		func(w *bitstest.Writer) {
-			w.Write(uint8(TagExtension))                   // Tag
-			w.Write(uint8(12))                             // Length
-			w.Write(uint8(TagExtensionSupplementaryAudio)) // Extension tag
-			w.Write("1")                                   // Mix type
-			w.Write("10101")                               // Editorial classification
-			w.Write("1")                                   // Reserved
-			w.Write("1")                                   // Language code flag
-			w.Write([]byte("lan"))                         // Language code
-			w.Write([]byte("private"))                     // Private data
+			_ = w.Write(uint8(TagExtension))                   // Tag
+			_ = w.Write(uint8(12))                             // Length
+			_ = w.Write(uint8(TagExtensionSupplementaryAudio)) // Extension tag
+			_ = w.Write("1")                                   // Mix type
+			_ = w.Write("10101")                               // Editorial classification
+			_ = w.Write("1")                                   // Reserved
+			_ = w.Write("1")                                   // Language code flag
+			_ = w.Write([]byte("lan"))                         // Language code
+			_ = w.Write([]byte("private"))                     // Private data
 		},
 		&Extension{
 			Header: Header{
@@ -337,14 +337,14 @@ var descriptorTestTable = []descriptorTest{
 	{
 		"Component",
 		func(w *bitstest.Writer) {
-			w.Write(uint8(TagComponent)) // Tag
-			w.Write(uint8(10))           // Length
-			w.Write("1010")              // Stream content ext
-			w.Write("0101")              // Stream content
-			w.Write(uint8(1))            // Component type
-			w.Write(uint8(2))            // Component tag
-			w.Write([]byte("lan"))       // ISO639 language code
-			w.Write([]byte("text"))      // Text
+			_ = w.Write(uint8(TagComponent)) // Tag
+			_ = w.Write(uint8(10))           // Length
+			_ = w.Write("1010")              // Stream content ext
+			_ = w.Write("0101")              // Stream content
+			_ = w.Write(uint8(1))            // Component type
+			_ = w.Write(uint8(2))            // Component tag
+			_ = w.Write([]byte("lan"))       // ISO639 language code
+			_ = w.Write([]byte("text"))      // Text
 		},
 		&Component{
 			Header: Header{
@@ -361,11 +361,11 @@ var descriptorTestTable = []descriptorTest{
 	{
 		"Content",
 		func(w *bitstest.Writer) {
-			w.Write(uint8(TagContent)) // Tag
-			w.Write(uint8(2))          // Length
-			w.Write("0001")            // Item #1 content nibble level 1
-			w.Write("0010")            // Item #1 content nibble level 2
-			w.Write(uint8(3))          // Item #1 user byte
+			_ = w.Write(uint8(TagContent)) // Tag
+			_ = w.Write(uint8(2))          // Length
+			_ = w.Write("0001")            // Item #1 content nibble level 1
+			_ = w.Write("0010")            // Item #1 content nibble level 2
+			_ = w.Write(uint8(3))          // Item #1 user byte
 		},
 		&Content{
 			Header: Header{
@@ -380,10 +380,10 @@ var descriptorTestTable = []descriptorTest{
 	{
 		"ParentalRating",
 		func(w *bitstest.Writer) {
-			w.Write(uint8(TagParentalRating)) // Tag
-			w.Write(uint8(4))                 // Length
-			w.Write([]byte("cou"))            // Item #1 country code
-			w.Write(uint8(2))                 // Item #1 rating
+			_ = w.Write(uint8(TagParentalRating)) // Tag
+			_ = w.Write(uint8(4))                 // Length
+			_ = w.Write([]byte("cou"))            // Item #1 country code
+			_ = w.Write(uint8(2))                 // Item #1 rating
 		},
 		&ParentalRating{
 			Header: Header{
@@ -397,15 +397,15 @@ var descriptorTestTable = []descriptorTest{
 	{
 		"LocalTimeOffset",
 		func(w *bitstest.Writer) {
-			w.Write(uint8(TagLocalTimeOffset)) // Tag
-			w.Write(uint8(13))                 // Length
-			w.Write([]byte("cou"))             // Country code
-			w.Write("101010")                  // Country region ID
-			w.Write("1")                       // Reserved
-			w.Write("1")                       // Local time offset polarity
-			w.Write(dvbDurationMinutesBytes)   // Local time offset
-			w.Write(dvbTimeBytes)              // Time of change
-			w.Write(dvbDurationMinutesBytes)   // Next time offset
+			_ = w.Write(uint8(TagLocalTimeOffset)) // Tag
+			_ = w.Write(uint8(13))                 // Length
+			_ = w.Write([]byte("cou"))             // Country code
+			_ = w.Write("101010")                  // Country region ID
+			_ = w.Write("1")                       // Reserved
+			_ = w.Write("1")                       // Local time offset polarity
+			_ = w.Write(dvbDurationMinutesBytes)   // Local time offset
+			_ = w.Write(dvbTimeBytes)              // Time of change
+			_ = w.Write(dvbDurationMinutesBytes)   // Next time offset
 		},
 		&LocalTimeOffset{
 			Header: Header{
@@ -423,13 +423,13 @@ var descriptorTestTable = []descriptorTest{
 	{
 		"VBIData",
 		func(w *bitstest.Writer) {
-			w.Write(uint8(TagVBIData))                  // Tag
-			w.Write(uint8(3))                           // Length
-			w.Write(uint8(VBIDataServiceIDEBUTeletext)) // Service #1 id
-			w.Write(uint8(1))                           // Service #1 descriptor length
-			w.Write("11")                               // Service #1 descriptor reserved
-			w.Write("1")                                // Service #1 descriptor field polarity
-			w.Write("10101")                            // Service #1 descriptor line offset
+			_ = w.Write(uint8(TagVBIData))                  // Tag
+			_ = w.Write(uint8(3))                           // Length
+			_ = w.Write(uint8(VBIDataServiceIDEBUTeletext)) // Service #1 id
+			_ = w.Write(uint8(1))                           // Service #1 descriptor length
+			_ = w.Write("11")                               // Service #1 descriptor reserved
+			_ = w.Write("1")                                // Service #1 descriptor field polarity
+			_ = w.Write("10101")                            // Service #1 descriptor line offset
 		},
 		&VBIData{
 			Header: Header{
@@ -446,12 +446,12 @@ var descriptorTestTable = []descriptorTest{
 	{
 		"VBITeletext",
 		func(w *bitstest.Writer) {
-			w.Write(uint8(TagVBITeletext)) // Tag
-			w.Write(uint8(5))              // Length
-			w.Write([]byte("lan"))         // Item #1 language
-			w.Write("00001")               // Item #1 type
-			w.Write("010")                 // Item #1 magazine
-			w.Write("00010010")            // Item #1 page number
+			_ = w.Write(uint8(TagVBITeletext)) // Tag
+			_ = w.Write(uint8(5))              // Length
+			_ = w.Write([]byte("lan"))         // Item #1 language
+			_ = w.Write("00001")               // Item #1 type
+			_ = w.Write("010")                 // Item #1 magazine
+			_ = w.Write("00010010")            // Item #1 page number
 		},
 		&Teletext{
 			Header: Header{
@@ -467,17 +467,17 @@ var descriptorTestTable = []descriptorTest{
 	{
 		"AVCVideo",
 		func(w *bitstest.Writer) {
-			w.Write(uint8(TagAVCVideo)) // Tag
-			w.Write(uint8(4))           // Length
-			w.Write(uint8(1))           // Profile idc
-			w.Write("1")                // Constraint set0 flag
-			w.Write("1")                // Constraint set1 flag
-			w.Write("1")                // Constraint set1 flag
-			w.Write("10101")            // Compatible flags
-			w.Write(uint8(2))           // Level idc
-			w.Write("1")                // AVC still present
-			w.Write("1")                // AVC 24 hour picture flag
-			w.Write("111111")           // Reserved
+			_ = w.Write(uint8(TagAVCVideo)) // Tag
+			_ = w.Write(uint8(4))           // Length
+			_ = w.Write(uint8(1))           // Profile idc
+			_ = w.Write("1")                // Constraint set0 flag
+			_ = w.Write("1")                // Constraint set1 flag
+			_ = w.Write("1")                // Constraint set1 flag
+			_ = w.Write("10101")            // Compatible flags
+			_ = w.Write(uint8(2))           // Level idc
+			_ = w.Write("1")                // AVC still present
+			_ = w.Write("1")                // AVC 24 hour picture flag
+			_ = w.Write("111111")           // Reserved
 		},
 		&AVCVideo{
 			Header: Header{
@@ -496,9 +496,9 @@ var descriptorTestTable = []descriptorTest{
 	{
 		"PrivateDataSpecifier",
 		func(w *bitstest.Writer) {
-			w.Write(uint8(TagPrivateDataSpecifier)) // Tag
-			w.Write(uint8(4))                       // Length
-			w.Write(uint32(128))                    // Private data specifier
+			_ = w.Write(uint8(TagPrivateDataSpecifier)) // Tag
+			_ = w.Write(uint8(4))                       // Length
+			_ = w.Write(uint32(128))                    // Private data specifier
 		},
 		&PrivateDataSpecifier{
 			Header: Header{
@@ -510,9 +510,9 @@ var descriptorTestTable = []descriptorTest{
 	{
 		"DataStreamAlignment",
 		func(w *bitstest.Writer) {
-			w.Write(uint8(TagDataStreamAlignment)) // Tag
-			w.Write(uint8(1))                      // Length
-			w.Write(uint8(2))                      // Type
+			_ = w.Write(uint8(TagDataStreamAlignment)) // Tag
+			_ = w.Write(uint8(1))                      // Length
+			_ = w.Write(uint8(2))                      // Type
 		},
 		&DataStreamAlignment{
 			Header: Header{
@@ -524,9 +524,9 @@ var descriptorTestTable = []descriptorTest{
 	{
 		"PrivateDataIndicator",
 		func(w *bitstest.Writer) {
-			w.Write(uint8(TagPrivateDataIndicator)) // Tag
-			w.Write(uint8(4))                       // Length
-			w.Write(uint32(127))                    // Private data indicator
+			_ = w.Write(uint8(TagPrivateDataIndicator)) // Tag
+			_ = w.Write(uint8(4))                       // Length
+			_ = w.Write(uint32(127))                    // Private data indicator
 		},
 		&PrivateDataIndicator{
 			Header: Header{
@@ -538,9 +538,9 @@ var descriptorTestTable = []descriptorTest{
 	{
 		"UserDefined",
 		func(w *bitstest.Writer) {
-			w.Write(uint8(0x80))    // Tag
-			w.Write(uint8(4))       // Length
-			w.Write([]byte("test")) // User defined
+			_ = w.Write(uint8(0x80))    // Tag
+			_ = w.Write(uint8(4))       // Length
+			_ = w.Write([]byte("test")) // User defined
 		},
 		&UserDefined{
 			Header: Header{
@@ -551,10 +551,10 @@ var descriptorTestTable = []descriptorTest{
 	{
 		"Registration",
 		func(w *bitstest.Writer) {
-			w.Write(uint8(TagRegistration)) // Tag
-			w.Write(uint8(8))               // Length
-			w.Write(uint32(1))              // Format identifier
-			w.Write([]byte("test"))         // Additional identification info
+			_ = w.Write(uint8(TagRegistration)) // Tag
+			_ = w.Write(uint8(8))               // Length
+			_ = w.Write(uint32(1))              // Format identifier
+			_ = w.Write([]byte("test"))         // Additional identification info
 		},
 		&Registration{
 			Header: Header{
@@ -567,9 +567,9 @@ var descriptorTestTable = []descriptorTest{
 	{
 		"Unknown",
 		func(w *bitstest.Writer) {
-			w.Write(uint8(0x1))     // Tag
-			w.Write(uint8(4))       // Length
-			w.Write([]byte("test")) // Content
+			_ = w.Write(uint8(0x1))     // Tag
+			_ = w.Write(uint8(4))       // Length
+			_ = w.Write([]byte("test")) // Content
 		},
 		&Unknown{
 			Header: Header{
@@ -581,10 +581,10 @@ var descriptorTestTable = []descriptorTest{
 	{
 		"Extension",
 		func(w *bitstest.Writer) {
-			w.Write(uint8(TagExtension)) // Tag
-			w.Write(uint8(5))            // Length
-			w.Write(uint8(0))            // Extension tag
-			w.Write([]byte("test"))      // Content
+			_ = w.Write(uint8(TagExtension)) // Tag
+			_ = w.Write(uint8(5))            // Length
+			_ = w.Write(uint8(0))            // Extension tag
+			_ = w.Write([]byte("test"))      // Content
 		},
 		&Extension{
 			Header: Header{
