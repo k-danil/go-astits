@@ -3,7 +3,6 @@ package demux
 import (
 	"math/bits"
 	"sync"
-	"unsafe"
 )
 
 // poolOfPayload global variable is used to ease access to pool from any place of the code
@@ -39,8 +38,10 @@ func initPool() *poolPayload {
 func (ptp *poolPayload) get(size int) (dp *dataPayload) {
 	s := uint(size)
 	idx := bits.Len(s) - 10
-	idx *= int(*(*uint8)(unsafe.Pointer(new(idx >= 0))))
-	if idx < len(ptp.sp) && idx >= 0 {
+	if idx < 0 {
+		idx = 0
+	}
+	if idx < len(ptp.sp) {
 		dp, _ = ptp.sp[idx].Get().(*dataPayload)
 		if uint(cap(dp.bs)) >= s {
 			dp.bs = dp.bs[:s]

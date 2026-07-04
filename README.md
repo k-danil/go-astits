@@ -24,7 +24,7 @@ API conventions: `Parse(bs []byte) (n int, err error)` on slices; `Put(bs []byte
 fixed-size serialization (panics on short buffer, like `binary.BigEndian`); `Append(dst
 []byte) []byte` for variable-size; `CalcLength() int` everywhere; constructors `demux.New` /
 `mux.New`; functional options `WithX`. No dependencies outside the standard
-library (`testify` in tests): direct slice parsing and byte appending throughout, bit-level
+library (`testify` in tests) and no `unsafe`: direct slice parsing and byte appending throughout, bit-level
 test fixtures are built with an internal ~80-line bit writer.
 
 ## Pros
