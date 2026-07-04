@@ -54,6 +54,19 @@ func (ptp *poolPayload) get(size int) (dp *dataPayload) {
 	}
 }
 
+// getClass returns a payload object with an empty slice backed by at least
+// the class capacity.
+func (ptp *poolPayload) getClass(class uint8) (dp *dataPayload) {
+	if int(class) < len(ptp.sp) {
+		dp, _ = ptp.sp[class].Get().(*dataPayload)
+		dp.bs = dp.bs[:0]
+		return
+	}
+	return &dataPayload{
+		bs: make([]byte, 0, 1024<<class),
+	}
+}
+
 // put returns reference to the payload slice back to pool
 // Don't use the payload after a call to put
 func (ptp *poolPayload) put(dp *dataPayload) {

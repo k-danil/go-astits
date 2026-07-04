@@ -365,17 +365,21 @@ func TestWriteTablesMultiSectionPAT(t *testing.T) {
 	dmx := demux.New(context.Background(), bytes.NewReader(buf.Bytes()), demux.WithPacketSize(ts.PacketSize))
 	got := map[uint16]uint16{}
 	for {
-		d, derr := dmx.NextData()
+		ev, derr := dmx.Next()
 		if errors.Is(derr, ts.ErrNoMorePackets) {
 			break
 		}
 		require.NoError(t, derr)
-		if d.PAT != nil {
-			for _, p := range d.PAT.Programs {
-				got[p.ProgramMapID] = p.ProgramNumber
+		if ev != demux.EventPAT {
+			continue
+		}
+		if _, data := dmx.Section(); data != nil {
+			if pat, isPAT := data.(*psi.PAT); isPAT {
+				for _, p := range pat.Programs {
+					got[p.ProgramMapID] = p.ProgramNumber
+				}
 			}
 		}
-		d.Close()
 	}
 	assert.Len(t, got, extraPrograms+1)
 	assert.Equal(t, uint16(42+1), got[uint16(0x200+42)])

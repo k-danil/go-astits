@@ -62,14 +62,24 @@ func TestZeroCopyPackets(t *testing.T) {
 	}
 }
 
-func TestZeroCopyNextDataForbidden(t *testing.T) {
-	stream := offsetTestStream([]uint16{0x100})
+// The accumulator copies payloads out before the batch refill, so the event
+// pump is legal in zero-copy mode.
+func TestZeroCopyNext(t *testing.T) {
+	stream := fuzzSeedStream()
 	dmx := New(context.Background(), bytes.NewReader(stream),
-		WithPacketSize(ts.PacketSize),
-		WithZeroCopyPackets(4),
+		WithPacketSize(192),
+		WithZeroCopyPackets(1), // refill on every packet: the strictest lifetime
 	)
-	_, err := dmx.NextData()
-	assert.True(t, errors.Is(err, ErrZeroCopyNextData))
+	events := 0
+	for {
+		if _, err := dmx.Next(); err != nil {
+			assert.True(t, errors.Is(err, ts.ErrNoMorePackets))
+			break
+		}
+		events++
+	}
+	assert.NotZero(t, events)
+	assert.NotNil(t, dmx.PAT())
 }
 
 func TestZeroCopyViewLifetime(t *testing.T) {

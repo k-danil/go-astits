@@ -34,27 +34,26 @@ func TestPSIDedup(t *testing.T) {
 		}
 	}
 
-	countDatas := func(dmx *Demuxer) (n int) {
+	countEvents := func(dmx *Demuxer) (n int) {
 		for {
-			d, err := dmx.NextData()
+			_, err := dmx.Next()
 			if err != nil {
 				require.True(t, errors.Is(err, ts.ErrNoMorePackets))
 				return
 			}
 			n++
-			d.Close()
 		}
 	}
 
-	// Identical repeated sections are suppressed: same data count as from a single copy
+	// Identical repeated sections are suppressed: same event count as from a single copy
 	single := New(context.Background(), bytes.NewReader(buf.Bytes()[:singleCopyLen]))
 	dmx := New(context.Background(), bytes.NewReader(buf.Bytes()))
-	want := countDatas(single)
+	want := countEvents(single)
 	require.NotZero(t, want)
-	require.Equal(t, want, countDatas(dmx))
+	require.Equal(t, want, countEvents(dmx))
 
 	// Rewind resets the cache — sections are emitted again
 	_, err := dmx.Rewind()
 	require.NoError(t, err)
-	require.Equal(t, want, countDatas(dmx))
+	require.Equal(t, want, countEvents(dmx))
 }
