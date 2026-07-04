@@ -34,7 +34,7 @@ var poolOfPacket = sync.Pool{
 // https://en.wikipedia.org/wiki/MPEG_transport_stream
 type Packet struct {
 	bs  [M2TSPacketSize]byte
-	raw []byte // the on-wire bytes: a subslice of bs in copy mode, a batch view in zero-copy mode
+	raw []byte                // the on-wire bytes: a subslice of bs in copy mode, a batch view in zero-copy mode
 	af  PacketAdaptationField // AdaptationField points here — no per-packet allocation
 
 	Header          PacketHeader
@@ -47,6 +47,8 @@ type Packet struct {
 	Offset int64
 }
 
+// UpdateHeader re-serializes Header into the packet bytes; call it after
+// mutating a header field (e.g. a PID rewrite) so Raw reflects the change.
 func (p *Packet) UpdateHeader() {
 	bs := p.raw
 	if bs == nil {
@@ -66,7 +68,6 @@ type PacketHeader struct {
 	TransportPriority          bool   // Set when the current packet has a higher priority than other packets with the same PID.
 	TransportScramblingControl uint8
 }
-
 
 // PacketAdaptationField represents a packet adaptation field
 type PacketAdaptationField struct {
@@ -137,6 +138,8 @@ type PacketAdaptationExtensionField struct {
 	SpliceType             uint8 // Indicates the parameters of the H.262 splice.
 }
 
+// NewPacket returns a zeroed packet from the pool; return it with Close when
+// done. The demuxer manages its own packets — use this for hand-built ones.
 func NewPacket() (p *Packet) {
 	p, _ = poolOfPacket.Get().(*Packet)
 	p.Reset()
@@ -159,6 +162,7 @@ func (p *Packet) SetAdaptationField(src *PacketAdaptationField) {
 	p.AdaptationField = &p.af
 }
 
+// Close returns the packet to the pool. Do not use the packet afterwards.
 func (p *Packet) Close() {
 	poolOfPacket.Put(p)
 }

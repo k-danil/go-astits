@@ -21,6 +21,7 @@ type ISO639LanguageAndAudioType struct {
 	Items  []ISO639Item
 }
 
+// ISO639Item is one language + audio-type entry of an ISO 639 descriptor.
 type ISO639Item struct {
 	Language [3]byte
 	Type     uint8

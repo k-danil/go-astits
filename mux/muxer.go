@@ -25,6 +25,7 @@ var (
 	ErrPCRPIDInvalid    = errors.New("astits: PCR PID invalid")
 )
 
+// Muxer writes an MPEG-TS stream for a single program.
 type Muxer struct {
 	ctx context.Context
 	w   io.Writer
@@ -70,6 +71,8 @@ type esContext struct {
 	cc wrappingCounter
 }
 
+// WithTablesRetransmitPeriod sets how often PAT/PMT are re-emitted, counted in
+// written PES packets.
 func WithTablesRetransmitPeriod(newPeriod int) func(*Muxer) {
 	return func(m *Muxer) {
 		m.tablesRetransmitPeriod = newPeriod
@@ -78,6 +81,8 @@ func WithTablesRetransmitPeriod(newPeriod int) func(*Muxer) {
 
 // TODO MuxerOptAutodetectPCRPID selecting first video PID for each PMT, falling back to first audio, falling back to any other
 
+// New creates a muxer writing to w; register streams with AddElementaryStream
+// before writing data.
 func New(ctx context.Context, w io.Writer, opts ...func(*Muxer)) (m *Muxer) {
 	m = &Muxer{
 		ctx: ctx,
@@ -170,6 +175,8 @@ func (m *Muxer) SetPCRPID(pid uint16) {
 	m.pmtUpdated = true
 }
 
+// SetCC seeds the continuity counter for a PID so passthrough output continues
+// the source packet sequence without a discontinuity.
 func (m *Muxer) SetCC(pid uint16, cc uint8) error {
 	ctx := m.esContexts.Get(pid)
 	if ctx == nil {
@@ -341,6 +348,7 @@ func (m *Muxer) retransmitTables(force bool) (n int, err error) {
 	return
 }
 
+// WriteTables writes the PAT and the PMT for the registered program.
 func (m *Muxer) WriteTables() (bytesWritten int, err error) {
 	if err = m.generatePAT(); err != nil {
 		return

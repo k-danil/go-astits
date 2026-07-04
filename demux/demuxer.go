@@ -87,6 +87,7 @@ func New(ctx context.Context, r io.Reader, opts ...func(*Demuxer)) (d *Demuxer) 
 	return
 }
 
+// GetStats returns the number of stream bytes seen per PID, keyed by PID.
 func (dmx *Demuxer) GetStats() (ret map[uint64]uint) {
 	var packetSize uint
 	if dmx.packetBuffer != nil {

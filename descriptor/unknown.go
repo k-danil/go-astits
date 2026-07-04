@@ -6,6 +6,8 @@ import (
 	"github.com/k-danil/go-astits/v2/internal/bytesiter"
 )
 
+// Unknown holds the raw body of a standard-range descriptor whose tag this
+// package does not model.
 type Unknown struct {
 	Header  Header
 	Content []byte

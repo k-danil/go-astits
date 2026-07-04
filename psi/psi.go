@@ -42,6 +42,7 @@ var ErrSectionOverflow = errors.New("astits: section data does not fit a single 
 // maxSectionLength bounds the section_length field (12 bits, capped by spec).
 const maxSectionLength = 1021
 
+// TableID identifies a PSI table (PAT, PMT, EIT, NIT, SDT, TOT, ...).
 type TableID uint8
 
 const (

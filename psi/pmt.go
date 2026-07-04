@@ -8,6 +8,7 @@ import (
 	"github.com/k-danil/go-astits/v2/internal/bytesiter"
 )
 
+// StreamType is a PMT elementary-stream type (a video, audio or data codec).
 type StreamType uint8
 
 // Stream types

@@ -7,6 +7,7 @@ import (
 	"github.com/k-danil/go-astits/v2/internal/bytesiter"
 )
 
+// Tag identifies a descriptor type on the wire.
 type Tag uint8
 
 // Descriptor tags
@@ -126,6 +127,8 @@ func AppendWithLength(dst []byte, ds []Descriptor) []byte {
 	return dst
 }
 
+// CalcLength returns the total serialized size of a descriptor list,
+// including the 2-byte tag+length prefix of each entry.
 func CalcLength(ds []Descriptor) (length int) {
 	for _, d := range ds {
 		length += 2 // tag and length
@@ -134,6 +137,8 @@ func CalcLength(ds []Descriptor) (length int) {
 	return
 }
 
+// Descriptor is a parsed DVB or MPEG descriptor. Concrete types carry the
+// parsed fields; all serialize through CalcLength and Append.
 type Descriptor interface {
 	// CalcLength returns the value of the descriptor_length field: the body
 	// size without the 2-byte tag+length prefix.
@@ -142,6 +147,7 @@ type Descriptor interface {
 	Append(dst []byte) []byte
 }
 
+// Header is the 2-byte tag+length prefix common to every descriptor.
 type Header struct {
 	Tag    Tag // the tag defines the structure of the contained data following the descriptor length.
 	Length uint8

@@ -11,6 +11,8 @@ func newDescriptorUserDefined(i *bytesiter.Iterator, h Header, _ int) (dd Descri
 	return
 }
 
+// UserDefined holds the raw body of a descriptor in the user-defined tag
+// range (0x80 and above), whose meaning is private to the stream.
 type UserDefined struct {
 	Header Header
 	Data   []byte
