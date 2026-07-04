@@ -3,21 +3,21 @@ package descriptor
 import (
 	"fmt"
 
-	"github.com/asticode/go-astikit"
+	"github.com/k-danil/go-astits/internal/bytesiter"
 )
 
-// DescriptorShortEvent represents a short event descriptor
+// ShortEvent represents a short event descriptor
 // Chapter: 6.2.37 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
-type DescriptorShortEvent struct {
+type ShortEvent struct {
 	EventName []byte
 	Text      []byte
-	Header    DescriptorHeader
+	Header    Header
 	Language  [3]byte
 }
 
-func newDescriptorShortEvent(i *astikit.BytesIterator, h DescriptorHeader, _ int) (dd Descriptor, err error) {
+func newDescriptorShortEvent(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {
 	// Create descriptor
-	d := &DescriptorShortEvent{
+	d := &ShortEvent{
 		Header: h,
 	}
 	dd = d
@@ -64,32 +64,15 @@ func newDescriptorShortEvent(i *astikit.BytesIterator, h DescriptorHeader, _ int
 	return
 }
 
-func (d *DescriptorShortEvent) length() uint8 {
-	ret := 3 + 1 + 1 // language code and lengths
-	ret += len(d.EventName)
-	ret += len(d.Text)
-	return uint8(ret)
+func (d *ShortEvent) CalcLength() int {
+	return 3 + 1 + 1 + len(d.EventName) + len(d.Text) // language code and lengths
 }
 
-func (d *DescriptorShortEvent) write(w *astikit.BitsWriter) (int, error) {
-	b := astikit.NewBitsWriterBatch(w)
-
-	length := d.length()
-	b.Write(uint8(d.Header.Tag))
-	b.Write(length)
-
-	if err := b.Err(); err != nil {
-		return 0, err
-	}
-	written := int(length) + 2
-
-	b.Write(d.Language[:])
-
-	b.Write(uint8(len(d.EventName)))
-	b.Write(d.EventName)
-
-	b.Write(uint8(len(d.Text)))
-	b.Write(d.Text)
-
-	return written, b.Err()
+func (d *ShortEvent) Append(dst []byte) []byte {
+	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	dst = append(dst, d.Language[:]...)
+	dst = append(dst, uint8(len(d.EventName)))
+	dst = append(dst, d.EventName...)
+	dst = append(dst, uint8(len(d.Text)))
+	return append(dst, d.Text...)
 }

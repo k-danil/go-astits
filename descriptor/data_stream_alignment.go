@@ -3,7 +3,7 @@ package descriptor
 import (
 	"fmt"
 
-	"github.com/asticode/go-astikit"
+	"github.com/k-danil/go-astits/internal/bytesiter"
 )
 
 // Data stream alignments
@@ -16,19 +16,19 @@ const (
 	DataStreamAligmentVideoSEQ               = 0x4
 )
 
-// DescriptorDataStreamAlignment represents a data stream alignment descriptor
-type DescriptorDataStreamAlignment struct {
-	Header DescriptorHeader
+// DataStreamAlignment represents a data stream alignment descriptor
+type DataStreamAlignment struct {
+	Header Header
 	Type   uint8
 }
 
-func newDescriptorDataStreamAlignment(i *astikit.BytesIterator, h DescriptorHeader, _ int) (dd Descriptor, err error) {
+func newDescriptorDataStreamAlignment(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {
 	var b byte
 	if b, err = i.NextByte(); err != nil {
 		err = fmt.Errorf("astits: fetching next byte failed: %w", err)
 		return
 	}
-	d := &DescriptorDataStreamAlignment{
+	d := &DataStreamAlignment{
 		Header: h,
 		Type:   b,
 	}
@@ -36,23 +36,11 @@ func newDescriptorDataStreamAlignment(i *astikit.BytesIterator, h DescriptorHead
 	return
 }
 
-func (*DescriptorDataStreamAlignment) length() uint8 {
+func (*DataStreamAlignment) CalcLength() int {
 	return 1
 }
 
-func (d *DescriptorDataStreamAlignment) write(w *astikit.BitsWriter) (int, error) {
-	b := astikit.NewBitsWriterBatch(w)
-
-	length := d.length()
-	b.Write(uint8(d.Header.Tag))
-	b.Write(length)
-
-	if err := b.Err(); err != nil {
-		return 0, err
-	}
-	written := int(length) + 2
-
-	b.Write(d.Type)
-
-	return written, b.Err()
+func (d *DataStreamAlignment) Append(dst []byte) []byte {
+	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	return append(dst, d.Type)
 }

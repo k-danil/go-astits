@@ -3,7 +3,7 @@ package descriptor
 import (
 	"fmt"
 
-	"github.com/asticode/go-astikit"
+	"github.com/k-danil/go-astits/internal/bytesiter"
 )
 
 // Audio types
@@ -14,19 +14,19 @@ const (
 	AudioTypeVisualImpairedCommentary = 0x3
 )
 
-// DescriptorISO639LanguageAndAudioType represents an ISO639 language descriptor
+// ISO639LanguageAndAudioType represents an ISO639 language descriptor
 // https://github.com/gfto/bitstream/blob/master/mpeg/psi/desc_0a.h
 // FIXME (barbashov) according to Chapter 2.6.18 ISO/IEC 13818-1:2015 there could be not one, but multiple such descriptors
-type DescriptorISO639LanguageAndAudioType struct {
+type ISO639LanguageAndAudioType struct {
 	Language [3]byte
-	Header   DescriptorHeader
+	Header   Header
 	Type     uint8
 }
 
 // In some actual cases, the length is 3 and the language is described in only 2 bytes
 //
 
-func newDescriptorISO639LanguageAndAudioType(i *astikit.BytesIterator, h DescriptorHeader, offsetEnd int) (dd Descriptor, err error) {
+func newDescriptorISO639LanguageAndAudioType(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
 	// Get next bytes
 	var bs []byte
 	if bs, err = i.NextBytesNoCopy(offsetEnd - i.Offset()); err != nil {
@@ -35,7 +35,7 @@ func newDescriptorISO639LanguageAndAudioType(i *astikit.BytesIterator, h Descrip
 	}
 
 	// Create descriptor
-	d := &DescriptorISO639LanguageAndAudioType{
+	d := &ISO639LanguageAndAudioType{
 		Header: h,
 		Type:   bs[len(bs)-1],
 	}
@@ -44,24 +44,12 @@ func newDescriptorISO639LanguageAndAudioType(i *astikit.BytesIterator, h Descrip
 	return
 }
 
-func (*DescriptorISO639LanguageAndAudioType) length() uint8 {
+func (*ISO639LanguageAndAudioType) CalcLength() int {
 	return 3 + 1 // language code + type
 }
 
-func (d *DescriptorISO639LanguageAndAudioType) write(w *astikit.BitsWriter) (int, error) {
-	b := astikit.NewBitsWriterBatch(w)
-
-	length := d.length()
-	b.Write(uint8(d.Header.Tag))
-	b.Write(length)
-
-	if err := b.Err(); err != nil {
-		return 0, err
-	}
-	written := int(length) + 2
-
-	b.Write(d.Language[:])
-	b.Write(d.Type)
-
-	return written, b.Err()
+func (d *ISO639LanguageAndAudioType) Append(dst []byte) []byte {
+	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	dst = append(dst, d.Language[:]...)
+	return append(dst, d.Type)
 }

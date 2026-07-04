@@ -1,12 +1,12 @@
 package dvb
 
 import (
-	"bytes"
 	"testing"
 	"time"
 
-	"github.com/asticode/go-astikit"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/k-danil/go-astits/internal/bytesiter"
 )
 
 var (
@@ -19,46 +19,31 @@ var (
 )
 
 func TestParseDVBTime(t *testing.T) {
-	d, err := ParseTime(astikit.NewBytesIterator(dvbTimeBytes))
+	d, err := ParseTime(bytesiter.New(dvbTimeBytes))
 	assert.Equal(t, dvbTime, d)
 	assert.NoError(t, err)
 }
 
 func TestParseDVBDurationMinutes(t *testing.T) {
-	d, err := ParseDurationMinutes(astikit.NewBytesIterator(dvbDurationMinutesBytes))
+	d, err := ParseDurationMinutes(bytesiter.New(dvbDurationMinutesBytes))
 	assert.Equal(t, dvbDurationMinutes, d)
 	assert.NoError(t, err)
 }
 
 func TestParseDVBDurationSeconds(t *testing.T) {
-	d, err := ParseDurationSeconds(astikit.NewBytesIterator(dvbDurationSecondsBytes))
+	d, err := ParseDurationSeconds(bytesiter.New(dvbDurationSecondsBytes))
 	assert.Equal(t, dvbDurationSeconds, d)
 	assert.NoError(t, err)
 }
 
 func TestWriteDVBTime(t *testing.T) {
-	buf := &bytes.Buffer{}
-	w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: buf})
-	n, err := WriteTime(w, dvbTime)
-	assert.NoError(t, err)
-	assert.Equal(t, n, buf.Len())
-	assert.Equal(t, dvbTimeBytes, buf.Bytes())
+	assert.Equal(t, dvbTimeBytes, AppendTime(nil, dvbTime))
 }
 
 func TestWriteDVBDurationMinutes(t *testing.T) {
-	buf := &bytes.Buffer{}
-	w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: buf})
-	n, err := WriteDurationMinutes(w, dvbDurationMinutes)
-	assert.NoError(t, err)
-	assert.Equal(t, n, buf.Len())
-	assert.Equal(t, dvbDurationMinutesBytes, buf.Bytes())
+	assert.Equal(t, dvbDurationMinutesBytes, AppendDurationMinutes(nil, dvbDurationMinutes))
 }
 
 func TestWriteDVBDurationSeconds(t *testing.T) {
-	buf := &bytes.Buffer{}
-	w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: buf})
-	n, err := WriteDurationSeconds(w, dvbDurationSeconds)
-	assert.NoError(t, err)
-	assert.Equal(t, n, buf.Len())
-	assert.Equal(t, dvbDurationSecondsBytes, buf.Bytes())
+	assert.Equal(t, dvbDurationSecondsBytes, AppendDurationSeconds(nil, dvbDurationSeconds))
 }

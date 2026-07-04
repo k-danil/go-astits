@@ -23,7 +23,7 @@ func offsetTestStream(pids []uint16) []byte {
 		}, []byte{0xde, 0xad, 0xbe, 0xef})
 		cc[pid] = (cc[pid] + 1) & 0xf
 		// packetShort pads without accounting for the header and returns 192 bytes
-		buf.Write(b[:ts.MpegTsPacketSize])
+		buf.Write(b[:ts.PacketSize])
 	}
 	return buf.Bytes()
 }
@@ -47,11 +47,11 @@ func TestPacketOffset(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			opts := []func(*Demuxer){DemuxerOptPacketSize(ts.MpegTsPacketSize)}
+			opts := []func(*Demuxer){WithPacketSize(ts.PacketSize)}
 			if tc.skipper != nil {
-				opts = append(opts, DemuxerOptPacketSkipper(tc.skipper))
+				opts = append(opts, WithPacketSkipper(tc.skipper))
 			}
-			dmx := NewDemuxer(context.Background(), bytes.NewReader(stream), opts...)
+			dmx := New(context.Background(), bytes.NewReader(stream), opts...)
 
 			p := ts.NewPacket()
 			defer p.Close()

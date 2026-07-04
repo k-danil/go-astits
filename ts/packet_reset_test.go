@@ -14,7 +14,7 @@ func TestPacketResetKeepsParseCorrect(t *testing.T) {
 	for i := range p.bs {
 		p.bs[i] = 0xa5
 	}
-	p.s = MpegTsPacketSize
+	p.s = PacketSize
 	p.Offset = 42
 
 	p.Reset()
@@ -25,7 +25,7 @@ func TestPacketResetKeepsParseCorrect(t *testing.T) {
 	assert.Nil(t, p.Payload)
 
 	b, _ := packetShort(PacketHeader{HasPayload: true, PID: 0x100}, []byte{0xde, 0xad, 0xbe, 0xef})
-	pb, err := NewPacketBuffer(bytes.NewReader(b[:MpegTsPacketSize]), MpegTsPacketSize, 0, EmptySkipper, 0)
+	pb, err := NewPacketBuffer(bytes.NewReader(b[:PacketSize]), PacketSize, 0, EmptySkipper, 0)
 	require.NoError(t, err)
 	require.NoError(t, pb.Next(p))
 	assert.Equal(t, uint16(0x100), p.Header.PID)

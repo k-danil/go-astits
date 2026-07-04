@@ -6,9 +6,11 @@ import (
 
 	"github.com/asticode/go-astikit"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/k-danil/go-astits/internal/bytesiter"
 )
 
-var tot = &TOTData{
+var tot = &TOT{
 	Descriptors: descriptors,
 	UTCTime:     dvbTime,
 }
@@ -23,7 +25,7 @@ func totBytes() []byte {
 }
 
 func TestParseTOTSection(t *testing.T) {
-	d, err := parseTOTSection(astikit.NewBytesIterator(totBytes()))
+	d, err := parseTOTSection(bytesiter.New(totBytes()))
 	assert.Equal(t, d, tot)
 	assert.NoError(t, err)
 }

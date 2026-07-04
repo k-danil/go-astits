@@ -9,19 +9,19 @@ import (
 )
 
 var descriptors = []descriptor.Descriptor{
-	&descriptor.DescriptorStreamIdentifier{
-		Header: descriptor.DescriptorHeader{
-			Tag:    descriptor.DescriptorTagStreamIdentifier,
+	&descriptor.StreamIdentifier{
+		Header: descriptor.Header{
+			Tag:    descriptor.TagStreamIdentifier,
 			Length: 0x1,
 		},
 		ComponentTag: 0x7},
 }
 
 func descriptorsBytes(w *astikit.BitsWriter) {
-	w.Write("000000000011")                                  // Overall length
-	w.Write(uint8(descriptor.DescriptorTagStreamIdentifier)) // Tag
-	w.Write(uint8(1))                                        // Length
-	w.Write(uint8(7))                                        // Component tag
+	w.Write("000000000011")                        // Overall length
+	w.Write(uint8(descriptor.TagStreamIdentifier)) // Tag
+	w.Write(uint8(1))                              // Length
+	w.Write(uint8(7))                              // Component tag
 }
 
 var (

@@ -194,7 +194,7 @@ type pesTestCase struct {
 	headerBytesFunc         func(w *astikit.BitsWriter, withStuffing bool, withCRC bool)
 	optionalHeaderBytesFunc func(w *astikit.BitsWriter, withStuffing bool, withCRC bool)
 	bytesFunc               func(w *astikit.BitsWriter, withStuffing bool, withCRC bool)
-	pesData                 *PESData
+	pesData                 *Data
 }
 
 var pesTestCases = []pesTestCase{
@@ -211,9 +211,9 @@ var pesTestCases = []pesTestCase{
 		func(w *astikit.BitsWriter, withStuffing bool, withCRC bool) {
 			w.Write([]byte("data")) // Data
 		},
-		&PESData{
+		&Data{
 			Data: []byte("data"),
-			Header: PESHeader{
+			Header: Header{
 				PacketLength: 4,
 				StreamID:     StreamIDPaddingStream,
 			},
@@ -297,10 +297,10 @@ var pesTestCases = []pesTestCase{
 				w.Write(stuffing) // Stuffing
 			}
 		},
-		&PESData{
+		&Data{
 			Data: []byte("data"),
-			Header: PESHeader{
-				OptionalHeader: &PESOptionalHeader{
+			Header: Header{
+				OptionalHeader: &OptionalHeader{
 					AdditionalCopyInfo:     127,
 					CRC:                    4,
 					DataAlignmentIndicator: true,
@@ -323,7 +323,7 @@ var pesTestCases = []pesTestCase{
 					PTSDTSIndicator:   3,
 					PTS:               ptsClockReference,
 					ScramblingControl: 1,
-					Extension: &PESOptionalHeaderExtension{
+					Extension: &OptionalHeaderExtension{
 						PrivateData:                     []byte("1234567890123456"),
 						PSTDBufferScale:                 1,
 						PSTDBufferSize:                  5461,
@@ -357,13 +357,13 @@ func pesWithHeaderBytes() []byte {
 }
 
 // used by TestParseData
-func pesWithHeader() *PESData {
+func pesWithHeader() *Data {
 	return pesTestCases[1].pesData
 }
 
 // embedPESFixture normalizes a fixture to its post-parse shape: OptionalHeader
-// points into the embedded PESHeader storage
-func embedPESFixture(pd *PESData) *PESData {
+// points into the embedded Header storage
+func embedPESFixture(pd *Data) *Data {
 	if pd.Header.OptionalHeader != nil && pd.Header.OptionalHeader != &pd.Header.optionalHeader {
 		pd.Header.optionalHeader = *pd.Header.OptionalHeader
 		pd.Header.OptionalHeader = &pd.Header.optionalHeader
@@ -379,7 +379,7 @@ func TestParsePESData(t *testing.T) {
 			tc.headerBytesFunc(w, true, true)
 			tc.optionalHeaderBytesFunc(w, true, true)
 			tc.bytesFunc(w, true, true)
-			d := &PESData{}
+			d := &Data{}
 			err := d.Parse(buf.Bytes())
 			assert.NoError(t, err)
 			assert.Equal(t, embedPESFixture(tc.pesData), d)
@@ -397,14 +397,14 @@ func TestWritePESData(t *testing.T) {
 			tc.bytesFunc(wExpected, false, false)
 
 			var bufActual bytes.Buffer
-			scratch := make([]byte, ts.MpegTsPacketSize-ts.MpegTsPacketHeaderSize)
+			scratch := make([]byte, ts.PacketSize-ts.HeaderSize)
 
 			start := true
 			totalBytes := 0
 			payloadPos := 0
 
 			for payloadPos+1 < len(tc.pesData.Data) {
-				n, payloadN, err := tc.pesData.Header.PutPESData(
+				n, payloadN, err := tc.pesData.Header.Put(
 					scratch,
 					tc.pesData.Data[payloadPos:],
 					start,
@@ -432,7 +432,7 @@ func TestWritePESHeader(t *testing.T) {
 			tc.headerBytesFunc(wExpected, false, false)
 			tc.optionalHeaderBytesFunc(wExpected, false, false)
 
-			bs := make([]byte, ts.MpegTsPacketSize)
+			bs := make([]byte, ts.PacketSize)
 			n, err := tc.pesData.Header.putBytes(bs, len(tc.pesData.Data))
 			assert.NoError(t, err)
 			assert.Equal(t, bufExpected.Len(), n)
@@ -442,7 +442,7 @@ func TestWritePESHeader(t *testing.T) {
 }
 
 func BenchmarkWritePESHeader(b *testing.B) {
-	bs := make([]byte, ts.MpegTsPacketSize)
+	bs := make([]byte, ts.PacketSize)
 
 	for _, tc := range pesTestCases {
 		b.Run(tc.name, func(b *testing.B) {
@@ -461,7 +461,7 @@ func TestWritePESOptionalHeader(t *testing.T) {
 			wExpected := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: &bufExpected})
 			tc.optionalHeaderBytesFunc(wExpected, false, false)
 
-			bs := make([]byte, ts.MpegTsPacketSize)
+			bs := make([]byte, ts.PacketSize)
 			n := tc.pesData.Header.OptionalHeader.putBytes(bs)
 			assert.Equal(t, bufExpected.Len(), n)
 			assert.True(t, bytes.Equal(bufExpected.Bytes(), bs[:n]))
@@ -481,13 +481,13 @@ func BenchmarkParsePESData(b *testing.B) {
 		bss[ti] = buf.Bytes()
 	}
 
-	d := &PESData{}
+	d := &Data{}
 	for ti, tc := range pesTestCases {
 		b.Run(tc.name, func(b *testing.B) {
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {
 				d.Parse(bss[ti])
-				*d = PESData{}
+				*d = Data{}
 			}
 		})
 	}

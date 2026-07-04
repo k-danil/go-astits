@@ -1,9 +1,9 @@
 package descriptor
 
-import "github.com/asticode/go-astikit"
+import "github.com/k-danil/go-astits/internal/bytesiter"
 
-func newDescriptorUserDefined(i *astikit.BytesIterator, h DescriptorHeader, _ int) (dd Descriptor, err error) {
-	d := &DescriptorUserDefined{
+func newDescriptorUserDefined(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {
+	d := &UserDefined{
 		Header: h,
 	}
 	dd = d
@@ -11,28 +11,16 @@ func newDescriptorUserDefined(i *astikit.BytesIterator, h DescriptorHeader, _ in
 	return
 }
 
-type DescriptorUserDefined struct {
-	Header DescriptorHeader
+type UserDefined struct {
+	Header Header
 	Data   []byte
 }
 
-func (d *DescriptorUserDefined) length() uint8 {
-	return uint8(len(d.Data))
+func (d *UserDefined) CalcLength() int {
+	return len(d.Data)
 }
 
-func (d *DescriptorUserDefined) write(w *astikit.BitsWriter) (int, error) {
-	b := astikit.NewBitsWriterBatch(w)
-
-	length := d.length()
-	b.Write(uint8(d.Header.Tag))
-	b.Write(length)
-
-	if err := b.Err(); err != nil {
-		return 0, err
-	}
-	written := int(length) + 2
-
-	b.Write(d.Data)
-
-	return written, b.Err()
+func (d *UserDefined) Append(dst []byte) []byte {
+	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	return append(dst, d.Data...)
 }

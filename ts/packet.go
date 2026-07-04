@@ -3,10 +3,7 @@ package ts
 import (
 	"encoding/binary"
 	"fmt"
-	"io"
 	"sync"
-
-	"github.com/asticode/go-astikit"
 
 	"github.com/k-danil/go-astits/internal/util"
 )
@@ -20,10 +17,9 @@ const (
 )
 
 const (
-	MpegTsPacketSize       = 188
-	M2TsPacketSize         = 192
-	MpegTsPacketHeaderSize = 4
-	pcrBytesSize           = 6
+	PacketSize     = 188
+	M2TSPacketSize = 192
+	HeaderSize     = 4
 )
 
 const syncByte byte = '\x47'
@@ -37,7 +33,7 @@ var poolOfPacket = sync.Pool{
 // Packet represents a packet
 // https://en.wikipedia.org/wiki/MPEG_transport_stream
 type Packet struct {
-	bs [M2TsPacketSize]byte
+	bs [M2TSPacketSize]byte
 	s  uint
 	af PacketAdaptationField // AdaptationField points here — no per-packet allocation
 
@@ -54,7 +50,7 @@ type Packet struct {
 }
 
 func (p *Packet) UpdateHeader() {
-	p.Header.putBytes(p.bs[:])
+	p.Header.Put(p.bs[:])
 }
 
 // PacketHeader represents a packet header
@@ -187,7 +183,7 @@ func (p *Packet) Reset() {
 // parse parses a packet from bs. Direct slice parsing: no BytesIterator on the hot
 // per-packet path — its per-field call overhead was a significant share of the cost.
 func (p *Packet) parse(bs []byte, s PacketSkipper) (skip bool, err error) {
-	if len(bs) < MpegTsPacketSize {
+	if len(bs) < PacketSize {
 		return false, ErrShortPacket
 	}
 
@@ -200,7 +196,7 @@ func (p *Packet) parse(bs []byte, s PacketSkipper) (skip bool, err error) {
 	}
 
 	// In case packet size is bigger than 188 bytes, we don't care for the first bytes
-	hdr := len(bs) - MpegTsPacketSize + 1
+	hdr := len(bs) - PacketSize + 1
 	p.Header.parseBytes(bs[hdr : hdr+3 : hdr+3])
 
 	// Skip packet
@@ -217,7 +213,7 @@ func (p *Packet) parse(bs []byte, s PacketSkipper) (skip bool, err error) {
 	if p.Header.HasAdaptationField {
 		p.af.Reset()
 		p.AdaptationField = &p.af
-		if err = p.af.parseBytes(bs, hdr+3); err != nil {
+		if _, err = p.af.Parse(bs[hdr+3:]); err != nil {
 			return
 		}
 	}
@@ -236,6 +232,15 @@ func (p *Packet) parse(bs []byte, s PacketSkipper) (skip bool, err error) {
 	return
 }
 
+// Parse parses a 4-byte packet header starting at the sync byte.
+func (ph *PacketHeader) Parse(bs []byte) (n int, err error) {
+	if len(bs) < HeaderSize {
+		return 0, ErrShortPacket
+	}
+	ph.parseBytes(bs[1:4])
+	return HeaderSize, nil
+}
+
 func (ph *PacketHeader) parseBytes(b []byte) {
 	_ = b[2]
 	ph.TransportErrorIndicator = b[0]&0x80 > 0
@@ -248,15 +253,19 @@ func (ph *PacketHeader) parseBytes(b []byte) {
 	ph.ContinuityCounter = b[2] & 0xf
 }
 
-func (af *PacketAdaptationField) parseBytes(bs []byte, o int) (err error) {
-	af.Length = bs[o]
-	o++
+// Parse parses an adaptation field starting at its length byte.
+func (af *PacketAdaptationField) Parse(bs []byte) (n int, err error) {
+	if len(bs) == 0 {
+		return 0, ErrShortPacket
+	}
+	af.Length = bs[0]
+	o := 1
 	bodyStart := o
 
 	// Valid length
 	if af.Length > 0 {
 		if o >= len(bs) {
-			return ErrShortPacket
+			return o, ErrShortPacket
 		}
 		b := bs[o]
 		o++
@@ -273,26 +282,26 @@ func (af *PacketAdaptationField) parseBytes(bs []byte, o int) (err error) {
 
 		// PCR
 		if af.HasPCR {
-			if o+pcrBytesSize > len(bs) {
-				return ErrShortPacket
+			var pn int
+			if pn, err = af.PCR.ParsePCR(bs[o:]); err != nil {
+				return o, err
 			}
-			af.PCR = parsePCRBytes(bs[o:])
-			o += pcrBytesSize
+			o += pn
 		}
 
 		// OPCR
 		if af.HasOPCR {
-			if o+pcrBytesSize > len(bs) {
-				return ErrShortPacket
+			var pn int
+			if pn, err = af.OPCR.ParsePCR(bs[o:]); err != nil {
+				return o, err
 			}
-			af.OPCR = parsePCRBytes(bs[o:])
-			o += pcrBytesSize
+			o += pn
 		}
 
 		// Splicing countdown
 		if af.HasSplicingCountdown {
 			if o >= len(bs) {
-				return ErrShortPacket
+				return o, ErrShortPacket
 			}
 			af.SpliceCountdown = bs[o]
 			o++
@@ -301,14 +310,14 @@ func (af *PacketAdaptationField) parseBytes(bs []byte, o int) (err error) {
 		// Transport private data
 		if af.HasTransportPrivateData {
 			if o >= len(bs) {
-				return ErrShortPacket
+				return o, ErrShortPacket
 			}
 			af.TransportPrivateDataLength = bs[o]
 			o++
 			if af.TransportPrivateDataLength > 0 {
 				end := o + int(af.TransportPrivateDataLength)
 				if end > len(bs) {
-					return ErrShortPacket
+					return o, ErrShortPacket
 				}
 				// Copy into privBuf: the slice no longer views the read buffer and
 				// survives value copies of the struct (with a repoint)
@@ -317,37 +326,36 @@ func (af *PacketAdaptationField) parseBytes(bs []byte, o int) (err error) {
 			}
 		}
 
-		// Adaptation extension: rare — stays on the iterator
+		// Adaptation extension
 		if af.HasAdaptationExtensionField {
-			i := astikit.NewBytesIterator(bs)
-			i.Seek(o)
 			af.AdaptationExtensionField = &PacketAdaptationExtensionField{}
-			if err = af.AdaptationExtensionField.parse(i); err != nil {
-				return fmt.Errorf("astits: parsing Extension field failed: %w", err)
+			var en int
+			if en, err = af.AdaptationExtensionField.Parse(bs[o:]); err != nil {
+				return o, fmt.Errorf("astits: parsing Extension field failed: %w", err)
 			}
-			o = i.Offset()
+			o += en
 		}
 	}
 
 	af.StuffingLength = af.Length - uint8(o-bodyStart)
 
-	return nil
+	return o, nil
 }
 
-func (afe *PacketAdaptationExtensionField) parse(i *astikit.BytesIterator) (err error) {
-	// Length
-	if afe.Length, err = i.NextByte(); err != nil {
-		err = fmt.Errorf("astits: fetching next byte failed: %w", err)
-		return
+// Parse parses an adaptation extension field starting at its length byte.
+func (afe *PacketAdaptationExtensionField) Parse(bs []byte) (n int, err error) {
+	if len(bs) == 0 {
+		return 0, ErrShortPacket
 	}
+	afe.Length = bs[0]
+	o := 1
 
 	if afe.Length > 0 {
-		var b byte
-		// Get next byte
-		if b, err = i.NextByte(); err != nil {
-			err = fmt.Errorf("astits: fetching next byte failed: %w", err)
-			return
+		if o >= len(bs) {
+			return o, ErrShortPacket
 		}
+		b := bs[o]
+		o++
 
 		// Basic
 		afe.HasLegalTimeWindow = b&0x80 > 0
@@ -356,83 +364,79 @@ func (afe *PacketAdaptationExtensionField) parse(i *astikit.BytesIterator) (err 
 
 		// Legal time window
 		if afe.HasLegalTimeWindow {
-			var bs []byte
-			if bs, err = i.NextBytesNoCopy(2); err != nil || len(bs) < 2 {
-				err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
-				return
+			if o+2 > len(bs) {
+				return o, ErrShortPacket
 			}
-			afe.LegalTimeWindowIsValid = bs[0]&0x80 > 0
-			afe.LegalTimeWindowOffset = binary.BigEndian.Uint16(bs) & 0x7fff
+			afe.LegalTimeWindowIsValid = bs[o]&0x80 > 0
+			afe.LegalTimeWindowOffset = binary.BigEndian.Uint16(bs[o:]) & 0x7fff
+			o += 2
 		}
 
 		// Piecewise rate
 		if afe.HasPiecewiseRate {
-			var bs []byte
-			if bs, err = i.NextBytesNoCopy(3); err != nil || len(bs) < 3 {
-				err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
-				return
+			if o+3 > len(bs) {
+				return o, ErrShortPacket
 			}
-			afe.PiecewiseRate = uint32(bs[0]&0x3f)<<16 | uint32(bs[1])<<8 | uint32(bs[2])
+			afe.PiecewiseRate = uint32(bs[o]&0x3f)<<16 | uint32(bs[o+1])<<8 | uint32(bs[o+2])
+			o += 3
 		}
 
 		// Seamless splice
 		if afe.HasSeamlessSplice {
-			// Get next byte
-			if b, err = i.NextByte(); err != nil {
-				err = fmt.Errorf("astits: fetching next byte failed: %w", err)
-				return
+			if o >= len(bs) {
+				return o, ErrShortPacket
 			}
+			// Splice type shares its byte with the DTS next access unit
+			afe.SpliceType = bs[o] & 0xf0 >> 4
 
-			// Splice type
-			afe.SpliceType = b & 0xf0 >> 4
-
-			// We need to rewind since the current byte is used by the DTS next access unit as well
-			i.Skip(-1)
-
-			// DTS Next access unit
-			if err = afe.DTSNextAccessUnit.parsePTSOrDTS(i); err != nil {
+			var pn int
+			if pn, err = afe.DTSNextAccessUnit.ParsePTSDTS(bs[o:]); err != nil {
 				err = fmt.Errorf("astits: parsing DTS failed: %w", err)
 				return
 			}
+			o += pn
 		}
 	}
-	return
+	return o, nil
 }
 
-// WriteBytes assembles the whole packet in bs (len(bs) = target packet size) and
-// emits it with a single Write — instead of per-field writes through BitsWriter.
-func (p *Packet) WriteBytes(bs []byte, w io.Writer) (written int, err error) {
-	p.Header.putBytes(bs[:MpegTsPacketHeaderSize])
-	written = MpegTsPacketHeaderSize
+// Put assembles the whole packet in bs; len(bs) is the target packet size,
+// the tail is stuffed with 0xff.
+func (p *Packet) Put(bs []byte) (n int, err error) {
+	p.Header.Put(bs)
+	n = HeaderSize
 
 	if p.Header.HasAdaptationField {
-		var n int
-		if n, err = p.AdaptationField.putBytes(bs[written:]); err != nil {
+		var an int
+		if an, err = p.AdaptationField.Put(bs[n:]); err != nil {
 			return 0, err
 		}
-		written += n
+		n += an
 	}
 
-	if len(bs)-written < len(p.Payload) {
+	if len(bs)-n < len(p.Payload) {
 		return 0, fmt.Errorf(
-			"writePacket: can't write %d bytes of payload: only %d is available",
+			"astits: can't put %d bytes of payload: only %d is available",
 			len(p.Payload),
-			len(bs)-written,
+			len(bs)-n,
 		)
 	}
 
 	if p.Header.HasPayload {
-		written += copy(bs[written:], p.Payload)
+		n += copy(bs[n:], p.Payload)
 	}
 
-	for i := written; i < len(bs); i++ {
+	for i := n; i < len(bs); i++ {
 		bs[i] = 0xff
 	}
 
-	if _, err = w.Write(bs); err != nil {
-		return 0, err
-	}
 	return len(bs), nil
+}
+
+// Put serializes the 4-byte packet header (including the sync byte) into bs.
+func (ph *PacketHeader) Put(bs []byte) (n int) {
+	ph.putBytes(bs)
+	return HeaderSize
 }
 
 func (ph *PacketHeader) putBytes(bb []byte) {
@@ -449,36 +453,32 @@ func (ph *PacketHeader) putBytes(bb []byte) {
 	binary.BigEndian.PutUint32(bb[:], val)
 }
 
-func (ph *PacketHeader) write(w *astikit.BitsWriter, bb []byte) (int, error) {
-	ph.putBytes(bb)
-	return MpegTsPacketHeaderSize, w.Write(bb[:4])
-}
-
-func (af *PacketAdaptationField) CalcLength() (length uint8) {
+func (af *PacketAdaptationField) CalcLength() int {
+	var length uint8
 	length++
-	length += pcrBytesSize * util.B2U(af.HasPCR)
-	length += pcrBytesSize * util.B2U(af.HasOPCR)
+	length += PCRSize * util.B2U(af.HasPCR)
+	length += PCRSize * util.B2U(af.HasOPCR)
 	length += util.B2U(af.HasSplicingCountdown)
 	length += (1 + uint8(len(af.TransportPrivateData))) * util.B2U(af.HasTransportPrivateData)
 	length += (1 + af.AdaptationExtensionField.calcLength()) * util.B2U(af.HasAdaptationExtensionField)
 	length += af.StuffingLength
-	return
+	return int(length)
 }
 
-// putBytes serializes the adaptation field directly into bs, mirroring the wire
+// Put serializes the adaptation field directly into bs, mirroring the wire
 // format of the former BitsWriter path byte for byte.
-func (af *PacketAdaptationField) putBytes(bs []byte) (n int, err error) {
+func (af *PacketAdaptationField) Put(bs []byte) (n int, err error) {
 	if af.IsOneByteStuffing {
 		bs[0] = 0
 		return 1, nil
 	}
 
 	length := af.CalcLength()
-	if int(length)+1 > len(bs) {
+	if length+1 > len(bs) {
 		return 0, ErrShortPacket
 	}
 
-	bs[0] = length
+	bs[0] = uint8(length)
 	var flags uint8
 	flags |= util.B2U(af.DiscontinuityIndicator) << 7
 	flags |= util.B2U(af.RandomAccessIndicator) << 6
@@ -492,11 +492,11 @@ func (af *PacketAdaptationField) putBytes(bs []byte) (n int, err error) {
 	n = 2
 
 	if af.HasPCR {
-		n += af.PCR.putPCRBytes(bs[n:])
+		n += af.PCR.PutPCR(bs[n:])
 	}
 
 	if af.HasOPCR {
-		n += af.OPCR.putPCRBytes(bs[n:])
+		n += af.OPCR.PutPCR(bs[n:])
 	}
 
 	if af.HasSplicingCountdown {
@@ -529,7 +529,7 @@ func (afe *PacketAdaptationExtensionField) calcLength() (length uint8) {
 	length++
 	length += 2 * util.B2U(afe.HasLegalTimeWindow)
 	length += 3 * util.B2U(afe.HasPiecewiseRate)
-	length += PTSOrDTSByteLength * util.B2U(afe.HasSeamlessSplice)
+	length += PTSDTSSize * util.B2U(afe.HasSeamlessSplice)
 	return length
 }
 
@@ -552,7 +552,7 @@ func (afe *PacketAdaptationExtensionField) putBytes(bs []byte) (n int) {
 	}
 
 	if afe.HasSeamlessSplice {
-		n += afe.DTSNextAccessUnit.PutPTSOrDTSBytes(bs[n:], afe.SpliceType)
+		n += afe.DTSNextAccessUnit.PutPTSDTS(bs[n:], afe.SpliceType)
 	}
 
 	return

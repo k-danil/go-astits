@@ -3,15 +3,14 @@ package descriptor
 import (
 	"fmt"
 
-	"github.com/asticode/go-astikit"
-
+	"github.com/k-danil/go-astits/internal/bytesiter"
 	"github.com/k-danil/go-astits/internal/util"
 )
 
-// DescriptorAC3 represents an AC3 descriptor
+// AC3 represents an AC3 descriptor
 // Chapter: Annex D | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
-type DescriptorAC3 struct {
-	Header           DescriptorHeader
+type AC3 struct {
+	Header           Header
 	AdditionalInfo   []byte
 	ASVC             uint8
 	BSID             uint8
@@ -23,7 +22,7 @@ type DescriptorAC3 struct {
 	MainID           uint8
 }
 
-func newDescriptorAC3(i *astikit.BytesIterator, h DescriptorHeader, offsetEnd int) (dd Descriptor, err error) {
+func newDescriptorAC3(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
 	// Get next byte
 	var b byte
 	if b, err = i.NextByte(); err != nil {
@@ -32,7 +31,7 @@ func newDescriptorAC3(i *astikit.BytesIterator, h DescriptorHeader, offsetEnd in
 	}
 
 	// Create descriptor
-	d := &DescriptorAC3{
+	d := &AC3{
 		Header:           h,
 		HasASVC:          uint8(b&0x10) > 0,
 		HasBSID:          uint8(b&0x40) > 0,
@@ -87,48 +86,32 @@ func newDescriptorAC3(i *astikit.BytesIterator, h DescriptorHeader, offsetEnd in
 	return
 }
 
-func (d *DescriptorAC3) length() (ret uint8) {
-	ret = 1 // flags
-	ret += util.B2U(d.HasComponentType)
-	ret += util.B2U(d.HasBSID)
-	ret += util.B2U(d.HasMainID)
-	ret += util.B2U(d.HasASVC)
-	ret += uint8(len(d.AdditionalInfo))
+func (d *AC3) CalcLength() int {
+	ret := 1 // flags
+	ret += int(util.B2U(d.HasComponentType))
+	ret += int(util.B2U(d.HasBSID))
+	ret += int(util.B2U(d.HasMainID))
+	ret += int(util.B2U(d.HasASVC))
+	ret += len(d.AdditionalInfo)
 
 	return ret
 }
 
-func (d *DescriptorAC3) write(w *astikit.BitsWriter) (int, error) {
-	b := astikit.NewBitsWriterBatch(w)
-
-	length := d.length()
-	b.Write(uint8(d.Header.Tag))
-	b.Write(length)
-
-	if err := b.Err(); err != nil {
-		return 0, err
-	}
-	written := int(length) + 2
-
-	b.Write(d.HasComponentType)
-	b.Write(d.HasBSID)
-	b.Write(d.HasMainID)
-	b.Write(d.HasASVC)
-	b.WriteN(uint8(0xff), 4)
+func (d *AC3) Append(dst []byte) []byte {
+	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	dst = append(dst, util.B2U(d.HasComponentType)<<7|util.B2U(d.HasBSID)<<6|util.B2U(d.HasMainID)<<5|util.B2U(d.HasASVC)<<4|0xf)
 
 	if d.HasComponentType {
-		b.Write(d.ComponentType)
+		dst = append(dst, d.ComponentType)
 	}
 	if d.HasBSID {
-		b.Write(d.BSID)
+		dst = append(dst, d.BSID)
 	}
 	if d.HasMainID {
-		b.Write(d.MainID)
+		dst = append(dst, d.MainID)
 	}
 	if d.HasASVC {
-		b.Write(d.ASVC)
+		dst = append(dst, d.ASVC)
 	}
-	b.Write(d.AdditionalInfo)
-
-	return written, b.Err()
+	return append(dst, d.AdditionalInfo...)
 }

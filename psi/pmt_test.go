@@ -6,10 +6,12 @@ import (
 
 	"github.com/asticode/go-astikit"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/k-danil/go-astits/internal/bytesiter"
 )
 
-var pmt = &PMTData{
-	ElementaryStreams: []PMTElementaryStream{{
+var pmt = &PMT{
+	ElementaryStreams: []ElementaryStream{{
 		ElementaryPID:               2730,
 		ElementaryStreamDescriptors: descriptors,
 		StreamType:                  StreamTypeMPEG1Audio,
@@ -36,18 +38,14 @@ func pmtBytes() []byte {
 
 func TestParsePMTSection(t *testing.T) {
 	var b = pmtBytes()
-	d, err := parsePMTSection(astikit.NewBytesIterator(b), len(b), uint16(1))
+	d, err := parsePMTSection(bytesiter.New(b), len(b), uint16(1))
 	assert.Equal(t, d, pmt)
 	assert.NoError(t, err)
 }
 
 func TestWritePMTSection(t *testing.T) {
-	buf := bytes.Buffer{}
-	w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: &buf})
-	n, err := pmt.writePMTSection(w)
-	assert.NoError(t, err)
-	assert.Equal(t, n, buf.Len())
-	assert.Equal(t, pmtBytes(), buf.Bytes())
+	dst := pmt.appendSection(nil)
+	assert.Equal(t, pmtBytes(), dst)
 }
 
 func BenchmarkParsePMTSection(b *testing.B) {
@@ -55,19 +53,16 @@ func BenchmarkParsePMTSection(b *testing.B) {
 	bs := pmtBytes()
 
 	for i := 0; i < b.N; i++ {
-		parsePMTSection(astikit.NewBytesIterator(bs), len(bs), uint16(1))
+		parsePMTSection(bytesiter.New(bs), len(bs), uint16(1))
 	}
 }
 
 func BenchmarkWritePMTSection(b *testing.B) {
 	b.ReportAllocs()
 
-	bw := &bytes.Buffer{}
-	bw.Grow(1024)
-	w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: bw})
+	dst := make([]byte, 0, 1024)
 
 	for i := 0; i < b.N; i++ {
-		bw.Reset()
-		pmt.writePMTSection(w)
+		dst = pmt.appendSection(dst[:0])
 	}
 }

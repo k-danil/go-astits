@@ -1,9 +1,9 @@
 package ts
 
-const CRC32Polynomial = uint32(0xffffffff)
+const CRC32Seed = uint32(0xffffffff)
 
 func ComputeCRC32(bs []byte) uint32 {
-	return UpdateCRC32(CRC32Polynomial, bs)
+	return UpdateCRC32(CRC32Seed, bs)
 }
 
 // Based on VLC implementation using a static CRC table (1kb additional memory on start, without

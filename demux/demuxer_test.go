@@ -33,9 +33,9 @@ func hexToBytes(in string) []byte {
 
 func TestDemuxerNew(t *testing.T) {
 	ps := 1
-	pp := func(pl *ts.PacketList) (ds []*DemuxerData, skip bool, err error) { return }
+	pp := func(pl *ts.PacketList) (ds []*Data, skip bool, err error) { return }
 	sp := func(p *ts.Packet) bool { return true }
-	dmx := NewDemuxer(context.Background(), nil, DemuxerOptPacketSize(ps), DemuxerOptPacketsParser(pp), DemuxerOptPacketSkipper(sp))
+	dmx := New(context.Background(), nil, WithPacketSize(ps), WithPacketsParser(pp), WithPacketSkipper(sp))
 	assert.Equal(t, uint(ps), dmx.optPacketSize)
 	assert.Equal(t, fmt.Sprintf("%p", pp), fmt.Sprintf("%p", dmx.optPacketsParser))
 	assert.Equal(t, fmt.Sprintf("%p", sp), fmt.Sprintf("%p", dmx.optPacketSkipper))
@@ -44,7 +44,7 @@ func TestDemuxerNew(t *testing.T) {
 func TestDemuxerNextPacket(t *testing.T) {
 	// Ctx error
 	ctx, cancel := context.WithCancel(context.Background())
-	dmx := NewDemuxer(ctx, bytes.NewReader([]byte{}))
+	dmx := New(ctx, bytes.NewReader([]byte{}))
 	cancel()
 	_, err := dmx.NextPacket()
 	assert.Error(t, err)
@@ -57,7 +57,7 @@ func TestDemuxerNextPacket(t *testing.T) {
 	b2, p2 := packet(packetHeader, packetAdaptationField, []byte("2"), true)
 	p2.Offset = int64(len(b1))
 	w.Write(b2)
-	dmx = NewDemuxer(context.Background(), bytes.NewReader(buf.Bytes()))
+	dmx = New(context.Background(), bytes.NewReader(buf.Bytes()))
 
 	// First packet
 	p, err := dmx.NextPacket()
@@ -92,16 +92,16 @@ func TestDemuxerNextData(t *testing.T) {
 	w.Write(b1)
 	b2, _ := packet(ts.PacketHeader{ContinuityCounter: uint8(1), PID: ts.PIDPAT}, &ts.PacketAdaptationField{}, b[147:], true)
 	w.Write(b2)
-	dmx := NewDemuxer(context.Background(), bytes.NewReader(buf.Bytes()))
+	dmx := New(context.Background(), bytes.NewReader(buf.Bytes()))
 	p, err := dmx.NextPacket()
 	assert.NoError(t, err)
 	_, err = dmx.Rewind()
 	assert.NoError(t, err)
 
 	// Next data
-	psiData, err := psi.ParsePSIData(astikit.NewBytesIterator(b))
+	psiData, err := psi.Parse(b)
 	assert.NoError(t, err)
-	var ds []*DemuxerData
+	var ds []*Data
 	for _, s := range psiData.Sections {
 		if !s.Header.TableID.IsUnknown() {
 			d, err := dmx.NextData()
@@ -114,7 +114,8 @@ func TestDemuxerNextData(t *testing.T) {
 		d.setAdaptationField(p.AdaptationField)
 	}
 	assert.Equal(t, want, ds)
-	assert.Equal(t, map[uint64]uint16{0x3: 0x2, 0x5: 0x4}, dmx.programMap.P)
+	assert.Equal(t, []uint16{0x3, 0x5}, dmx.programMap.Keys)
+	assert.Equal(t, []uint16{0x2, 0x4}, dmx.programMap.Vals)
 
 	// No more packets
 	_, err = dmx.NextData()
@@ -135,10 +136,10 @@ func TestDemuxerNextDataUnknownDataPackets(t *testing.T) {
 	bufWriter.Write(b1)
 
 	// The demuxer must return "no more packets"
-	dmx := NewDemuxer(context.Background(), bytes.NewReader(buf.Bytes()),
-		DemuxerOptPacketSize(188))
+	dmx := New(context.Background(), bytes.NewReader(buf.Bytes()),
+		WithPacketSize(188))
 	d, err := dmx.NextData()
-	assert.Equal(t, (*DemuxerData)(nil), d)
+	assert.Equal(t, (*Data)(nil), d)
 	assert.EqualError(t, err, ts.ErrNoMorePackets.Error())
 }
 
@@ -158,7 +159,7 @@ func TestDemuxerNextDataPATPMT(t *testing.T) {
 		ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
 		ffffffffffffffffff`)
 	r := bytes.NewReader(append(pat, pmt...))
-	dmx := NewDemuxer(context.Background(), r, DemuxerOptPacketSize(188))
+	dmx := New(context.Background(), r, WithPacketSize(188))
 	assert.Equal(t, 188*2, r.Len())
 
 	d, err := dmx.NextData()
@@ -175,9 +176,9 @@ func TestDemuxerNextDataPATPMT(t *testing.T) {
 
 func TestDemuxerRewind(t *testing.T) {
 	r := bytes.NewReader([]byte("content"))
-	dmx := NewDemuxer(context.Background(), r)
+	dmx := New(context.Background(), r)
 	dmx.packetPool.addUnlocked(&ts.Packet{Header: ts.PacketHeader{PID: 1}})
-	dmx.dataBuffer = append(dmx.dataBuffer, &DemuxerData{})
+	dmx.dataBuffer = append(dmx.dataBuffer, &Data{})
 	b := make([]byte, 2)
 	_, err := r.Read(b)
 	assert.NoError(t, err)
@@ -204,9 +205,9 @@ func BenchmarkDemuxer_NextData(b *testing.B) {
 	w.Write(b2)
 
 	r := bytes.NewReader(buf.Bytes())
-	dmx := NewDemuxer(context.Background(), r)
+	dmx := New(context.Background(), r)
 
-	psiData, err := psi.ParsePSIData(astikit.NewBytesIterator(bs))
+	psiData, err := psi.Parse(bs)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -223,7 +224,7 @@ func BenchmarkDemuxer_NextData(b *testing.B) {
 func FuzzDemuxer(f *testing.F) {
 	f.Fuzz(func(t *testing.T, b []byte) {
 		r := bytes.NewReader(b)
-		dmx := NewDemuxer(context.Background(), r, DemuxerOptPacketSize(188))
+		dmx := New(context.Background(), r, WithPacketSize(188))
 		for {
 			_, err := dmx.NextData()
 			if err == ts.ErrNoMorePackets {

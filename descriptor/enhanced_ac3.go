@@ -3,15 +3,14 @@ package descriptor
 import (
 	"fmt"
 
-	"github.com/asticode/go-astikit"
-
+	"github.com/k-danil/go-astits/internal/bytesiter"
 	"github.com/k-danil/go-astits/internal/util"
 )
 
-// DescriptorEnhancedAC3 represents an enhanced AC3 descriptor
+// EnhancedAC3 represents an enhanced AC3 descriptor
 // Chapter: Annex D | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
-type DescriptorEnhancedAC3 struct {
-	Header           DescriptorHeader
+type EnhancedAC3 struct {
+	Header           Header
 	AdditionalInfo   []byte
 	ASVC             uint8
 	BSID             uint8
@@ -30,7 +29,7 @@ type DescriptorEnhancedAC3 struct {
 	SubStream3       uint8
 }
 
-func newDescriptorEnhancedAC3(i *astikit.BytesIterator, h DescriptorHeader, offsetEnd int) (dd Descriptor, err error) {
+func newDescriptorEnhancedAC3(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
 	// Get next byte
 	var b byte
 	if b, err = i.NextByte(); err != nil {
@@ -39,7 +38,7 @@ func newDescriptorEnhancedAC3(i *astikit.BytesIterator, h DescriptorHeader, offs
 	}
 
 	// Create descriptor
-	d := &DescriptorEnhancedAC3{
+	d := &EnhancedAC3{
 		Header:           h,
 		HasASVC:          uint8(b&0x10) > 0,
 		HasBSID:          uint8(b&0x40) > 0,
@@ -132,64 +131,46 @@ func newDescriptorEnhancedAC3(i *astikit.BytesIterator, h DescriptorHeader, offs
 	return
 }
 
-func (d *DescriptorEnhancedAC3) length() (ret uint8) {
-	ret = 1 // flags
-	ret += util.B2U(d.HasComponentType)
-	ret += util.B2U(d.HasBSID)
-	ret += util.B2U(d.HasMainID)
-	ret += util.B2U(d.HasASVC)
-	ret += util.B2U(d.HasSubStream1)
-	ret += util.B2U(d.HasSubStream2)
-	ret += util.B2U(d.HasSubStream3)
-	ret += uint8(len(d.AdditionalInfo))
+func (d *EnhancedAC3) CalcLength() int {
+	ret := 1 // flags
+	ret += int(util.B2U(d.HasComponentType))
+	ret += int(util.B2U(d.HasBSID))
+	ret += int(util.B2U(d.HasMainID))
+	ret += int(util.B2U(d.HasASVC))
+	ret += int(util.B2U(d.HasSubStream1))
+	ret += int(util.B2U(d.HasSubStream2))
+	ret += int(util.B2U(d.HasSubStream3))
+	ret += len(d.AdditionalInfo)
 
-	return
+	return ret
 }
 
-func (d *DescriptorEnhancedAC3) write(w *astikit.BitsWriter) (int, error) {
-	b := astikit.NewBitsWriterBatch(w)
-
-	length := d.length()
-	b.Write(uint8(d.Header.Tag))
-	b.Write(length)
-
-	if err := b.Err(); err != nil {
-		return 0, err
-	}
-	written := int(length) + 2
-
-	b.Write(d.HasComponentType)
-	b.Write(d.HasBSID)
-	b.Write(d.HasMainID)
-	b.Write(d.HasASVC)
-	b.Write(d.MixInfoExists)
-	b.Write(d.HasSubStream1)
-	b.Write(d.HasSubStream2)
-	b.Write(d.HasSubStream3)
+func (d *EnhancedAC3) Append(dst []byte) []byte {
+	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	dst = append(dst, util.B2U(d.HasComponentType)<<7|util.B2U(d.HasBSID)<<6|util.B2U(d.HasMainID)<<5|util.B2U(d.HasASVC)<<4|
+		util.B2U(d.MixInfoExists)<<3|util.B2U(d.HasSubStream1)<<2|util.B2U(d.HasSubStream2)<<1|util.B2U(d.HasSubStream3))
 
 	if d.HasComponentType {
-		b.Write(d.ComponentType)
+		dst = append(dst, d.ComponentType)
 	}
 	if d.HasBSID {
-		b.Write(d.BSID)
+		dst = append(dst, d.BSID)
 	}
 	if d.HasMainID {
-		b.Write(d.MainID)
+		dst = append(dst, d.MainID)
 	}
 	if d.HasASVC {
-		b.Write(d.ASVC)
+		dst = append(dst, d.ASVC)
 	}
 	if d.HasSubStream1 {
-		b.Write(d.SubStream1)
+		dst = append(dst, d.SubStream1)
 	}
 	if d.HasSubStream2 {
-		b.Write(d.SubStream2)
+		dst = append(dst, d.SubStream2)
 	}
 	if d.HasSubStream3 {
-		b.Write(d.SubStream3)
+		dst = append(dst, d.SubStream3)
 	}
 
-	b.Write(d.AdditionalInfo)
-
-	return written, b.Err()
+	return append(dst, d.AdditionalInfo...)
 }

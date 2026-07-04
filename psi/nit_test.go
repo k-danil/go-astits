@@ -6,12 +6,14 @@ import (
 
 	"github.com/asticode/go-astikit"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/k-danil/go-astits/internal/bytesiter"
 )
 
-var nit = &NITData{
+var nit = &NIT{
 	NetworkDescriptors: descriptors,
 	NetworkID:          1,
-	TransportStreams: []NITDataTransportStream{{
+	TransportStreams: []NITTransportStream{{
 		OriginalNetworkID:    3,
 		TransportDescriptors: descriptors,
 		TransportStreamID:    2,
@@ -34,7 +36,7 @@ func nitBytes() []byte {
 
 func TestParseNITSection(t *testing.T) {
 	var b = nitBytes()
-	d, err := parseNITSection(astikit.NewBytesIterator(b), uint16(1))
+	d, err := parseNITSection(bytesiter.New(b), uint16(1))
 	assert.Equal(t, d, nit)
 	assert.NoError(t, err)
 }

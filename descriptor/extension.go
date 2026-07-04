@@ -3,27 +3,26 @@ package descriptor
 import (
 	"fmt"
 
-	"github.com/asticode/go-astikit"
-
+	"github.com/k-danil/go-astits/internal/bytesiter"
 	"github.com/k-danil/go-astits/internal/util"
 )
 
 // Descriptor extension tags
 // Chapter: 6.3 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 const (
-	DescriptorTagExtensionSupplementaryAudio = 0x6
+	TagExtensionSupplementaryAudio = 0x6
 )
 
-// DescriptorExtension represents an extension descriptor
+// Extension represents an extension descriptor
 // Chapter: 6.2.16 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
-type DescriptorExtension struct {
-	SupplementaryAudio *DescriptorExtensionSupplementaryAudio
+type Extension struct {
+	SupplementaryAudio *ExtensionSupplementaryAudio
 	Unknown            []byte
-	Header             DescriptorHeader
+	Header             Header
 	Tag                uint8
 }
 
-func newDescriptorExtension(i *astikit.BytesIterator, h DescriptorHeader, offsetEnd int) (dd Descriptor, err error) {
+func newDescriptorExtension(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
 	// Get next byte
 	var b byte
 	if b, err = i.NextByte(); err != nil {
@@ -32,7 +31,7 @@ func newDescriptorExtension(i *astikit.BytesIterator, h DescriptorHeader, offset
 	}
 
 	// Create descriptor
-	d := &DescriptorExtension{
+	d := &Extension{
 		Header: h,
 		Tag:    b,
 	}
@@ -40,7 +39,7 @@ func newDescriptorExtension(i *astikit.BytesIterator, h DescriptorHeader, offset
 
 	// Switch on tag
 	switch d.Tag {
-	case DescriptorTagExtensionSupplementaryAudio:
+	case TagExtensionSupplementaryAudio:
 		if d.SupplementaryAudio, err = newDescriptorExtensionSupplementaryAudio(i, offsetEnd); err != nil {
 			err = fmt.Errorf("astits: parsing extension supplementary audio descriptor failed: %w", err)
 			return
@@ -54,51 +53,36 @@ func newDescriptorExtension(i *astikit.BytesIterator, h DescriptorHeader, offset
 	return
 }
 
-func (d *DescriptorExtension) length() uint8 {
+func (d *Extension) CalcLength() int {
 	ret := 1 // tag
 
 	switch d.Tag {
-	case DescriptorTagExtensionSupplementaryAudio:
-		ret += d.SupplementaryAudio.length()
+	case TagExtensionSupplementaryAudio:
+		ret += d.SupplementaryAudio.CalcLength()
 	default:
 		ret += len(d.Unknown)
 	}
 
-	return uint8(ret)
+	return ret
 }
 
-func (d *DescriptorExtension) write(w *astikit.BitsWriter) (int, error) {
-	b := astikit.NewBitsWriterBatch(w)
-
-	length := d.length()
-	b.Write(uint8(d.Header.Tag))
-	b.Write(length)
-
-	if err := b.Err(); err != nil {
-		return 0, err
-	}
-	written := int(length) + 2
-
-	b.Write(d.Tag)
+func (d *Extension) Append(dst []byte) []byte {
+	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	dst = append(dst, d.Tag)
 
 	switch d.Tag {
-	case DescriptorTagExtensionSupplementaryAudio:
-		err := d.SupplementaryAudio.write(w)
-		if err != nil {
-			return 0, err
-		}
+	case TagExtensionSupplementaryAudio:
+		dst = d.SupplementaryAudio.Append(dst)
 	default:
-		if len(d.Unknown) > 0 {
-			b.Write(d.Unknown)
-		}
+		dst = append(dst, d.Unknown...)
 	}
 
-	return written, b.Err()
+	return dst
 }
 
-// DescriptorExtensionSupplementaryAudio represents a supplementary audio extension descriptor
+// ExtensionSupplementaryAudio represents a supplementary audio extension descriptor
 // Chapter: 6.4.10 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
-type DescriptorExtensionSupplementaryAudio struct {
+type ExtensionSupplementaryAudio struct {
 	PrivateData             []byte
 	LanguageCode            [3]byte
 	EditorialClassification uint8
@@ -106,7 +90,7 @@ type DescriptorExtensionSupplementaryAudio struct {
 	MixType                 bool
 }
 
-func newDescriptorExtensionSupplementaryAudio(i *astikit.BytesIterator, offsetEnd int) (d *DescriptorExtensionSupplementaryAudio, err error) {
+func newDescriptorExtensionSupplementaryAudio(i *bytesiter.Iterator, offsetEnd int) (d *ExtensionSupplementaryAudio, err error) {
 	// Get next byte
 	var b byte
 	if b, err = i.NextByte(); err != nil {
@@ -115,7 +99,7 @@ func newDescriptorExtensionSupplementaryAudio(i *astikit.BytesIterator, offsetEn
 	}
 
 	// Init
-	d = &DescriptorExtensionSupplementaryAudio{
+	d = &ExtensionSupplementaryAudio{
 		EditorialClassification: b >> 2 & 0x1f,
 		HasLanguageCode:         b&0x1 > 0,
 		MixType:                 b&0x80 > 0,
@@ -141,26 +125,21 @@ func newDescriptorExtensionSupplementaryAudio(i *astikit.BytesIterator, offsetEn
 	return
 }
 
-func (d *DescriptorExtensionSupplementaryAudio) length() int {
+func (d *ExtensionSupplementaryAudio) CalcLength() int {
 	ret := 1
 	ret += 3 * int(util.B2U(d.HasLanguageCode))
 	ret += len(d.PrivateData)
 	return ret
 }
 
-func (d *DescriptorExtensionSupplementaryAudio) write(w *astikit.BitsWriter) error {
-	b := astikit.NewBitsWriterBatch(w)
-
-	b.Write(d.MixType)
-	b.WriteN(d.EditorialClassification, 5)
-	b.Write(true) // reserved
-	b.Write(d.HasLanguageCode)
+// Append appends the extension body only: tag and length are owned by the
+// enclosing Extension descriptor.
+func (d *ExtensionSupplementaryAudio) Append(dst []byte) []byte {
+	dst = append(dst, util.B2U(d.MixType)<<7|d.EditorialClassification&0x1f<<2|1<<1|util.B2U(d.HasLanguageCode))
 
 	if d.HasLanguageCode {
-		b.Write(d.LanguageCode[:])
+		dst = append(dst, d.LanguageCode[:]...)
 	}
 
-	b.Write(d.PrivateData)
-
-	return b.Err()
+	return append(dst, d.PrivateData...)
 }

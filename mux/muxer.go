@@ -6,10 +6,7 @@ import (
 	"errors"
 	"io"
 
-	"github.com/asticode/go-astikit"
-
 	"github.com/k-danil/go-astits/internal/pidmap"
-	"github.com/k-danil/go-astits/internal/programmap"
 	"github.com/k-danil/go-astits/pes"
 	"github.com/k-danil/go-astits/psi"
 	"github.com/k-danil/go-astits/ts"
@@ -35,8 +32,8 @@ type Muxer struct {
 	packetSize             int
 	tablesRetransmitPeriod int // period in PES packets
 
-	pm         *programmap.Map // pid -> programNumber
-	pmt        psi.PMTData
+	pm         pidmap.Map[uint16] // pid -> programNumber
+	pmt        psi.PMT
 	patVersion wrappingCounter
 	pmtVersion wrappingCounter
 	patCC      wrappingCounter
@@ -51,20 +48,22 @@ type Muxer struct {
 	pkt     []byte
 	pes     []byte
 	stuffAF ts.PacketAdaptationField
+	pktArr  [ts.PacketSize]byte
+	pesArr  [ts.PacketSize]byte
 
-	patDataBytes bytes.Buffer
-	pmtDataBytes bytes.Buffer
+	patData []byte
+	pmtData []byte
 
 	esContexts              pidmap.Map[esContext]
 	tablesRetransmitCounter int
 }
 
 type esContext struct {
-	es *psi.PMTElementaryStream
+	es *psi.ElementaryStream
 	cc wrappingCounter
 }
 
-func MuxerOptTablesRetransmitPeriod(newPeriod int) func(*Muxer) {
+func WithTablesRetransmitPeriod(newPeriod int) func(*Muxer) {
 	return func(m *Muxer) {
 		m.tablesRetransmitPeriod = newPeriod
 	}
@@ -72,17 +71,16 @@ func MuxerOptTablesRetransmitPeriod(newPeriod int) func(*Muxer) {
 
 // TODO MuxerOptAutodetectPCRPID selecting first video PID for each PMT, falling back to first audio, falling back to any other
 
-func NewMuxer(ctx context.Context, w io.Writer, opts ...func(*Muxer)) (m *Muxer) {
+func New(ctx context.Context, w io.Writer, opts ...func(*Muxer)) (m *Muxer) {
 	m = &Muxer{
 		ctx: ctx,
 		w:   w,
 
-		packetSize:             ts.MpegTsPacketSize, // no 192-byte packet support yet
+		packetSize:             ts.PacketSize, // no 192-byte packet support yet
 		tablesRetransmitPeriod: 40,
 
-		pm: programmap.New(),
-		pmt: psi.PMTData{
-			ElementaryStreams: []psi.PMTElementaryStream{},
+		pmt: psi.PMT{
+			ElementaryStreams: []psi.ElementaryStream{},
 			ProgramNumber:     programNumberStart,
 		},
 
@@ -94,11 +92,11 @@ func NewMuxer(ctx context.Context, w io.Writer, opts ...func(*Muxer)) (m *Muxer)
 		pmtCC: newWrappingCounter(0b1111),
 	}
 
-	m.pkt = make([]byte, m.packetSize)
-	m.pes = make([]byte, m.packetSize)
+	m.pkt = m.pktArr[:]
+	m.pes = m.pesArr[:]
 
 	// TODO multiple programs support
-	m.pm.SetUnlocked(pmtStartPID, programNumberStart)
+	m.pm.Set(pmtStartPID, programNumberStart)
 	m.pmUpdated = true
 
 	for _, opt := range opts {
@@ -112,7 +110,7 @@ func NewMuxer(ctx context.Context, w io.Writer, opts ...func(*Muxer)) (m *Muxer)
 }
 
 // if es.ElementaryPID is zero, it will be generated automatically
-func (m *Muxer) AddElementaryStream(es psi.PMTElementaryStream) error {
+func (m *Muxer) AddElementaryStream(es psi.ElementaryStream) error {
 	if es.ElementaryPID != 0 {
 		for _, oes := range m.pmt.ElementaryStreams {
 			if oes.ElementaryPID == es.ElementaryPID {
@@ -170,10 +168,10 @@ func (m *Muxer) SetCC(pid uint16, cc uint8) error {
 	return ctx.cc.set(int(cc))
 }
 
-// WriteData writes MuxerData to TS stream
+// WriteData writes Data to TS stream
 // Currently only PES packets are supported
 // Be aware that after successful call WriteData will set d.AdaptationField.StuffingLength value to zero
-func (m *Muxer) WriteData(d *MuxerData) (bytesWritten int, err error) {
+func (m *Muxer) WriteData(d *Data) (bytesWritten int, err error) {
 	ctx := m.esContexts.Get(d.PID)
 	if ctx == nil {
 		return 0, ErrPIDNotFound
@@ -194,7 +192,7 @@ func (m *Muxer) WriteData(d *MuxerData) (bytesWritten int, err error) {
 	writeAf := d.AdaptationField != nil
 	payloadBytesWritten := 0
 	for payloadBytesWritten < len(d.PES.Data) {
-		pktLen := ts.MpegTsPacketHeaderSize
+		pktLen := ts.HeaderSize
 		pkt := ts.Packet{
 			Header: ts.PacketHeader{
 				ContinuityCounter:         uint8(ctx.cc.inc()),
@@ -208,13 +206,13 @@ func (m *Muxer) WriteData(d *MuxerData) (bytesWritten int, err error) {
 		if writeAf {
 			pkt.AdaptationField = d.AdaptationField
 			// one byte for adaptation field length field
-			pktLen += 1 + int(d.AdaptationField.CalcLength())
+			pktLen += 1 + d.AdaptationField.CalcLength()
 			writeAf = false
 		}
 
 		bytesAvailable := m.packetSize - pktLen
 		if payloadStart {
-			pesHeaderLengthCurrent := pes.HeaderLength + int(d.PES.Header.OptionalHeader.CalcLength())
+			pesHeaderLengthCurrent := pes.HeaderSize + d.PES.Header.OptionalHeader.CalcLength()
 			// d.AdaptationField with pes header are too big, we don't have space to write pes header
 			if bytesAvailable < pesHeaderLengthCurrent {
 				pkt.Header.HasAdaptationField = true
@@ -237,7 +235,7 @@ func (m *Muxer) WriteData(d *MuxerData) (bytesWritten int, err error) {
 			}
 
 			var ntot, npayload int
-			if ntot, npayload, err = d.PES.Header.PutPESData(
+			if ntot, npayload, err = d.PES.Header.Put(
 				m.pes[:bytesAvailable],
 				d.PES.Data[payloadBytesWritten:],
 				payloadStart,
@@ -261,7 +259,10 @@ func (m *Muxer) WriteData(d *MuxerData) (bytesWritten int, err error) {
 				}
 			}
 
-			if n, err = pkt.WriteBytes(m.pkt, m.w); err != nil {
+			if _, err = pkt.Put(m.pkt); err != nil {
+				return
+			}
+			if n, err = m.w.Write(m.pkt); err != nil {
 				return
 			}
 
@@ -284,7 +285,10 @@ func (m *Muxer) WritePacket(p *ts.Packet) (int, error) {
 	if raw := p.Raw(); len(raw) > 0 {
 		return m.w.Write(raw)
 	}
-	return p.WriteBytes(m.pkt, m.w)
+	if _, err := p.Put(m.pkt); err != nil {
+		return 0, err
+	}
+	return m.w.Write(m.pkt)
 }
 
 // stuffingAdaptationField reuses the muxer's scratch AF: no allocation per stuffed
@@ -339,19 +343,19 @@ func (m *Muxer) WriteTables() (bytesWritten int, err error) {
 
 func (m *Muxer) generatePAT() (err error) {
 	if m.pmUpdated {
-		d := toPATData(m.pm)
+		d := toPATData(&m.pm)
 
-		psiData := psi.PSIData{
-			Sections: []psi.PSISection{
+		psiData := psi.Data{
+			Sections: []psi.Section{
 				{
-					Header: psi.PSISectionHeader{
-						SectionLength:          d.CalcPATSectionLength(),
+					Header: psi.SectionHeader{
+						SectionLength:          uint16(d.CalcSectionLength()),
 						SectionSyntaxIndicator: true,
-						TableID:                psi.PSITableID(d.TransportStreamID),
+						TableID:                psi.TableID(d.TransportStreamID),
 					},
-					Syntax: &psi.PSISectionSyntax{
+					Syntax: &psi.SectionSyntax{
 						Data: d,
-						Header: psi.PSISectionSyntaxHeader{
+						Header: psi.SectionSyntaxHeader{
 							CurrentNextIndicator: true,
 							// TODO support for PAT tables longer than 1 TS packet
 							//LastSectionNumber:    0,
@@ -364,9 +368,7 @@ func (m *Muxer) generatePAT() (err error) {
 			},
 		}
 
-		m.patDataBytes.Reset()
-		w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: &m.patDataBytes})
-		if _, err = psiData.WritePSIData(w); err != nil {
+		if m.patData, err = psiData.Append(m.patData[:0]); err != nil {
 			return
 		}
 
@@ -381,12 +383,13 @@ func (m *Muxer) generatePAT() (err error) {
 			PID:                       ts.PIDPAT,
 			ContinuityCounter:         uint8(m.patCC.inc()),
 		},
-		Payload: m.patDataBytes.Bytes(),
+		Payload: m.patData,
 	}
-	if _, err = pkt.WriteBytes(m.pkt, &m.patBytes); err != nil {
+	if _, err = pkt.Put(m.pkt); err != nil {
 		// FIXME save old PAT and rollback to it here maybe?
 		return
 	}
+	m.patBytes.Write(m.pkt)
 
 	return
 }
@@ -404,17 +407,17 @@ func (m *Muxer) generatePMT() (err error) {
 			return ErrPCRPIDInvalid
 		}
 
-		psiData := psi.PSIData{
-			Sections: []psi.PSISection{
+		psiData := psi.Data{
+			Sections: []psi.Section{
 				{
-					Header: psi.PSISectionHeader{
-						SectionLength:          m.pmt.CalcPMTSectionLength(),
+					Header: psi.SectionHeader{
+						SectionLength:          uint16(m.pmt.CalcSectionLength()),
 						SectionSyntaxIndicator: true,
-						TableID:                psi.PSITableIDPMT,
+						TableID:                psi.TableIDPMT,
 					},
-					Syntax: &psi.PSISectionSyntax{
+					Syntax: &psi.SectionSyntax{
 						Data: &m.pmt,
-						Header: psi.PSISectionSyntaxHeader{
+						Header: psi.SectionSyntaxHeader{
 							CurrentNextIndicator: true,
 							//LastSectionNumber:    0,
 							//SectionNumber:        0,
@@ -426,9 +429,7 @@ func (m *Muxer) generatePMT() (err error) {
 			},
 		}
 
-		m.pmtDataBytes.Reset()
-		w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: &m.pmtDataBytes})
-		if _, err = psiData.WritePSIData(w); err != nil {
+		if m.pmtData, err = psiData.Append(m.pmtData[:0]); err != nil {
 			return
 		}
 
@@ -437,7 +438,7 @@ func (m *Muxer) generatePMT() (err error) {
 
 	m.pmtBytes.Reset()
 
-	l := m.pmtDataBytes.Len()
+	l := len(m.pmtData)
 	for i := 0; i <= l/packetMaxPayload; i++ {
 		start := i * packetMaxPayload
 		stop := start + packetMaxPayload
@@ -451,27 +452,28 @@ func (m *Muxer) generatePMT() (err error) {
 				PID:                       pmtStartPID, // FIXME multiple programs support
 				ContinuityCounter:         uint8(m.pmtCC.inc()),
 			},
-			Payload: m.pmtDataBytes.Bytes()[start:stop],
+			Payload: m.pmtData[start:stop],
 		}
-		if _, err = pkt.WriteBytes(m.pkt, &m.pmtBytes); err != nil {
+		if _, err = pkt.Put(m.pkt); err != nil {
 			// FIXME save old PMT and rollback to it here maybe?
 			return
 		}
+		m.pmtBytes.Write(m.pkt)
 	}
 
 	return
 }
 
-func toPATData(pm *programmap.Map) *psi.PATData {
-	d := &psi.PATData{
-		Programs:          make([]psi.PATProgram, 0, len(pm.P)),
-		TransportStreamID: uint16(psi.PSITableIDPAT),
+func toPATData(pm *pidmap.Map[uint16]) *psi.PAT {
+	d := &psi.PAT{
+		Programs:          make([]psi.PATProgram, 0, len(pm.Keys)),
+		TransportStreamID: uint16(psi.TableIDPAT),
 	}
 
-	for pid, pnr := range pm.P {
+	for i, pid := range pm.Keys {
 		d.Programs = append(d.Programs, psi.PATProgram{
-			ProgramMapID:  uint16(pid),
-			ProgramNumber: pnr,
+			ProgramMapID:  pid,
+			ProgramNumber: pm.Vals[i],
 		})
 	}
 

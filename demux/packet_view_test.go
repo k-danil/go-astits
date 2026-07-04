@@ -38,13 +38,13 @@ func TestZeroCopyPackets(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			opts := []func(*Demuxer){
-				DemuxerOptPacketSize(ts.MpegTsPacketSize),
-				DemuxerOptZeroCopyPackets(tc.batch),
+				WithPacketSize(ts.PacketSize),
+				WithZeroCopyPackets(tc.batch),
 			}
 			if tc.skipper != nil {
-				opts = append(opts, DemuxerOptPacketSkipper(tc.skipper))
+				opts = append(opts, WithPacketSkipper(tc.skipper))
 			}
-			dmx := NewDemuxer(context.Background(), bytes.NewReader(append(stream, tc.trailing...)), opts...)
+			dmx := New(context.Background(), bytes.NewReader(append(stream, tc.trailing...)), opts...)
 
 			p := ts.NewPacket()
 			defer p.Close()
@@ -64,9 +64,9 @@ func TestZeroCopyPackets(t *testing.T) {
 
 func TestZeroCopyNextDataForbidden(t *testing.T) {
 	stream := offsetTestStream([]uint16{0x100})
-	dmx := NewDemuxer(context.Background(), bytes.NewReader(stream),
-		DemuxerOptPacketSize(ts.MpegTsPacketSize),
-		DemuxerOptZeroCopyPackets(4),
+	dmx := New(context.Background(), bytes.NewReader(stream),
+		WithPacketSize(ts.PacketSize),
+		WithZeroCopyPackets(4),
 	)
 	_, err := dmx.NextData()
 	assert.True(t, errors.Is(err, ErrZeroCopyNextData))
@@ -75,9 +75,9 @@ func TestZeroCopyNextDataForbidden(t *testing.T) {
 func TestZeroCopyViewLifetime(t *testing.T) {
 	const batch = 2
 	stream := offsetTestStream([]uint16{0x100, 0x101, 0x102, 0x103})
-	dmx := NewDemuxer(context.Background(), bytes.NewReader(stream),
-		DemuxerOptPacketSize(ts.MpegTsPacketSize),
-		DemuxerOptZeroCopyPackets(batch),
+	dmx := New(context.Background(), bytes.NewReader(stream),
+		WithPacketSize(ts.PacketSize),
+		WithZeroCopyPackets(batch),
 	)
 
 	p := ts.NewPacket()

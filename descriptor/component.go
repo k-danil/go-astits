@@ -3,13 +3,13 @@ package descriptor
 import (
 	"fmt"
 
-	"github.com/asticode/go-astikit"
+	"github.com/k-danil/go-astits/internal/bytesiter"
 )
 
-// DescriptorComponent represents a component descriptor
+// Component represents a component descriptor
 // Chapter: 6.2.8 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
-type DescriptorComponent struct {
-	Header             DescriptorHeader
+type Component struct {
+	Header             Header
 	ISO639LanguageCode [3]byte
 	Text               []byte
 	ComponentTag       uint8
@@ -18,9 +18,9 @@ type DescriptorComponent struct {
 	StreamContentExt   uint8
 }
 
-func newDescriptorComponent(i *astikit.BytesIterator, h DescriptorHeader, offsetEnd int) (dd Descriptor, err error) {
+func newDescriptorComponent(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
 	// Init
-	d := &DescriptorComponent{
+	d := &Component{
 		Header: h,
 	}
 	dd = d
@@ -74,31 +74,14 @@ func newDescriptorComponent(i *astikit.BytesIterator, h DescriptorHeader, offset
 	return
 }
 
-func (d *DescriptorComponent) length() uint8 {
-	return uint8(6 + len(d.Text))
+func (d *Component) CalcLength() int {
+	return 6 + len(d.Text)
 }
 
-func (d *DescriptorComponent) write(w *astikit.BitsWriter) (int, error) {
-	b := astikit.NewBitsWriterBatch(w)
-
-	length := d.length()
-	b.Write(uint8(d.Header.Tag))
-	b.Write(length)
-
-	if err := b.Err(); err != nil {
-		return 0, err
-	}
-	written := int(length) + 2
-
-	b.WriteN(d.StreamContentExt, 4)
-	b.WriteN(d.StreamContent, 4)
-
-	b.Write(d.ComponentType)
-	b.Write(d.ComponentTag)
-
-	b.Write(d.ISO639LanguageCode[:])
-
-	b.Write(d.Text)
-
-	return written, b.Err()
+func (d *Component) Append(dst []byte) []byte {
+	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	dst = append(dst, d.StreamContentExt<<4|d.StreamContent&0xf)
+	dst = append(dst, d.ComponentType, d.ComponentTag)
+	dst = append(dst, d.ISO639LanguageCode[:]...)
+	return append(dst, d.Text...)
 }

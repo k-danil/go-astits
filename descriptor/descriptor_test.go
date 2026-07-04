@@ -17,19 +17,19 @@ var (
 )
 
 var descriptors = []Descriptor{
-	&DescriptorStreamIdentifier{
-		Header: DescriptorHeader{
-			Tag:    DescriptorTagStreamIdentifier,
+	&StreamIdentifier{
+		Header: Header{
+			Tag:    TagStreamIdentifier,
 			Length: 0x1,
 		},
 		ComponentTag: 0x7},
 }
 
 func descriptorsBytes(w *astikit.BitsWriter) {
-	w.Write("000000000011")                       // Overall length
-	w.Write(uint8(DescriptorTagStreamIdentifier)) // Tag
-	w.Write(uint8(1))                             // Length
-	w.Write(uint8(7))                             // Component tag
+	w.Write("000000000011")             // Overall length
+	w.Write(uint8(TagStreamIdentifier)) // Tag
+	w.Write(uint8(1))                   // Length
+	w.Write(uint8(7))                   // Component tag
 }
 
 type descriptorTest struct {
@@ -42,22 +42,22 @@ var descriptorTestTable = []descriptorTest{
 	{
 		"AC3",
 		func(w *astikit.BitsWriter) {
-			w.Write(uint8(DescriptorTagAC3)) // Tag
-			w.Write(uint8(9))                // Length
-			w.Write("1")                     // Component type flag
-			w.Write("1")                     // BSID flag
-			w.Write("1")                     // MainID flag
-			w.Write("1")                     // ASVC flag
-			w.Write("1111")                  // Reserved flags
-			w.Write(uint8(1))                // Component type
-			w.Write(uint8(2))                // BSID
-			w.Write(uint8(3))                // MainID
-			w.Write(uint8(4))                // ASVC
-			w.Write([]byte("info"))          // Additional info
+			w.Write(uint8(TagAC3))  // Tag
+			w.Write(uint8(9))       // Length
+			w.Write("1")            // Component type flag
+			w.Write("1")            // BSID flag
+			w.Write("1")            // MainID flag
+			w.Write("1")            // ASVC flag
+			w.Write("1111")         // Reserved flags
+			w.Write(uint8(1))       // Component type
+			w.Write(uint8(2))       // BSID
+			w.Write(uint8(3))       // MainID
+			w.Write(uint8(4))       // ASVC
+			w.Write([]byte("info")) // Additional info
 		},
-		&DescriptorAC3{
-			Header: DescriptorHeader{
-				Tag:    DescriptorTagAC3,
+		&AC3{
+			Header: Header{
+				Tag:    TagAC3,
 				Length: 9,
 			},
 			AdditionalInfo:   []byte("info"),
@@ -73,14 +73,14 @@ var descriptorTestTable = []descriptorTest{
 	{
 		"ISO639LanguageAndAudioType",
 		func(w *astikit.BitsWriter) {
-			w.Write(uint8(DescriptorTagISO639LanguageAndAudioType)) // Tag
-			w.Write(uint8(4))                                       // Length
-			w.Write([]byte("eng"))                                  // Language
-			w.Write(uint8(AudioTypeCleanEffects))                   // Audio type
+			w.Write(uint8(TagISO639LanguageAndAudioType)) // Tag
+			w.Write(uint8(4))                             // Length
+			w.Write([]byte("eng"))                        // Language
+			w.Write(uint8(AudioTypeCleanEffects))         // Audio type
 		},
-		&DescriptorISO639LanguageAndAudioType{
-			Header: DescriptorHeader{
-				Tag:    DescriptorTagISO639LanguageAndAudioType,
+		&ISO639LanguageAndAudioType{
+			Header: Header{
+				Tag:    TagISO639LanguageAndAudioType,
 				Length: 4,
 			},
 			Language: [3]byte{0x65, 0x6e, 0x67}, // eng
@@ -89,33 +89,33 @@ var descriptorTestTable = []descriptorTest{
 	{
 		"MaximumBitrate",
 		func(w *astikit.BitsWriter) {
-			w.Write(uint8(DescriptorTagMaximumBitrate)) // Tag
-			w.Write(uint8(3))                           // Length
-			w.Write("110000000000000000000001")         // Maximum bitrate
+			w.Write(uint8(TagMaximumBitrate))   // Tag
+			w.Write(uint8(3))                   // Length
+			w.Write("110000000000000000000001") // Maximum bitrate
 		},
-		&DescriptorMaximumBitrate{
-			Header: DescriptorHeader{
-				Tag:    DescriptorTagMaximumBitrate,
+		&MaximumBitrate{
+			Header: Header{
+				Tag:    TagMaximumBitrate,
 				Length: 3,
 			},
 			Bitrate: uint32(50)}},
 	{
 		"NetworkName",
 		func(w *astikit.BitsWriter) {
-			w.Write(uint8(DescriptorTagNetworkName)) // Tag
-			w.Write(uint8(4))                        // Length
-			w.Write([]byte("name"))                  // Name
+			w.Write(uint8(TagNetworkName)) // Tag
+			w.Write(uint8(4))              // Length
+			w.Write([]byte("name"))        // Name
 		},
-		&DescriptorNetworkName{
-			Header: DescriptorHeader{
-				Tag:    DescriptorTagNetworkName,
+		&NetworkName{
+			Header: Header{
+				Tag:    TagNetworkName,
 				Length: 4,
 			},
 			Name: []byte("name")}},
 	{
 		"Service",
 		func(w *astikit.BitsWriter) {
-			w.Write(uint8(DescriptorTagService))                // Tag
+			w.Write(uint8(TagService))                          // Tag
 			w.Write(uint8(18))                                  // Length
 			w.Write(uint8(ServiceTypeDigitalTelevisionService)) // Type
 			w.Write(uint8(8))                                   // Provider name length
@@ -123,9 +123,9 @@ var descriptorTestTable = []descriptorTest{
 			w.Write(uint8(7))                                   // Service name length
 			w.Write([]byte("service"))                          // Service name
 		},
-		&DescriptorService{
-			Header: DescriptorHeader{
-				Tag:    DescriptorTagService,
+		&Service{
+			Header: Header{
+				Tag:    TagService,
 				Length: 18,
 			},
 			Name:     []byte("service"),
@@ -135,17 +135,17 @@ var descriptorTestTable = []descriptorTest{
 	{
 		"ShortEvent",
 		func(w *astikit.BitsWriter) {
-			w.Write(uint8(DescriptorTagShortEvent)) // Tag
-			w.Write(uint8(14))                      // Length
-			w.Write([]byte("eng"))                  // Language code
-			w.Write(uint8(5))                       // Event name length
-			w.Write([]byte("event"))                // Event name
-			w.Write(uint8(4))                       // Text length
+			w.Write(uint8(TagShortEvent)) // Tag
+			w.Write(uint8(14))            // Length
+			w.Write([]byte("eng"))        // Language code
+			w.Write(uint8(5))             // Event name length
+			w.Write([]byte("event"))      // Event name
+			w.Write(uint8(4))             // Text length
 			w.Write([]byte("text"))
 		},
-		&DescriptorShortEvent{
-			Header: DescriptorHeader{
-				Tag:    DescriptorTagShortEvent,
+		&ShortEvent{
+			Header: Header{
+				Tag:    TagShortEvent,
 				Length: 14,
 			},
 			EventName: []byte("event"),
@@ -155,36 +155,36 @@ var descriptorTestTable = []descriptorTest{
 	{
 		"StreamIdentifier",
 		func(w *astikit.BitsWriter) {
-			w.Write(uint8(DescriptorTagStreamIdentifier)) // Tag
-			w.Write(uint8(1))                             // Length
-			w.Write(uint8(2))                             // Component tag
+			w.Write(uint8(TagStreamIdentifier)) // Tag
+			w.Write(uint8(1))                   // Length
+			w.Write(uint8(2))                   // Component tag
 		},
-		&DescriptorStreamIdentifier{
-			Header: DescriptorHeader{
-				Tag:    DescriptorTagStreamIdentifier,
+		&StreamIdentifier{
+			Header: Header{
+				Tag:    TagStreamIdentifier,
 				Length: 1,
 			},
 			ComponentTag: 0x2}},
 	{
 		"Subtitling",
 		func(w *astikit.BitsWriter) {
-			w.Write(uint8(DescriptorTagSubtitling)) // Tag
-			w.Write(uint8(16))                      // Length
-			w.Write([]byte("lg1"))                  // Item #1 language
-			w.Write(uint8(1))                       // Item #1 type
-			w.Write(uint16(2))                      // Item #1 composition page
-			w.Write(uint16(3))                      // Item #1 ancillary page
-			w.Write([]byte("lg2"))                  // Item #2 language
-			w.Write(uint8(4))                       // Item #2 type
-			w.Write(uint16(5))                      // Item #2 composition page
-			w.Write(uint16(6))                      // Item #2 ancillary page
+			w.Write(uint8(TagSubtitling)) // Tag
+			w.Write(uint8(16))            // Length
+			w.Write([]byte("lg1"))        // Item #1 language
+			w.Write(uint8(1))             // Item #1 type
+			w.Write(uint16(2))            // Item #1 composition page
+			w.Write(uint16(3))            // Item #1 ancillary page
+			w.Write([]byte("lg2"))        // Item #2 language
+			w.Write(uint8(4))             // Item #2 type
+			w.Write(uint16(5))            // Item #2 composition page
+			w.Write(uint16(6))            // Item #2 ancillary page
 		},
-		&DescriptorSubtitling{
-			Header: DescriptorHeader{
-				Tag:    DescriptorTagSubtitling,
+		&Subtitling{
+			Header: Header{
+				Tag:    TagSubtitling,
 				Length: 16,
 			},
-			Items: []DescriptorSubtitlingItem{
+			Items: []SubtitlingItem{
 				{
 					AncillaryPageID:   3,
 					CompositionPageID: 2,
@@ -201,23 +201,23 @@ var descriptorTestTable = []descriptorTest{
 	{
 		"Teletext",
 		func(w *astikit.BitsWriter) {
-			w.Write(uint8(DescriptorTagTeletext)) // Tag
-			w.Write(uint8(10))                    // Length
-			w.Write([]byte("lg1"))                // Item #1 language
-			w.Write("00001")                      // Item #1 type
-			w.Write("010")                        // Item #1 magazine
-			w.Write("00010010")                   // Item #1 page number
-			w.Write([]byte("lg2"))                // Item #2 language
-			w.Write("00011")                      // Item #2 type
-			w.Write("100")                        // Item #2 magazine
-			w.Write("00100011")                   // Item #2 page number
+			w.Write(uint8(TagTeletext)) // Tag
+			w.Write(uint8(10))          // Length
+			w.Write([]byte("lg1"))      // Item #1 language
+			w.Write("00001")            // Item #1 type
+			w.Write("010")              // Item #1 magazine
+			w.Write("00010010")         // Item #1 page number
+			w.Write([]byte("lg2"))      // Item #2 language
+			w.Write("00011")            // Item #2 type
+			w.Write("100")              // Item #2 magazine
+			w.Write("00100011")         // Item #2 page number
 		},
-		&DescriptorTeletext{
-			Header: DescriptorHeader{
-				Tag:    DescriptorTagTeletext,
+		&Teletext{
+			Header: Header{
+				Tag:    TagTeletext,
 				Length: 10,
 			},
-			Items: []DescriptorTeletextItem{
+			Items: []TeletextItem{
 				{
 					Language: [3]byte{0x6c, 0x67, 0x31}, // lg1
 					Magazine: uint8(2),
@@ -234,26 +234,26 @@ var descriptorTestTable = []descriptorTest{
 	{
 		"ExtendedEvent",
 		func(w *astikit.BitsWriter) {
-			w.Write(uint8(DescriptorTagExtendedEvent)) // Tag
-			w.Write(uint8(30))                         // Length
-			w.Write("0001")                            // Number
-			w.Write("0010")                            // Last descriptor number
-			w.Write([]byte("lan"))                     // ISO 639 language code
-			w.Write(uint8(20))                         // Length of items
-			w.Write(uint8(11))                         // Item #1 description length
-			w.Write([]byte("description"))             // Item #1 description
-			w.Write(uint8(7))                          // Item #1 content length
-			w.Write([]byte("content"))                 // Item #1 content
-			w.Write(uint8(4))                          // Text length
-			w.Write([]byte("text"))                    // Text
+			w.Write(uint8(TagExtendedEvent)) // Tag
+			w.Write(uint8(30))               // Length
+			w.Write("0001")                  // Number
+			w.Write("0010")                  // Last descriptor number
+			w.Write([]byte("lan"))           // ISO 639 language code
+			w.Write(uint8(20))               // Length of items
+			w.Write(uint8(11))               // Item #1 description length
+			w.Write([]byte("description"))   // Item #1 description
+			w.Write(uint8(7))                // Item #1 content length
+			w.Write([]byte("content"))       // Item #1 content
+			w.Write(uint8(4))                // Text length
+			w.Write([]byte("text"))          // Text
 		},
-		&DescriptorExtendedEvent{
-			Header: DescriptorHeader{
-				Tag:    DescriptorTagExtendedEvent,
+		&ExtendedEvent{
+			Header: Header{
+				Tag:    TagExtendedEvent,
 				Length: 30,
 			},
 			ISO639LanguageCode: [3]byte{0x6c, 0x61, 0x6e}, // lan
-			Items: []DescriptorExtendedEventItem{{
+			Items: []ExtendedEventItem{{
 				Content:     []byte("content"),
 				Description: []byte("description"),
 			}},
@@ -264,28 +264,28 @@ var descriptorTestTable = []descriptorTest{
 	{
 		"EnhancedAC3",
 		func(w *astikit.BitsWriter) {
-			w.Write(uint8(DescriptorTagEnhancedAC3)) // Tag
-			w.Write(uint8(12))                       // Length
-			w.Write("1")                             // Component type flag
-			w.Write("1")                             // BSID flag
-			w.Write("1")                             // MainID flag
-			w.Write("1")                             // ASVC flag
-			w.Write("1")                             // Mix info exists
-			w.Write("1")                             // SubStream1 flag
-			w.Write("1")                             // SubStream2 flag
-			w.Write("1")                             // SubStream3 flag
-			w.Write(uint8(1))                        // Component type
-			w.Write(uint8(2))                        // BSID
-			w.Write(uint8(3))                        // MainID
-			w.Write(uint8(4))                        // ASVC
-			w.Write(uint8(5))                        // SubStream1
-			w.Write(uint8(6))                        // SubStream2
-			w.Write(uint8(7))                        // SubStream3
-			w.Write([]byte("info"))                  // Additional info
+			w.Write(uint8(TagEnhancedAC3)) // Tag
+			w.Write(uint8(12))             // Length
+			w.Write("1")                   // Component type flag
+			w.Write("1")                   // BSID flag
+			w.Write("1")                   // MainID flag
+			w.Write("1")                   // ASVC flag
+			w.Write("1")                   // Mix info exists
+			w.Write("1")                   // SubStream1 flag
+			w.Write("1")                   // SubStream2 flag
+			w.Write("1")                   // SubStream3 flag
+			w.Write(uint8(1))              // Component type
+			w.Write(uint8(2))              // BSID
+			w.Write(uint8(3))              // MainID
+			w.Write(uint8(4))              // ASVC
+			w.Write(uint8(5))              // SubStream1
+			w.Write(uint8(6))              // SubStream2
+			w.Write(uint8(7))              // SubStream3
+			w.Write([]byte("info"))        // Additional info
 		},
-		&DescriptorEnhancedAC3{
-			Header: DescriptorHeader{
-				Tag:    DescriptorTagEnhancedAC3,
+		&EnhancedAC3{
+			Header: Header{
+				Tag:    TagEnhancedAC3,
 				Length: 12,
 			},
 			AdditionalInfo:   []byte("info"),
@@ -308,46 +308,46 @@ var descriptorTestTable = []descriptorTest{
 	{
 		"Extension",
 		func(w *astikit.BitsWriter) {
-			w.Write(uint8(DescriptorTagExtension))                   // Tag
-			w.Write(uint8(12))                                       // Length
-			w.Write(uint8(DescriptorTagExtensionSupplementaryAudio)) // Extension tag
-			w.Write("1")                                             // Mix type
-			w.Write("10101")                                         // Editorial classification
-			w.Write("1")                                             // Reserved
-			w.Write("1")                                             // Language code flag
-			w.Write([]byte("lan"))                                   // Language code
-			w.Write([]byte("private"))                               // Private data
+			w.Write(uint8(TagExtension))                   // Tag
+			w.Write(uint8(12))                             // Length
+			w.Write(uint8(TagExtensionSupplementaryAudio)) // Extension tag
+			w.Write("1")                                   // Mix type
+			w.Write("10101")                               // Editorial classification
+			w.Write("1")                                   // Reserved
+			w.Write("1")                                   // Language code flag
+			w.Write([]byte("lan"))                         // Language code
+			w.Write([]byte("private"))                     // Private data
 		},
-		&DescriptorExtension{
-			Header: DescriptorHeader{
-				Tag:    DescriptorTagExtension,
+		&Extension{
+			Header: Header{
+				Tag:    TagExtension,
 				Length: 12,
 			},
-			SupplementaryAudio: &DescriptorExtensionSupplementaryAudio{
+			SupplementaryAudio: &ExtensionSupplementaryAudio{
 				EditorialClassification: 21,
 				HasLanguageCode:         true,
 				LanguageCode:            [3]byte{0x6c, 0x61, 0x6e}, // lan
 				MixType:                 true,
 				PrivateData:             []byte("private"),
 			},
-			Tag:     DescriptorTagExtensionSupplementaryAudio,
+			Tag:     TagExtensionSupplementaryAudio,
 			Unknown: nil,
 		}},
 	{
 		"Component",
 		func(w *astikit.BitsWriter) {
-			w.Write(uint8(DescriptorTagComponent)) // Tag
-			w.Write(uint8(10))                     // Length
-			w.Write("1010")                        // Stream content ext
-			w.Write("0101")                        // Stream content
-			w.Write(uint8(1))                      // Component type
-			w.Write(uint8(2))                      // Component tag
-			w.Write([]byte("lan"))                 // ISO639 language code
-			w.Write([]byte("text"))                // Text
+			w.Write(uint8(TagComponent)) // Tag
+			w.Write(uint8(10))           // Length
+			w.Write("1010")              // Stream content ext
+			w.Write("0101")              // Stream content
+			w.Write(uint8(1))            // Component type
+			w.Write(uint8(2))            // Component tag
+			w.Write([]byte("lan"))       // ISO639 language code
+			w.Write([]byte("text"))      // Text
 		},
-		&DescriptorComponent{
-			Header: DescriptorHeader{
-				Tag:    DescriptorTagComponent,
+		&Component{
+			Header: Header{
+				Tag:    TagComponent,
 				Length: 10,
 			},
 			ComponentTag:       2,
@@ -360,18 +360,18 @@ var descriptorTestTable = []descriptorTest{
 	{
 		"Content",
 		func(w *astikit.BitsWriter) {
-			w.Write(uint8(DescriptorTagContent)) // Tag
-			w.Write(uint8(2))                    // Length
-			w.Write("0001")                      // Item #1 content nibble level 1
-			w.Write("0010")                      // Item #1 content nibble level 2
-			w.Write(uint8(3))                    // Item #1 user byte
+			w.Write(uint8(TagContent)) // Tag
+			w.Write(uint8(2))          // Length
+			w.Write("0001")            // Item #1 content nibble level 1
+			w.Write("0010")            // Item #1 content nibble level 2
+			w.Write(uint8(3))          // Item #1 user byte
 		},
-		&DescriptorContent{
-			Header: DescriptorHeader{
-				Tag:    DescriptorTagContent,
+		&Content{
+			Header: Header{
+				Tag:    TagContent,
 				Length: 2,
 			},
-			Items: []DescriptorContentItem{{
+			Items: []ContentItem{{
 				ContentNibbleLevel1: 1,
 				ContentNibbleLevel2: 2,
 				UserByte:            3,
@@ -379,39 +379,39 @@ var descriptorTestTable = []descriptorTest{
 	{
 		"ParentalRating",
 		func(w *astikit.BitsWriter) {
-			w.Write(uint8(DescriptorTagParentalRating)) // Tag
-			w.Write(uint8(4))                           // Length
-			w.Write([]byte("cou"))                      // Item #1 country code
-			w.Write(uint8(2))                           // Item #1 rating
+			w.Write(uint8(TagParentalRating)) // Tag
+			w.Write(uint8(4))                 // Length
+			w.Write([]byte("cou"))            // Item #1 country code
+			w.Write(uint8(2))                 // Item #1 rating
 		},
-		&DescriptorParentalRating{
-			Header: DescriptorHeader{
-				Tag:    DescriptorTagParentalRating,
+		&ParentalRating{
+			Header: Header{
+				Tag:    TagParentalRating,
 				Length: 4,
 			},
-			Items: []DescriptorParentalRatingItem{{
+			Items: []ParentalRatingItem{{
 				CountryCode: [3]byte{0x63, 0x6f, 0x75}, // cou
 				Rating:      2,
 			}}}},
 	{
 		"LocalTimeOffset",
 		func(w *astikit.BitsWriter) {
-			w.Write(uint8(DescriptorTagLocalTimeOffset)) // Tag
-			w.Write(uint8(13))                           // Length
-			w.Write([]byte("cou"))                       // Country code
-			w.Write("101010")                            // Country region ID
-			w.Write("1")                                 // Reserved
-			w.Write("1")                                 // Local time offset polarity
-			w.Write(dvbDurationMinutesBytes)             // Local time offset
-			w.Write(dvbTimeBytes)                        // Time of change
-			w.Write(dvbDurationMinutesBytes)             // Next time offset
+			w.Write(uint8(TagLocalTimeOffset)) // Tag
+			w.Write(uint8(13))                 // Length
+			w.Write([]byte("cou"))             // Country code
+			w.Write("101010")                  // Country region ID
+			w.Write("1")                       // Reserved
+			w.Write("1")                       // Local time offset polarity
+			w.Write(dvbDurationMinutesBytes)   // Local time offset
+			w.Write(dvbTimeBytes)              // Time of change
+			w.Write(dvbDurationMinutesBytes)   // Next time offset
 		},
-		&DescriptorLocalTimeOffset{
-			Header: DescriptorHeader{
-				Tag:    DescriptorTagLocalTimeOffset,
+		&LocalTimeOffset{
+			Header: Header{
+				Tag:    TagLocalTimeOffset,
 				Length: 13,
 			},
-			Items: []DescriptorLocalTimeOffsetItem{{
+			Items: []LocalTimeOffsetItem{{
 				CountryCode:             [3]byte{0x63, 0x6f, 0x75}, // cou
 				CountryRegionID:         42,
 				LocalTimeOffset:         dvbDurationMinutes,
@@ -422,7 +422,7 @@ var descriptorTestTable = []descriptorTest{
 	{
 		"VBIData",
 		func(w *astikit.BitsWriter) {
-			w.Write(uint8(DescriptorTagVBIData))        // Tag
+			w.Write(uint8(TagVBIData))                  // Tag
 			w.Write(uint8(3))                           // Length
 			w.Write(uint8(VBIDataServiceIDEBUTeletext)) // Service #1 id
 			w.Write(uint8(1))                           // Service #1 descriptor length
@@ -430,14 +430,14 @@ var descriptorTestTable = []descriptorTest{
 			w.Write("1")                                // Service #1 descriptor field polarity
 			w.Write("10101")                            // Service #1 descriptor line offset
 		},
-		&DescriptorVBIData{
-			Header: DescriptorHeader{
-				Tag:    DescriptorTagVBIData,
+		&VBIData{
+			Header: Header{
+				Tag:    TagVBIData,
 				Length: 3,
 			},
-			Services: []DescriptorVBIDataService{{
+			Services: []VBIDataService{{
 				DataServiceID: VBIDataServiceIDEBUTeletext,
-				Descriptors: []DescriptorVBIDataDescriptor{{
+				Descriptors: []VBIDataDescriptor{{
 					FieldParity: true,
 					LineOffset:  21,
 				}},
@@ -445,19 +445,19 @@ var descriptorTestTable = []descriptorTest{
 	{
 		"VBITeletext",
 		func(w *astikit.BitsWriter) {
-			w.Write(uint8(DescriptorTagVBITeletext)) // Tag
-			w.Write(uint8(5))                        // Length
-			w.Write([]byte("lan"))                   // Item #1 language
-			w.Write("00001")                         // Item #1 type
-			w.Write("010")                           // Item #1 magazine
-			w.Write("00010010")                      // Item #1 page number
+			w.Write(uint8(TagVBITeletext)) // Tag
+			w.Write(uint8(5))              // Length
+			w.Write([]byte("lan"))         // Item #1 language
+			w.Write("00001")               // Item #1 type
+			w.Write("010")                 // Item #1 magazine
+			w.Write("00010010")            // Item #1 page number
 		},
-		&DescriptorTeletext{
-			Header: DescriptorHeader{
-				Tag:    DescriptorTagVBITeletext,
+		&Teletext{
+			Header: Header{
+				Tag:    TagVBITeletext,
 				Length: 5,
 			},
-			Items: []DescriptorTeletextItem{{
+			Items: []TeletextItem{{
 				Language: [3]byte{0x6c, 0x61, 0x6e}, // lan
 				Magazine: uint8(2),
 				Page:     uint8(12),
@@ -466,21 +466,21 @@ var descriptorTestTable = []descriptorTest{
 	{
 		"AVCVideo",
 		func(w *astikit.BitsWriter) {
-			w.Write(uint8(DescriptorTagAVCVideo)) // Tag
-			w.Write(uint8(4))                     // Length
-			w.Write(uint8(1))                     // Profile idc
-			w.Write("1")                          // Constraint set0 flag
-			w.Write("1")                          // Constraint set1 flag
-			w.Write("1")                          // Constraint set1 flag
-			w.Write("10101")                      // Compatible flags
-			w.Write(uint8(2))                     // Level idc
-			w.Write("1")                          // AVC still present
-			w.Write("1")                          // AVC 24 hour picture flag
-			w.Write("111111")                     // Reserved
+			w.Write(uint8(TagAVCVideo)) // Tag
+			w.Write(uint8(4))           // Length
+			w.Write(uint8(1))           // Profile idc
+			w.Write("1")                // Constraint set0 flag
+			w.Write("1")                // Constraint set1 flag
+			w.Write("1")                // Constraint set1 flag
+			w.Write("10101")            // Compatible flags
+			w.Write(uint8(2))           // Level idc
+			w.Write("1")                // AVC still present
+			w.Write("1")                // AVC 24 hour picture flag
+			w.Write("111111")           // Reserved
 		},
-		&DescriptorAVCVideo{
-			Header: DescriptorHeader{
-				Tag:    DescriptorTagAVCVideo,
+		&AVCVideo{
+			Header: Header{
+				Tag:    TagAVCVideo,
 				Length: 4,
 			},
 			AVC24HourPictureFlag: true,
@@ -495,13 +495,13 @@ var descriptorTestTable = []descriptorTest{
 	{
 		"PrivateDataSpecifier",
 		func(w *astikit.BitsWriter) {
-			w.Write(uint8(DescriptorTagPrivateDataSpecifier)) // Tag
-			w.Write(uint8(4))                                 // Length
-			w.Write(uint32(128))                              // Private data specifier
+			w.Write(uint8(TagPrivateDataSpecifier)) // Tag
+			w.Write(uint8(4))                       // Length
+			w.Write(uint32(128))                    // Private data specifier
 		},
-		&DescriptorPrivateDataSpecifier{
-			Header: DescriptorHeader{
-				Tag:    DescriptorTagPrivateDataSpecifier,
+		&PrivateDataSpecifier{
+			Header: Header{
+				Tag:    TagPrivateDataSpecifier,
 				Length: 4,
 			},
 			Specifier: 128,
@@ -509,13 +509,13 @@ var descriptorTestTable = []descriptorTest{
 	{
 		"DataStreamAlignment",
 		func(w *astikit.BitsWriter) {
-			w.Write(uint8(DescriptorTagDataStreamAlignment)) // Tag
-			w.Write(uint8(1))                                // Length
-			w.Write(uint8(2))                                // Type
+			w.Write(uint8(TagDataStreamAlignment)) // Tag
+			w.Write(uint8(1))                      // Length
+			w.Write(uint8(2))                      // Type
 		},
-		&DescriptorDataStreamAlignment{
-			Header: DescriptorHeader{
-				Tag:    DescriptorTagDataStreamAlignment,
+		&DataStreamAlignment{
+			Header: Header{
+				Tag:    TagDataStreamAlignment,
 				Length: 1,
 			},
 			Type: 2,
@@ -523,13 +523,13 @@ var descriptorTestTable = []descriptorTest{
 	{
 		"PrivateDataIndicator",
 		func(w *astikit.BitsWriter) {
-			w.Write(uint8(DescriptorTagPrivateDataIndicator)) // Tag
-			w.Write(uint8(4))                                 // Length
-			w.Write(uint32(127))                              // Private data indicator
+			w.Write(uint8(TagPrivateDataIndicator)) // Tag
+			w.Write(uint8(4))                       // Length
+			w.Write(uint32(127))                    // Private data indicator
 		},
-		&DescriptorPrivateDataIndicator{
-			Header: DescriptorHeader{
-				Tag:    DescriptorTagPrivateDataIndicator,
+		&PrivateDataIndicator{
+			Header: Header{
+				Tag:    TagPrivateDataIndicator,
 				Length: 4,
 			},
 			Indicator: 127,
@@ -541,8 +541,8 @@ var descriptorTestTable = []descriptorTest{
 			w.Write(uint8(4))       // Length
 			w.Write([]byte("test")) // User defined
 		},
-		&DescriptorUserDefined{
-			Header: DescriptorHeader{
+		&UserDefined{
+			Header: Header{
 				Tag:    0x80,
 				Length: 4,
 			},
@@ -550,14 +550,14 @@ var descriptorTestTable = []descriptorTest{
 	{
 		"Registration",
 		func(w *astikit.BitsWriter) {
-			w.Write(uint8(DescriptorTagRegistration)) // Tag
-			w.Write(uint8(8))                         // Length
-			w.Write(uint32(1))                        // Format identifier
-			w.Write([]byte("test"))                   // Additional identification info
+			w.Write(uint8(TagRegistration)) // Tag
+			w.Write(uint8(8))               // Length
+			w.Write(uint32(1))              // Format identifier
+			w.Write([]byte("test"))         // Additional identification info
 		},
-		&DescriptorRegistration{
-			Header: DescriptorHeader{
-				Tag:    DescriptorTagRegistration,
+		&Registration{
+			Header: Header{
+				Tag:    TagRegistration,
 				Length: 8,
 			},
 			AdditionalIdentificationInfo: []byte("test"),
@@ -570,8 +570,8 @@ var descriptorTestTable = []descriptorTest{
 			w.Write(uint8(4))       // Length
 			w.Write([]byte("test")) // Content
 		},
-		&DescriptorUnknown{
-			Header: DescriptorHeader{
+		&Unknown{
+			Header: Header{
 				Tag:    0x1,
 				Length: 4,
 			},
@@ -580,14 +580,14 @@ var descriptorTestTable = []descriptorTest{
 	{
 		"Extension",
 		func(w *astikit.BitsWriter) {
-			w.Write(uint8(DescriptorTagExtension)) // Tag
-			w.Write(uint8(5))                      // Length
-			w.Write(uint8(0))                      // Extension tag
-			w.Write([]byte("test"))                // Content
+			w.Write(uint8(TagExtension)) // Tag
+			w.Write(uint8(5))            // Length
+			w.Write(uint8(0))            // Extension tag
+			w.Write([]byte("test"))      // Content
 		},
-		&DescriptorExtension{
-			Header: DescriptorHeader{
-				Tag:    DescriptorTagExtension,
+		&Extension{
+			Header: Header{
+				Tag:    TagExtension,
 				Length: 5,
 			},
 			Tag:     0,
@@ -611,7 +611,7 @@ func TestParseDescriptorOneByOne(t *testing.T) {
 			descBytes[0] = byte(descLen >> 8)
 			descBytes[1] = byte(descLen & 0xff)
 
-			ds, err := ParseDescriptors(astikit.NewBytesIterator(descBytes))
+			ds, _, err := Parse(descBytes)
 			assert.NoError(t, err)
 			assert.Equal(t, tc.desc, ds[0])
 		})
@@ -632,7 +632,7 @@ func TestParseDescriptorAll(t *testing.T) {
 	descBytes[0] = byte(descLen >> 8)
 	descBytes[1] = byte(descLen & 0xff)
 
-	ds, err := ParseDescriptors(astikit.NewBytesIterator(descBytes))
+	ds, _, err := Parse(descBytes)
 	assert.NoError(t, err)
 
 	for i, tc := range descriptorTestTable {
@@ -647,12 +647,9 @@ func TestWriteDescriptorOneByOne(t *testing.T) {
 			wExpected := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: &bufExpected})
 			tc.bytesFunc(wExpected)
 
-			bufActual := bytes.Buffer{}
-			wActual := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: &bufActual})
-			n, err := tc.desc.write(wActual)
-			assert.NoError(t, err)
-			assert.Equal(t, n, bufActual.Len())
-			assert.Equal(t, bufExpected.Bytes(), bufActual.Bytes())
+			actual := tc.desc.Append(nil)
+			assert.Equal(t, 2+tc.desc.CalcLength(), len(actual))
+			assert.Equal(t, bufExpected.Bytes(), actual)
 		})
 	}
 }
@@ -675,27 +672,19 @@ func TestWriteDescriptorAll(t *testing.T) {
 	descBytes[0] = byte(descLen>>8) | 0b11110000 // program_info_length is preceded by 4 reserved bits
 	descBytes[1] = byte(descLen & 0xff)
 
-	bufActual := bytes.Buffer{}
-	wActual := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: &bufActual})
-
-	n, err := WriteDescriptorsWithLength(wActual, dss)
-	assert.NoError(t, err)
-	assert.Equal(t, n, bufActual.Len())
-	assert.Equal(t, bufExpected.Len(), bufActual.Len())
-	assert.Equal(t, bufExpected.Bytes(), bufActual.Bytes())
+	actual := AppendWithLength(nil, dss)
+	assert.Equal(t, bufExpected.Len(), len(actual))
+	assert.Equal(t, bufExpected.Bytes(), actual)
 }
 
 func BenchmarkWriteDescriptor(b *testing.B) {
-	buf := bytes.Buffer{}
-	buf.Grow(1024)
-	w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: &buf})
+	dst := make([]byte, 0, 1024)
 
 	for _, bm := range descriptorTestTable {
 		b.Run(bm.name, func(b *testing.B) {
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {
-				buf.Reset()
-				bm.desc.write(w)
+				dst = bm.desc.Append(dst[:0])
 			}
 		})
 	}
@@ -717,12 +706,11 @@ func BenchmarkParseDescriptor(b *testing.B) {
 	}
 
 	for ti, tc := range descriptorTestTable {
-		bi := astikit.NewBytesIterator(bss[ti])
+		bs := bss[ti]
 		b.Run(tc.name, func(b *testing.B) {
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {
-				bi.Seek(0)
-				ParseDescriptors(bi)
+				Parse(bs)
 			}
 		})
 	}

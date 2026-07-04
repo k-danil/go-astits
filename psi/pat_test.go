@@ -6,9 +6,11 @@ import (
 
 	"github.com/asticode/go-astikit"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/k-danil/go-astits/internal/bytesiter"
 )
 
-var pat = &PATData{
+var pat = &PAT{
 	Programs: []PATProgram{
 		{ProgramMapID: 3, ProgramNumber: 2},
 		{ProgramMapID: 5, ProgramNumber: 4},
@@ -30,19 +32,15 @@ func patBytes() []byte {
 
 func TestParsePATSection(t *testing.T) {
 	var b = patBytes()
-	d, err := parsePATSection(astikit.NewBytesIterator(b), len(b), uint16(1))
+	d, err := parsePATSection(bytesiter.New(b), len(b), uint16(1))
 	assert.Equal(t, d, pat)
 	assert.NoError(t, err)
 }
 
 func TestWritePATSection(t *testing.T) {
-	bw := &bytes.Buffer{}
-	w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: bw})
-	n, err := pat.writePATSection(w)
-	assert.NoError(t, err)
-	assert.Equal(t, n, 8)
-	assert.Equal(t, n, bw.Len())
-	assert.Equal(t, patBytes(), bw.Bytes())
+	dst := pat.appendSection(nil)
+	assert.Equal(t, 8, len(dst))
+	assert.Equal(t, patBytes(), dst)
 }
 
 func BenchmarkParsePATSection(b *testing.B) {
@@ -50,19 +48,16 @@ func BenchmarkParsePATSection(b *testing.B) {
 	bs := patBytes()
 
 	for i := 0; i < b.N; i++ {
-		parsePATSection(astikit.NewBytesIterator(bs), len(bs), uint16(1))
+		parsePATSection(bytesiter.New(bs), len(bs), uint16(1))
 	}
 }
 
 func BenchmarkWritePATSection(b *testing.B) {
 	b.ReportAllocs()
 
-	bw := &bytes.Buffer{}
-	bw.Grow(1024)
-	w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: bw})
+	dst := make([]byte, 0, 1024)
 
 	for i := 0; i < b.N; i++ {
-		bw.Reset()
-		pat.writePATSection(w)
+		dst = pat.appendSection(dst[:0])
 	}
 }

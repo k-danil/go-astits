@@ -4,16 +4,16 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"github.com/asticode/go-astikit"
+	"github.com/k-danil/go-astits/internal/bytesiter"
 )
 
 const (
 	patSectionEntryBytesSize = 4 // 16 bits + 3 reserved + 13 bits = 32 bits
 )
 
-// PATData represents a PAT data
+// PAT represents a PAT data
 // https://en.wikipedia.org/wiki/Program-specific_information
-type PATData struct {
+type PAT struct {
 	Programs          []PATProgram
 	TransportStreamID uint16
 }
@@ -25,9 +25,9 @@ type PATProgram struct {
 }
 
 // parsePATSection parses a PAT section
-func parsePATSection(i *astikit.BytesIterator, offsetSectionsEnd int, tableIDExtension uint16) (d *PATData, err error) {
+func parsePATSection(i *bytesiter.Iterator, offsetSectionsEnd int, tableIDExtension uint16) (d *PAT, err error) {
 	// Create data
-	d = &PATData{
+	d = &PAT{
 		TransportStreamID: tableIDExtension,
 		Programs:          make([]PATProgram, (offsetSectionsEnd-i.Offset())/4),
 	}
@@ -50,18 +50,15 @@ func parsePATSection(i *astikit.BytesIterator, offsetSectionsEnd int, tableIDExt
 	return
 }
 
-func (d *PATData) CalcPATSectionLength() uint16 {
-	return uint16(4 * len(d.Programs))
+func (d *PAT) CalcSectionLength() int {
+	return 4 * len(d.Programs)
 }
 
-func (d *PATData) writePATSection(w *astikit.BitsWriter) (int, error) {
-	b := astikit.NewBitsWriterBatch(w)
-
+func (d *PAT) appendSection(dst []byte) []byte {
 	for _, p := range d.Programs {
-		b.Write(p.ProgramNumber)
-		b.WriteN(uint8(0xff), 3)
-		b.WriteN(p.ProgramMapID, 13)
+		dst = append(dst,
+			byte(p.ProgramNumber>>8), byte(p.ProgramNumber),
+			0xe0|byte(p.ProgramMapID>>8)&0x1f, byte(p.ProgramMapID))
 	}
-
-	return len(d.Programs) * patSectionEntryBytesSize, b.Err()
+	return dst
 }

@@ -4,24 +4,23 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/asticode/go-astikit"
-
 	"github.com/k-danil/go-astits/descriptor"
+	"github.com/k-danil/go-astits/internal/bytesiter"
 	"github.com/k-danil/go-astits/internal/dvb"
 )
 
-// TOTData represents a TOT data
+// TOT represents a TOT data
 // Page: 39 | Chapter: 5.2.6 | Link: https://www.dvb.org/resources/public/standards/a38_dvb-si_specification.pdf
 // (barbashov) the link above can be broken, alternative: https://dvb.org/wp-content/uploads/2019/12/a038_tm1217r37_en300468v1_17_1_-_rev-134_-_si_specification.pdf
-type TOTData struct {
+type TOT struct {
 	Descriptors []descriptor.Descriptor
 	UTCTime     time.Time
 }
 
 // parseTOTSection parses a TOT section
-func parseTOTSection(i *astikit.BytesIterator) (d *TOTData, err error) {
+func parseTOTSection(i *bytesiter.Iterator) (d *TOT, err error) {
 	// Create data
-	d = &TOTData{}
+	d = &TOT{}
 
 	// UTC time
 	if d.UTCTime, err = dvb.ParseTime(i); err != nil {
@@ -30,9 +29,11 @@ func parseTOTSection(i *astikit.BytesIterator) (d *TOTData, err error) {
 	}
 
 	// Descriptors
-	if d.Descriptors, err = descriptor.ParseDescriptors(i); err != nil {
+	var dn int
+	if d.Descriptors, dn, err = descriptor.Parse(i.Bytes()); err != nil {
 		err = fmt.Errorf("astits: parsing descriptors failed: %w", err)
 		return
 	}
+	i.Skip(dn)
 	return
 }

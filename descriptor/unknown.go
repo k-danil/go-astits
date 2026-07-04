@@ -3,17 +3,17 @@ package descriptor
 import (
 	"fmt"
 
-	"github.com/asticode/go-astikit"
+	"github.com/k-danil/go-astits/internal/bytesiter"
 )
 
-type DescriptorUnknown struct {
-	Header  DescriptorHeader
+type Unknown struct {
+	Header  Header
 	Content []byte
 }
 
-func newDescriptorUnknown(i *astikit.BytesIterator, h DescriptorHeader, _ int) (dd Descriptor, err error) {
+func newDescriptorUnknown(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {
 	// Create descriptor
-	d := &DescriptorUnknown{
+	d := &Unknown{
 		Header: h,
 	}
 	dd = d
@@ -26,23 +26,11 @@ func newDescriptorUnknown(i *astikit.BytesIterator, h DescriptorHeader, _ int) (
 	return
 }
 
-func (d *DescriptorUnknown) length() uint8 {
-	return uint8(len(d.Content))
+func (d *Unknown) CalcLength() int {
+	return len(d.Content)
 }
 
-func (d *DescriptorUnknown) write(w *astikit.BitsWriter) (int, error) {
-	b := astikit.NewBitsWriterBatch(w)
-
-	length := d.length()
-	b.Write(uint8(d.Header.Tag))
-	b.Write(length)
-
-	if err := b.Err(); err != nil {
-		return 0, err
-	}
-	written := int(length) + 2
-
-	b.Write(d.Content)
-
-	return written, b.Err()
+func (d *Unknown) Append(dst []byte) []byte {
+	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	return append(dst, d.Content...)
 }

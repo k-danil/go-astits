@@ -3,30 +3,30 @@ package descriptor
 import (
 	"fmt"
 
-	"github.com/asticode/go-astikit"
+	"github.com/k-danil/go-astits/internal/bytesiter"
 )
 
-// DescriptorExtendedEvent represents an extended event descriptor
+// ExtendedEvent represents an extended event descriptor
 // Chapter: 6.2.15 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
-type DescriptorExtendedEvent struct {
+type ExtendedEvent struct {
 	Text                 []byte
-	Items                []DescriptorExtendedEventItem
-	Header               DescriptorHeader
+	Items                []ExtendedEventItem
+	Header               Header
 	ISO639LanguageCode   [3]byte
 	LastDescriptorNumber uint8
 	Number               uint8
 }
 
-// DescriptorExtendedEventItem represents an extended event item descriptor
+// ExtendedEventItem represents an extended event item descriptor
 // Chapter: 6.2.15 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
-type DescriptorExtendedEventItem struct {
+type ExtendedEventItem struct {
 	Content     []byte
 	Description []byte
 }
 
-func newDescriptorExtendedEvent(i *astikit.BytesIterator, h DescriptorHeader, _ int) (dd Descriptor, err error) {
+func newDescriptorExtendedEvent(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {
 	// Init
-	d := &DescriptorExtendedEvent{
+	d := &ExtendedEvent{
 		Header: h,
 	}
 	dd = d
@@ -66,7 +66,7 @@ func newDescriptorExtendedEvent(i *astikit.BytesIterator, h DescriptorHeader, _ 
 	offsetEnd := i.Offset() + itemsLength
 	for i.Offset() < offsetEnd {
 		// Create item
-		var item DescriptorExtendedEventItem
+		var item ExtendedEventItem
 		if err = item.newDescriptorExtendedEventItem(i); err != nil {
 			err = fmt.Errorf("astits: creating extended event item failed: %w", err)
 			return
@@ -93,7 +93,7 @@ func newDescriptorExtendedEvent(i *astikit.BytesIterator, h DescriptorHeader, _ 
 	return
 }
 
-func (d *DescriptorExtendedEventItem) newDescriptorExtendedEventItem(i *astikit.BytesIterator) (err error) {
+func (d *ExtendedEventItem) newDescriptorExtendedEventItem(i *bytesiter.Iterator) (err error) {
 	// Get next byte
 	var b byte
 	if b, err = i.NextByte(); err != nil {
@@ -127,37 +127,24 @@ func (d *DescriptorExtendedEventItem) newDescriptorExtendedEventItem(i *astikit.
 	return
 }
 
-func (d *DescriptorExtendedEvent) length() uint8 {
+func (d *ExtendedEvent) CalcLength() int {
 	ret := 1 + 3 + 1 // numbers, language and items length
 
-	itemsRet := 0
 	for _, item := range d.Items {
-		itemsRet += 1 // description length
-		itemsRet += len(item.Description)
-		itemsRet += 1 // content length
-		itemsRet += len(item.Content)
+		ret += 1 // description length
+		ret += len(item.Description)
+		ret += 1 // content length
+		ret += len(item.Content)
 	}
-
-	ret += itemsRet
 
 	ret += 1 // text length
 	ret += len(d.Text)
 
-	return uint8(ret)
+	return ret
 }
 
-func (d *DescriptorExtendedEvent) write(w *astikit.BitsWriter) (int, error) {
-	b := astikit.NewBitsWriterBatch(w)
-
-	length := d.length()
-	b.Write(uint8(d.Header.Tag))
-	b.Write(length)
-
-	if err := b.Err(); err != nil {
-		return 0, err
-	}
-	written := int(length) + 2
-
+func (d *ExtendedEvent) Append(dst []byte) []byte {
+	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
 	var lengthOfItems int
 	for _, item := range d.Items {
 		lengthOfItems += 1 // description length
@@ -166,21 +153,17 @@ func (d *DescriptorExtendedEvent) write(w *astikit.BitsWriter) (int, error) {
 		lengthOfItems += len(item.Content)
 	}
 
-	b.WriteN(d.Number, 4)
-	b.WriteN(d.LastDescriptorNumber, 4)
+	dst = append(dst, d.Number&0xf<<4|d.LastDescriptorNumber&0xf)
+	dst = append(dst, d.ISO639LanguageCode[:]...)
 
-	b.Write(d.ISO639LanguageCode[:])
-
-	b.Write(uint8(lengthOfItems))
+	dst = append(dst, uint8(lengthOfItems))
 	for _, item := range d.Items {
-		b.Write(uint8(len(item.Description)))
-		b.Write(item.Description)
-		b.Write(uint8(len(item.Content)))
-		b.Write(item.Content)
+		dst = append(dst, uint8(len(item.Description)))
+		dst = append(dst, item.Description...)
+		dst = append(dst, uint8(len(item.Content)))
+		dst = append(dst, item.Content...)
 	}
 
-	b.Write(uint8(len(d.Text)))
-	b.Write(d.Text)
-
-	return written, b.Err()
+	dst = append(dst, uint8(len(d.Text)))
+	return append(dst, d.Text...)
 }

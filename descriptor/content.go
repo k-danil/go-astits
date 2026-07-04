@@ -3,27 +3,27 @@ package descriptor
 import (
 	"fmt"
 
-	"github.com/asticode/go-astikit"
+	"github.com/k-danil/go-astits/internal/bytesiter"
 )
 
-// DescriptorContent represents a content descriptor
+// Content represents a content descriptor
 // Chapter: 6.2.9 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
-type DescriptorContent struct {
-	Header DescriptorHeader
-	Items  []DescriptorContentItem
+type Content struct {
+	Header Header
+	Items  []ContentItem
 }
 
-// DescriptorContentItem represents a content item descriptor
+// ContentItem represents a content item descriptor
 // Chapter: 6.2.9 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
-type DescriptorContentItem struct {
+type ContentItem struct {
 	ContentNibbleLevel1 uint8
 	ContentNibbleLevel2 uint8
 	UserByte            uint8
 }
 
-func newDescriptorContent(i *astikit.BytesIterator, h DescriptorHeader, offsetEnd int) (dd Descriptor, err error) {
+func newDescriptorContent(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
 	// Init
-	d := &DescriptorContent{
+	d := &Content{
 		Header: h,
 	}
 	dd = d
@@ -38,7 +38,7 @@ func newDescriptorContent(i *astikit.BytesIterator, h DescriptorHeader, offsetEn
 		}
 
 		// Append item
-		d.Items = append(d.Items, DescriptorContentItem{
+		d.Items = append(d.Items, ContentItem{
 			ContentNibbleLevel1: bs[0] >> 4,
 			ContentNibbleLevel2: bs[0] & 0xf,
 			UserByte:            bs[1],
@@ -47,27 +47,14 @@ func newDescriptorContent(i *astikit.BytesIterator, h DescriptorHeader, offsetEn
 	return
 }
 
-func (d *DescriptorContent) length() uint8 {
-	return uint8(2 * len(d.Items))
+func (d *Content) CalcLength() int {
+	return 2 * len(d.Items)
 }
 
-func (d *DescriptorContent) write(w *astikit.BitsWriter) (int, error) {
-	b := astikit.NewBitsWriterBatch(w)
-
-	length := d.length()
-	b.Write(uint8(d.Header.Tag))
-	b.Write(length)
-
-	if err := b.Err(); err != nil {
-		return 0, err
-	}
-	written := int(length) + 2
-
+func (d *Content) Append(dst []byte) []byte {
+	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
 	for _, item := range d.Items {
-		b.WriteN(item.ContentNibbleLevel1, 4)
-		b.WriteN(item.ContentNibbleLevel2, 4)
-		b.Write(item.UserByte)
+		dst = append(dst, item.ContentNibbleLevel1<<4|item.ContentNibbleLevel2&0xf, item.UserByte)
 	}
-
-	return written, b.Err()
+	return dst
 }

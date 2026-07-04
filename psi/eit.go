@@ -5,17 +5,16 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/asticode/go-astikit"
-
 	"github.com/k-danil/go-astits/descriptor"
+	"github.com/k-danil/go-astits/internal/bytesiter"
 	"github.com/k-danil/go-astits/internal/dvb"
 )
 
-// EITData represents an EIT data
+// EIT represents an EIT data
 // Page: 36 | Chapter: 5.2.4 | Link: https://www.dvb.org/resources/public/standards/a38_dvb-si_specification.pdf
 // (barbashov) the link above can be broken, alternative: https://dvb.org/wp-content/uploads/2019/12/a038_tm1217r37_en300468v1_17_1_-_rev-134_-_si_specification.pdf
-type EITData struct {
-	Events                   []EITDataEvent
+type EIT struct {
+	Events                   []EITEvent
 	OriginalNetworkID        uint16
 	ServiceID                uint16
 	TransportStreamID        uint16
@@ -23,8 +22,8 @@ type EITData struct {
 	SegmentLastSectionNumber uint8
 }
 
-// EITDataEvent represents an EIT data event
-type EITDataEvent struct {
+// EITEvent represents an EIT data event
+type EITEvent struct {
 	Descriptors    []descriptor.Descriptor
 	Duration       time.Duration
 	StartTime      time.Time
@@ -34,9 +33,9 @@ type EITDataEvent struct {
 }
 
 // parseEITSection parses an EIT section
-func parseEITSection(i *astikit.BytesIterator, offsetSectionsEnd int, tableIDExtension uint16) (d *EITData, err error) {
+func parseEITSection(i *bytesiter.Iterator, offsetSectionsEnd int, tableIDExtension uint16) (d *EIT, err error) {
 	// Create data
-	d = &EITData{ServiceID: tableIDExtension}
+	d = &EIT{ServiceID: tableIDExtension}
 
 	// Get next 2 bytes
 	var bs []byte
@@ -79,7 +78,7 @@ func parseEITSection(i *astikit.BytesIterator, offsetSectionsEnd int, tableIDExt
 		}
 
 		// Event ID
-		var e = EITDataEvent{}
+		var e = EITEvent{}
 		e.EventID = binary.BigEndian.Uint16(bs)
 
 		// Start time
@@ -110,10 +109,12 @@ func parseEITSection(i *astikit.BytesIterator, offsetSectionsEnd int, tableIDExt
 		i.Skip(-1)
 
 		// Descriptors
-		if e.Descriptors, err = descriptor.ParseDescriptors(i); err != nil {
+		var dn int
+		if e.Descriptors, dn, err = descriptor.Parse(i.Bytes()); err != nil {
 			err = fmt.Errorf("astits: parsing descriptors failed: %w", err)
 			return
 		}
+		i.Skip(dn)
 
 		// Add event
 		d.Events = append(d.Events, e)

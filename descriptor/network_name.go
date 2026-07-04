@@ -3,19 +3,19 @@ package descriptor
 import (
 	"fmt"
 
-	"github.com/asticode/go-astikit"
+	"github.com/k-danil/go-astits/internal/bytesiter"
 )
 
-// DescriptorNetworkName represents a network name descriptor
+// NetworkName represents a network name descriptor
 // Chapter: 6.2.27 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
-type DescriptorNetworkName struct {
-	Header DescriptorHeader
+type NetworkName struct {
+	Header Header
 	Name   []byte
 }
 
-func newDescriptorNetworkName(i *astikit.BytesIterator, h DescriptorHeader, offsetEnd int) (dd Descriptor, err error) {
+func newDescriptorNetworkName(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
 	// Create descriptor
-	d := &DescriptorNetworkName{
+	d := &NetworkName{
 		Header: h,
 	}
 	dd = d
@@ -28,23 +28,11 @@ func newDescriptorNetworkName(i *astikit.BytesIterator, h DescriptorHeader, offs
 	return
 }
 
-func (d *DescriptorNetworkName) length() uint8 {
-	return uint8(len(d.Name))
+func (d *NetworkName) CalcLength() int {
+	return len(d.Name)
 }
 
-func (d *DescriptorNetworkName) write(w *astikit.BitsWriter) (int, error) {
-	b := astikit.NewBitsWriterBatch(w)
-
-	length := d.length()
-	b.Write(uint8(d.Header.Tag))
-	b.Write(length)
-
-	if err := b.Err(); err != nil {
-		return 0, err
-	}
-	written := int(length) + 2
-
-	b.Write(d.Name)
-
-	return written, b.Err()
+func (d *NetworkName) Append(dst []byte) []byte {
+	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	return append(dst, d.Name...)
 }

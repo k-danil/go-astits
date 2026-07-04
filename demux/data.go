@@ -5,28 +5,26 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"github.com/asticode/go-astikit"
-
+	"github.com/k-danil/go-astits/internal/bytesiter"
 	"github.com/k-danil/go-astits/internal/pidmap"
-	"github.com/k-danil/go-astits/internal/programmap"
 	"github.com/k-danil/go-astits/pes"
 	"github.com/k-danil/go-astits/psi"
 	"github.com/k-danil/go-astits/ts"
 )
 
-// DemuxerData represents a data parsed by Demuxer
-type DemuxerData struct {
-	PAT *psi.PATData
-	PMT *psi.PMTData
-	PES *pes.PESData
-	EIT *psi.EITData
-	NIT *psi.NITData
-	SDT *psi.SDTData
-	TOT *psi.TOTData
+// Data represents a data parsed by Demuxer
+type Data struct {
+	PAT *psi.PAT
+	PMT *psi.PMT
+	PES *pes.Data
+	EIT *psi.EIT
+	NIT *psi.NIT
+	SDT *psi.SDT
+	TOT *psi.TOT
 
 	AdaptationField *ts.PacketAdaptationField
 	af              ts.PacketAdaptationField
-	pes             pes.PESData
+	pes             pes.Data
 
 	internalData *dataPayload
 
@@ -34,7 +32,7 @@ type DemuxerData struct {
 	PID               uint16
 }
 
-func (d *DemuxerData) Close() {
+func (d *Data) Close() {
 	if d.internalData != nil {
 		poolOfPayload.put(d.internalData)
 	}
@@ -42,7 +40,7 @@ func (d *DemuxerData) Close() {
 
 // setAdaptationField stores an OWNED copy: the source AF lives in the embedded
 // struct of a pooled packet that is reused right after parseData.
-func (d *DemuxerData) setAdaptationField(src *ts.PacketAdaptationField) {
+func (d *Data) setAdaptationField(src *ts.PacketAdaptationField) {
 	if src == nil {
 		return
 	}
@@ -51,7 +49,7 @@ func (d *DemuxerData) setAdaptationField(src *ts.PacketAdaptationField) {
 }
 
 // parseData parses a payload spanning over multiple packets and returns a set of data
-func parseData(pl *ts.PacketList, prs PacketsParser, pm *programmap.Map, psiPrev *pidmap.Map[[]byte], scratch []*DemuxerData) (ds []*DemuxerData, err error) {
+func parseData(pl *ts.PacketList, prs PacketsParser, pm *pidmap.Map[uint16], psiPrev *pidmap.Map[[]byte], scratch []*Data) (ds []*Data, err error) {
 	// Use custom parser first
 	if prs != nil {
 		var skip bool
@@ -95,8 +93,8 @@ func parseData(pl *ts.PacketList, prs PacketsParser, pm *programmap.Map, psiPrev
 		}
 
 		// Parse PSI data
-		var psiData *psi.PSIData
-		if psiData, err = psi.ParsePSIData(astikit.NewBytesIterator(dp.bs)); err != nil {
+		var psiData *psi.Data
+		if psiData, err = psi.Parse(dp.bs); err != nil {
 			poolOfPayload.put(dp)
 			err = fmt.Errorf("astits: parsing PSI data failed: %w", err)
 			return
@@ -113,7 +111,7 @@ func parseData(pl *ts.PacketList, prs PacketsParser, pm *programmap.Map, psiPrev
 			d.setAdaptationField(af)
 		}
 	case isPESPayload(dp.bs):
-		d := &DemuxerData{
+		d := &Data{
 			PID:               pid,
 			ContinuityCounter: cc,
 
@@ -137,10 +135,10 @@ func parseData(pl *ts.PacketList, prs PacketsParser, pm *programmap.Map, psiPrev
 	return
 }
 
-// psiToData converts parsed PSI tables into a set of DemuxerData
-func psiToData(d *psi.PSIData, af *ts.PacketAdaptationField, pid uint16) (ds []*DemuxerData) {
+// psiToData converts parsed PSI tables into a set of Data
+func psiToData(d *psi.Data, af *ts.PacketAdaptationField, pid uint16) (ds []*Data) {
 	// Loop through sections
-	ds = make([]*DemuxerData, 0, len(d.Sections))
+	ds = make([]*Data, 0, len(d.Sections))
 	for _, s := range d.Sections {
 		// No data
 		if s.Syntax == nil || s.Syntax.Data == nil {
@@ -149,27 +147,27 @@ func psiToData(d *psi.PSIData, af *ts.PacketAdaptationField, pid uint16) (ds []*
 
 		// Switch on table type
 		switch data := s.Syntax.Data.(type) {
-		case *psi.NITData:
-			ds = append(ds, &DemuxerData{AdaptationField: af, NIT: data, PID: pid})
-		case *psi.PATData:
-			ds = append(ds, &DemuxerData{AdaptationField: af, PAT: data, PID: pid})
-		case *psi.PMTData:
-			ds = append(ds, &DemuxerData{AdaptationField: af, PID: pid, PMT: data})
-		case *psi.SDTData:
-			ds = append(ds, &DemuxerData{AdaptationField: af, PID: pid, SDT: data})
-		case *psi.TOTData:
-			ds = append(ds, &DemuxerData{AdaptationField: af, PID: pid, TOT: data})
-		case *psi.EITData:
-			ds = append(ds, &DemuxerData{AdaptationField: af, PID: pid, EIT: data})
+		case *psi.NIT:
+			ds = append(ds, &Data{AdaptationField: af, NIT: data, PID: pid})
+		case *psi.PAT:
+			ds = append(ds, &Data{AdaptationField: af, PAT: data, PID: pid})
+		case *psi.PMT:
+			ds = append(ds, &Data{AdaptationField: af, PID: pid, PMT: data})
+		case *psi.SDT:
+			ds = append(ds, &Data{AdaptationField: af, PID: pid, SDT: data})
+		case *psi.TOT:
+			ds = append(ds, &Data{AdaptationField: af, PID: pid, TOT: data})
+		case *psi.EIT:
+			ds = append(ds, &Data{AdaptationField: af, PID: pid, EIT: data})
 		}
 	}
 	return
 }
 
 // isPSIPayload checks whether the payload is a PSI one
-func isPSIPayload(pid uint16, pm *programmap.Map) bool {
+func isPSIPayload(pid uint16, pm *pidmap.Map[uint16]) bool {
 	return pid == ts.PIDPAT || // PAT
-		pm.ExistsUnlocked(pid) || // PMT
+		pm.Has(pid) || // PMT
 		((pid >= 0x10 && pid <= 0x14) || (pid >= 0x1e && pid <= 0x1f)) //DVB
 }
 
@@ -197,7 +195,7 @@ func isPSIComplete(pl *ts.PacketList) bool {
 	}
 
 	// Create reader
-	i := astikit.NewBytesIterator(dp.bs)
+	i := bytesiter.New(dp.bs)
 
 	// Get next byte
 	b, err := i.NextByte()
@@ -217,7 +215,7 @@ func isPSIComplete(pl *ts.PacketList) bool {
 		}
 
 		// Check whether we need to stop the parsing
-		if psi.ShouldStopPSIParsing(psi.PSITableID(b)) {
+		if psi.TableID(b).StopsParsing() {
 			break
 		}
 

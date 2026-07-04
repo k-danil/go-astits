@@ -6,10 +6,12 @@ import (
 
 	"github.com/asticode/go-astikit"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/k-danil/go-astits/internal/bytesiter"
 )
 
-var eit = &EITData{
-	Events: []EITDataEvent{{
+var eit = &EIT{
+	Events: []EITEvent{{
 		Descriptors:    descriptors,
 		Duration:       dvbDurationSeconds,
 		EventID:        6,
@@ -42,7 +44,7 @@ func eitBytes() []byte {
 
 func TestParseEITSection(t *testing.T) {
 	var b = eitBytes()
-	d, err := parseEITSection(astikit.NewBytesIterator(b), len(b), uint16(1))
+	d, err := parseEITSection(bytesiter.New(b), len(b), uint16(1))
 	assert.Equal(t, d, eit)
 	assert.NoError(t, err)
 }

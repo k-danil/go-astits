@@ -3,13 +3,14 @@ package descriptor
 import (
 	"fmt"
 
-	"github.com/asticode/go-astikit"
+	"github.com/k-danil/go-astits/internal/bytesiter"
+	"github.com/k-danil/go-astits/internal/util"
 )
 
-// DescriptorAVCVideo represents an AVC video descriptor
+// AVCVideo represents an AVC video descriptor
 // No doc found unfortunately, basing the implementation on https://github.com/gfto/bitstream/blob/master/mpeg/psi/desc_28.h
-type DescriptorAVCVideo struct {
-	Header               DescriptorHeader
+type AVCVideo struct {
+	Header               Header
 	AVC24HourPictureFlag bool
 	AVCStillPresent      bool
 	CompatibleFlags      uint8
@@ -20,9 +21,9 @@ type DescriptorAVCVideo struct {
 	ProfileIDC           uint8
 }
 
-func newDescriptorAVCVideo(i *astikit.BytesIterator, h DescriptorHeader, _ int) (dd Descriptor, err error) {
+func newDescriptorAVCVideo(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {
 	// Init
-	d := &DescriptorAVCVideo{
+	d := &AVCVideo{
 		Header: h,
 	}
 	dd = d
@@ -72,34 +73,14 @@ func newDescriptorAVCVideo(i *astikit.BytesIterator, h DescriptorHeader, _ int) 
 	return
 }
 
-func (*DescriptorAVCVideo) length() uint8 {
+func (*AVCVideo) CalcLength() int {
 	return 4
 }
 
-func (d *DescriptorAVCVideo) write(w *astikit.BitsWriter) (int, error) {
-	b := astikit.NewBitsWriterBatch(w)
-
-	length := d.length()
-	b.Write(uint8(d.Header.Tag))
-	b.Write(length)
-
-	if err := b.Err(); err != nil {
-		return 0, err
-	}
-	written := int(length) + 2
-
-	b.Write(d.ProfileIDC)
-
-	b.Write(d.ConstraintSet0Flag)
-	b.Write(d.ConstraintSet1Flag)
-	b.Write(d.ConstraintSet2Flag)
-	b.WriteN(d.CompatibleFlags, 5)
-
-	b.Write(d.LevelIDC)
-
-	b.Write(d.AVCStillPresent)
-	b.Write(d.AVC24HourPictureFlag)
-	b.WriteN(uint8(0xff), 6)
-
-	return written, b.Err()
+func (d *AVCVideo) Append(dst []byte) []byte {
+	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	dst = append(dst, d.ProfileIDC)
+	dst = append(dst, util.B2U(d.ConstraintSet0Flag)<<7|util.B2U(d.ConstraintSet1Flag)<<6|util.B2U(d.ConstraintSet2Flag)<<5|d.CompatibleFlags&0x1f)
+	dst = append(dst, d.LevelIDC)
+	return append(dst, util.B2U(d.AVCStillPresent)<<7|util.B2U(d.AVC24HourPictureFlag)<<6|0x3f)
 }

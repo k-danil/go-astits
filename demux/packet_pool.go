@@ -2,7 +2,6 @@ package demux
 
 import (
 	"github.com/k-danil/go-astits/internal/pidmap"
-	"github.com/k-danil/go-astits/internal/programmap"
 	"github.com/k-danil/go-astits/ts"
 )
 
@@ -36,7 +35,7 @@ func (s *pidSlot) add(p *ts.Packet, b *packetPool) (pl *ts.PacketList) {
 
 	// Check if PSI payload is complete
 	if b.programMap != nil &&
-		(p.Header.PID == ts.PIDPAT || b.programMap.ExistsUnlocked(p.Header.PID)) &&
+		(p.Header.PID == ts.PIDPAT || b.programMap.Has(p.Header.PID)) &&
 		isPSIComplete(mps) {
 		pl = mps
 		mps = nil
@@ -50,17 +49,20 @@ func (s *pidSlot) add(p *ts.Packet, b *packetPool) (pl *ts.PacketList) {
 type packetPool struct {
 	slots      pidmap.Map[pidSlot]
 	free       ts.PacketFreeList
-	programMap *programmap.Map
+	programMap *pidmap.Map[uint16]
+
+	keysArr [packetPoolPreallocPIDs]uint16
+	valsArr [packetPoolPreallocPIDs]pidSlot
 }
 
 const packetPoolPreallocPIDs = 8
 
-// newPacketPool creates a new packet pool with an optional parser and programMap
-func newPacketPool(programMap *programmap.Map) *packetPool {
-	return &packetPool{
-		slots:      pidmap.New[pidSlot](packetPoolPreallocPIDs),
-		programMap: programMap,
-	}
+// init readies the pool in place: slot slices start on the embedded arrays so a
+// short-lived demuxer does not pay heap allocations for them.
+func (b *packetPool) init(programMap *pidmap.Map[uint16]) {
+	b.slots = pidmap.Map[pidSlot]{Keys: b.keysArr[:0], Vals: b.valsArr[:0]}
+	b.free = ts.PacketFreeList{}
+	b.programMap = programMap
 }
 
 func (b *packetPool) getPacket() (p *ts.Packet) {

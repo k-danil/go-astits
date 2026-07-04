@@ -46,3 +46,11 @@ func (m *Map[V]) Remove(key uint16) {
 		}
 	}
 }
+
+func (m *Map[V]) Has(key uint16) bool {
+	return m.Get(key) != nil
+}
+
+func (m *Map[V]) Set(key uint16, val V) {
+	*m.GetOrAdd(key) = val
+}

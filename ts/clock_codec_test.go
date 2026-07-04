@@ -55,28 +55,29 @@ func escrBytes() []byte {
 
 func TestParsePTSOrDTS(t *testing.T) {
 	var v ClockReference
-	err := v.parsePTSOrDTS(astikit.NewBytesIterator(ptsBytes("0010")))
+	n, err := v.ParsePTSDTS(ptsBytes("0010"))
+	assert.Equal(t, PTSDTSSize, n)
 	assert.Equal(t, v, ptsClockReference)
 	assert.NoError(t, err)
 }
 
 func TestWritePTSOrDTS(t *testing.T) {
-	bs := make([]byte, PTSOrDTSByteLength)
-	n := dtsClockReference.PutPTSOrDTSBytes(bs, uint8(0b0010))
+	bs := make([]byte, PTSDTSSize)
+	n := dtsClockReference.PutPTSDTS(bs, uint8(0b0010))
 	assert.Equal(t, n, 5)
 	assert.Equal(t, dtsBytes("0010"), bs)
 }
 
 func TestParseESCR(t *testing.T) {
 	var v ClockReference
-	_, err := v.ParseESCRBytes(escrBytes(), 0)
+	_, err := v.ParseESCR(escrBytes())
 	assert.Equal(t, v, clockReference)
 	assert.NoError(t, err)
 }
 
 func TestWriteESCR(t *testing.T) {
-	bs := make([]byte, ESCRByteLength)
-	n := clockReference.PutESCRBytes(bs)
+	bs := make([]byte, ESCRSize)
+	n := clockReference.PutESCR(bs)
 	assert.Equal(t, n, 6)
 	assert.Equal(t, escrBytes(), bs)
 }

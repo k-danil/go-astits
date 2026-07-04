@@ -3,16 +3,16 @@ package descriptor
 import (
 	"fmt"
 
-	"github.com/asticode/go-astikit"
+	"github.com/k-danil/go-astits/internal/bytesiter"
 )
 
-// DescriptorMaximumBitrate represents a maximum bitrate descriptor
-type DescriptorMaximumBitrate struct {
+// MaximumBitrate represents a maximum bitrate descriptor
+type MaximumBitrate struct {
 	Bitrate uint32 // In bytes/second
-	Header  DescriptorHeader
+	Header  Header
 }
 
-func newDescriptorMaximumBitrate(i *astikit.BytesIterator, h DescriptorHeader, _ int) (dd Descriptor, err error) {
+func newDescriptorMaximumBitrate(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {
 	// Get next bytes
 	var bs []byte
 	if bs, err = i.NextBytesNoCopy(3); err != nil || len(bs) < 3 {
@@ -21,7 +21,7 @@ func newDescriptorMaximumBitrate(i *astikit.BytesIterator, h DescriptorHeader, _
 	}
 
 	// Create descriptor
-	d := &DescriptorMaximumBitrate{
+	d := &MaximumBitrate{
 		Header:  h,
 		Bitrate: (uint32(bs[0]&0x3f)<<16 | uint32(bs[1])<<8 | uint32(bs[2])) * 50,
 	}
@@ -29,24 +29,12 @@ func newDescriptorMaximumBitrate(i *astikit.BytesIterator, h DescriptorHeader, _
 	return
 }
 
-func (*DescriptorMaximumBitrate) length() uint8 {
+func (*MaximumBitrate) CalcLength() int {
 	return 3
 }
 
-func (d *DescriptorMaximumBitrate) write(w *astikit.BitsWriter) (int, error) {
-	b := astikit.NewBitsWriterBatch(w)
-
-	length := d.length()
-	b.Write(uint8(d.Header.Tag))
-	b.Write(length)
-
-	if err := b.Err(); err != nil {
-		return 0, err
-	}
-	written := int(length) + 2
-
-	b.WriteN(uint8(0xff), 2)
-	b.WriteN(d.Bitrate/50, 22)
-
-	return written, b.Err()
+func (d *MaximumBitrate) Append(dst []byte) []byte {
+	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	v := d.Bitrate / 50
+	return append(dst, 0xc0|byte(v>>16)&0x3f, byte(v>>8), byte(v))
 }

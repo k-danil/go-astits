@@ -4,16 +4,16 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"github.com/asticode/go-astikit"
+	"github.com/k-danil/go-astits/internal/bytesiter"
 )
 
-// DescriptorPrivateDataSpecifier represents a private data specifier descriptor
-type DescriptorPrivateDataSpecifier struct {
-	Header    DescriptorHeader
+// PrivateDataSpecifier represents a private data specifier descriptor
+type PrivateDataSpecifier struct {
+	Header    Header
 	Specifier uint32
 }
 
-func newDescriptorPrivateDataSpecifier(i *astikit.BytesIterator, h DescriptorHeader, _ int) (dd Descriptor, err error) {
+func newDescriptorPrivateDataSpecifier(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {
 	// Get next bytes
 	var bs []byte
 	if bs, err = i.NextBytesNoCopy(4); err != nil || len(bs) < 4 {
@@ -22,7 +22,7 @@ func newDescriptorPrivateDataSpecifier(i *astikit.BytesIterator, h DescriptorHea
 	}
 
 	// Create descriptor
-	d := &DescriptorPrivateDataSpecifier{
+	d := &PrivateDataSpecifier{
 		Header:    h,
 		Specifier: binary.BigEndian.Uint32(bs),
 	}
@@ -30,23 +30,11 @@ func newDescriptorPrivateDataSpecifier(i *astikit.BytesIterator, h DescriptorHea
 	return
 }
 
-func (*DescriptorPrivateDataSpecifier) length() uint8 {
+func (*PrivateDataSpecifier) CalcLength() int {
 	return 4
 }
 
-func (d *DescriptorPrivateDataSpecifier) write(w *astikit.BitsWriter) (int, error) {
-	b := astikit.NewBitsWriterBatch(w)
-
-	length := d.length()
-	b.Write(uint8(d.Header.Tag))
-	b.Write(length)
-
-	if err := b.Err(); err != nil {
-		return 0, err
-	}
-	written := int(length) + 2
-
-	b.Write(d.Specifier)
-
-	return written, b.Err()
+func (d *PrivateDataSpecifier) Append(dst []byte) []byte {
+	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	return append(dst, byte(d.Specifier>>24), byte(d.Specifier>>16), byte(d.Specifier>>8), byte(d.Specifier))
 }

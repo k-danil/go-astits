@@ -4,21 +4,21 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/asticode/go-astikit"
-
+	"github.com/k-danil/go-astits/internal/bytesiter"
 	"github.com/k-danil/go-astits/internal/dvb"
+	"github.com/k-danil/go-astits/internal/util"
 )
 
-// DescriptorLocalTimeOffset represents a local time offset descriptor
+// LocalTimeOffset represents a local time offset descriptor
 // Chapter: 6.2.20 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
-type DescriptorLocalTimeOffset struct {
-	Header DescriptorHeader
-	Items  []DescriptorLocalTimeOffsetItem
+type LocalTimeOffset struct {
+	Header Header
+	Items  []LocalTimeOffsetItem
 }
 
-// DescriptorLocalTimeOffsetItem represents a local time offset item descriptor
+// LocalTimeOffsetItem represents a local time offset item descriptor
 // Chapter: 6.2.20 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
-type DescriptorLocalTimeOffsetItem struct {
+type LocalTimeOffsetItem struct {
 	LocalTimeOffset         time.Duration
 	NextTimeOffset          time.Duration
 	TimeOfChange            time.Time
@@ -27,11 +27,11 @@ type DescriptorLocalTimeOffsetItem struct {
 	LocalTimeOffsetPolarity bool
 }
 
-func newDescriptorLocalTimeOffset(i *astikit.BytesIterator, h DescriptorHeader, offsetEnd int) (dd Descriptor, err error) {
+func newDescriptorLocalTimeOffset(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
 	// Init
-	d := &DescriptorLocalTimeOffset{
+	d := &LocalTimeOffset{
 		Header: h,
-		Items:  make([]DescriptorLocalTimeOffsetItem, (offsetEnd-i.Offset())/13),
+		Items:  make([]LocalTimeOffsetItem, (offsetEnd-i.Offset())/13),
 	}
 	dd = d
 
@@ -79,39 +79,18 @@ func newDescriptorLocalTimeOffset(i *astikit.BytesIterator, h DescriptorHeader, 
 	return
 }
 
-func (d *DescriptorLocalTimeOffset) length() uint8 {
-	return uint8(13 * len(d.Items))
+func (d *LocalTimeOffset) CalcLength() int {
+	return 13 * len(d.Items)
 }
 
-func (d *DescriptorLocalTimeOffset) write(w *astikit.BitsWriter) (int, error) {
-	b := astikit.NewBitsWriterBatch(w)
-
-	length := d.length()
-	b.Write(uint8(d.Header.Tag))
-	b.Write(length)
-
-	if err := b.Err(); err != nil {
-		return 0, err
-	}
-	written := int(length) + 2
-
+func (d *LocalTimeOffset) Append(dst []byte) []byte {
+	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
 	for _, item := range d.Items {
-		b.Write(item.CountryCode[:])
-
-		b.WriteN(item.CountryRegionID, 6)
-		b.WriteN(uint8(0xff), 1)
-		b.Write(item.LocalTimeOffsetPolarity)
-
-		if _, err := dvb.WriteDurationMinutes(w, item.LocalTimeOffset); err != nil {
-			return 0, err
-		}
-		if _, err := dvb.WriteTime(w, item.TimeOfChange); err != nil {
-			return 0, err
-		}
-		if _, err := dvb.WriteDurationMinutes(w, item.NextTimeOffset); err != nil {
-			return 0, err
-		}
+		dst = append(dst, item.CountryCode[:]...)
+		dst = append(dst, item.CountryRegionID&0x3f<<2|1<<1|util.B2U(item.LocalTimeOffsetPolarity))
+		dst = dvb.AppendDurationMinutes(dst, item.LocalTimeOffset)
+		dst = dvb.AppendTime(dst, item.TimeOfChange)
+		dst = dvb.AppendDurationMinutes(dst, item.NextTimeOffset)
 	}
-
-	return written, b.Err()
+	return dst
 }

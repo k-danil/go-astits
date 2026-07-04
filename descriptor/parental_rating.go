@@ -3,25 +3,25 @@ package descriptor
 import (
 	"fmt"
 
-	"github.com/asticode/go-astikit"
+	"github.com/k-danil/go-astits/internal/bytesiter"
 )
 
-// DescriptorParentalRating represents a parental rating descriptor
+// ParentalRating represents a parental rating descriptor
 // Chapter: 6.2.28 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
-type DescriptorParentalRating struct {
-	Header DescriptorHeader
-	Items  []DescriptorParentalRatingItem
+type ParentalRating struct {
+	Header Header
+	Items  []ParentalRatingItem
 }
 
-// DescriptorParentalRatingItem represents a parental rating item descriptor
+// ParentalRatingItem represents a parental rating item descriptor
 // Chapter: 6.2.28 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
-type DescriptorParentalRatingItem struct {
+type ParentalRatingItem struct {
 	CountryCode [3]byte
 	Rating      uint8
 }
 
 // MinimumAge returns the minimum age for the parental rating
-func (d DescriptorParentalRatingItem) MinimumAge() int {
+func (d ParentalRatingItem) MinimumAge() int {
 	// Undefined or user defined ratings
 	if d.Rating == 0 || d.Rating > 0x10 {
 		return 0
@@ -29,11 +29,11 @@ func (d DescriptorParentalRatingItem) MinimumAge() int {
 	return int(d.Rating) + 3
 }
 
-func newDescriptorParentalRating(i *astikit.BytesIterator, h DescriptorHeader, offsetEnd int) (dd Descriptor, err error) {
+func newDescriptorParentalRating(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
 	// Create descriptor
-	d := &DescriptorParentalRating{
+	d := &ParentalRating{
 		Header: h,
-		Items:  make([]DescriptorParentalRatingItem, (offsetEnd-i.Offset())/4),
+		Items:  make([]ParentalRatingItem, (offsetEnd-i.Offset())/4),
 	}
 	dd = d
 
@@ -51,26 +51,15 @@ func newDescriptorParentalRating(i *astikit.BytesIterator, h DescriptorHeader, o
 	return
 }
 
-func (d *DescriptorParentalRating) length() uint8 {
-	return uint8(4 * len(d.Items))
+func (d *ParentalRating) CalcLength() int {
+	return 4 * len(d.Items)
 }
 
-func (d *DescriptorParentalRating) write(w *astikit.BitsWriter) (int, error) {
-	b := astikit.NewBitsWriterBatch(w)
-
-	length := d.length()
-	b.Write(uint8(d.Header.Tag))
-	b.Write(length)
-
-	if err := b.Err(); err != nil {
-		return 0, err
-	}
-	written := int(length) + 2
-
+func (d *ParentalRating) Append(dst []byte) []byte {
+	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
 	for _, item := range d.Items {
-		b.Write(item.CountryCode[:])
-		b.Write(item.Rating)
+		dst = append(dst, item.CountryCode[:]...)
+		dst = append(dst, item.Rating)
 	}
-
-	return written, b.Err()
+	return dst
 }

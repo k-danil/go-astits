@@ -4,37 +4,38 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"github.com/asticode/go-astikit"
-
 	"github.com/k-danil/go-astits/descriptor"
+	"github.com/k-danil/go-astits/internal/bytesiter"
 )
 
-// NITData represents a NIT data
+// NIT represents a NIT data
 // Page: 29 | Chapter: 5.2.1 | Link: https://www.dvb.org/resources/public/standards/a38_dvb-si_specification.pdf
 // (barbashov) the link above can be broken, alternative: https://dvb.org/wp-content/uploads/2019/12/a038_tm1217r37_en300468v1_17_1_-_rev-134_-_si_specification.pdf
-type NITData struct {
+type NIT struct {
 	NetworkDescriptors []descriptor.Descriptor
-	TransportStreams   []NITDataTransportStream
+	TransportStreams   []NITTransportStream
 	NetworkID          uint16
 }
 
-// NITDataTransportStream represents a NIT data transport stream
-type NITDataTransportStream struct {
+// NITTransportStream represents a NIT data transport stream
+type NITTransportStream struct {
 	TransportDescriptors []descriptor.Descriptor
 	TransportStreamID    uint16
 	OriginalNetworkID    uint16
 }
 
 // parseNITSection parses a NIT section
-func parseNITSection(i *astikit.BytesIterator, tableIDExtension uint16) (d *NITData, err error) {
+func parseNITSection(i *bytesiter.Iterator, tableIDExtension uint16) (d *NIT, err error) {
 	// Create data
-	d = &NITData{NetworkID: tableIDExtension}
+	d = &NIT{NetworkID: tableIDExtension}
 
 	// Network descriptors
-	if d.NetworkDescriptors, err = descriptor.ParseDescriptors(i); err != nil {
+	var dn int
+	if d.NetworkDescriptors, dn, err = descriptor.Parse(i.Bytes()); err != nil {
 		err = fmt.Errorf("astits: parsing descriptors failed: %w", err)
 		return
 	}
+	i.Skip(dn)
 
 	// Get next bytes
 	var bs []byte
@@ -50,7 +51,7 @@ func parseNITSection(i *astikit.BytesIterator, tableIDExtension uint16) (d *NITD
 	offsetEnd := i.Offset() + transportStreamLoopLength
 	for i.Offset() < offsetEnd {
 		// Create transport stream
-		ts := NITDataTransportStream{}
+		ts := NITTransportStream{}
 
 		// Get next bytes
 		if bs, err = i.NextBytesNoCopy(4); err != nil || len(bs) < 4 {
@@ -65,10 +66,11 @@ func parseNITSection(i *astikit.BytesIterator, tableIDExtension uint16) (d *NITD
 		ts.OriginalNetworkID = uint16(val)
 
 		// Transport descriptors
-		if ts.TransportDescriptors, err = descriptor.ParseDescriptors(i); err != nil {
+		if ts.TransportDescriptors, dn, err = descriptor.Parse(i.Bytes()); err != nil {
 			err = fmt.Errorf("astits: parsing descriptors failed: %w", err)
 			return
 		}
+		i.Skip(dn)
 
 		// Append transport stream
 		d.TransportStreams = append(d.TransportStreams, ts)

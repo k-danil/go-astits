@@ -106,7 +106,7 @@ func autoDetectPacketSize(r io.Reader) (packetSize uint, err error) {
 
 	// Look for sync bytes
 	for idx, b := range bs {
-		if b == syncByte && idx >= MpegTsPacketSize {
+		if b == syncByte && idx >= PacketSize {
 			// Update packet size
 			packetSize = uint(idx)
 

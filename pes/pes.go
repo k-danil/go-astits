@@ -39,31 +39,31 @@ const (
 )
 
 const (
-	HeaderLength       = 6
+	HeaderSize         = 6
 	dsmTrickModeLength = 1
 )
 
-// PESData represents a PES data
+// Data represents a PES data
 // https://en.wikipedia.org/wiki/Packetized_elementary_stream
 // http://dvd.sourceforge.net/dvdinfo/pes-hdr.html
 // http://happy.emu.id.au/lab/tut/dttb/dtbtut4b.htm
-type PESData struct {
+type Data struct {
 	Data   []byte
-	Header PESHeader
+	Header Header
 }
 
-// PESHeader represents a packet PES header
-type PESHeader struct {
-	OptionalHeader *PESOptionalHeader
-	optionalHeader PESOptionalHeader // storage for OptionalHeader — no allocation per PES
-	PacketLength   uint16            // Specifies the number of bytes remaining in the packet after this field. Can be zero. If the PES packet length is set to zero, the PES packet can be of any length. A value of zero for the PES packet length can be used only when the PES packet payload is a video elementary stream.
-	StreamID       uint8             // Examples: Audio streams (0xC0-0xDF), Video streams (0xE0-0xEF)
+// Header represents a packet PES header
+type Header struct {
+	OptionalHeader *OptionalHeader
+	optionalHeader OptionalHeader // storage for OptionalHeader — no allocation per PES
+	PacketLength   uint16         // Specifies the number of bytes remaining in the packet after this field. Can be zero. If the PES packet length is set to zero, the PES packet can be of any length. A value of zero for the PES packet length can be used only when the PES packet payload is a video elementary stream.
+	StreamID       uint8          // Examples: Audio streams (0xC0-0xDF), Video streams (0xE0-0xEF)
 }
 
-// PESOptionalHeader represents a PES optional header
-type PESOptionalHeader struct {
+// OptionalHeader represents a PES optional header
+type OptionalHeader struct {
 	DSMTrickMode           *DSMTrickMode
-	Extension              *PESOptionalHeaderExtension
+	Extension              *OptionalHeaderExtension
 	DTS                    ts.ClockReference
 	PTS                    ts.ClockReference
 	ESCR                   ts.ClockReference
@@ -87,7 +87,7 @@ type PESOptionalHeader struct {
 	ScramblingControl      uint8
 }
 
-type PESOptionalHeaderExtension struct {
+type OptionalHeaderExtension struct {
 	PrivateData                     []byte
 	Extension2Data                  []byte
 	HasPrivateData                  bool
@@ -114,13 +114,13 @@ type DSMTrickMode struct {
 	TrickModeControl    uint8
 }
 
-func (h *PESHeader) IsVideoStream() bool {
+func (h *Header) IsVideoStream() bool {
 	return h.StreamID == 0xe0 ||
 		h.StreamID == 0xfd
 }
 
 // Parse parses a PES data
-func (d *PESData) Parse(bs []byte) (err error) {
+func (d *Data) Parse(bs []byte) (err error) {
 	// Skip first 3 bytes that are there to identify the PES payload
 	const pesPayloadPrefixSize = 3
 
@@ -150,8 +150,8 @@ func hasPESOptionalHeader(streamID uint8) bool {
 }
 
 // parseBytes parses a PES header starting at bs[o]
-func (h *PESHeader) parseBytes(bs []byte, o int) (dataStart, dataEnd int, err error) {
-	if o+HeaderLength-3 > len(bs) {
+func (h *Header) parseBytes(bs []byte, o int) (dataStart, dataEnd int, err error) {
+	if o+HeaderSize-3 > len(bs) {
 		return 0, 0, ts.ErrShortPacket
 	}
 
@@ -168,7 +168,7 @@ func (h *PESHeader) parseBytes(bs []byte, o int) (dataStart, dataEnd int, err er
 
 	// Optional header
 	if hasPESOptionalHeader(h.StreamID) {
-		h.optionalHeader = PESOptionalHeader{}
+		h.optionalHeader = OptionalHeader{}
 		h.OptionalHeader = &h.optionalHeader
 		if dataStart, err = h.OptionalHeader.parseBytes(bs, o); err != nil {
 			err = fmt.Errorf("astits: parsing PES optional header failed: %w", err)
@@ -181,7 +181,7 @@ func (h *PESHeader) parseBytes(bs []byte, o int) (dataStart, dataEnd int, err er
 }
 
 // parseBytes parses a PES optional header starting at bs[o]
-func (h *PESOptionalHeader) parseBytes(bs []byte, o int) (dataStart int, err error) {
+func (h *OptionalHeader) parseBytes(bs []byte, o int) (dataStart int, err error) {
 	if o+3 > len(bs) {
 		return 0, ts.ErrShortPacket
 	}
@@ -212,28 +212,33 @@ func (h *PESOptionalHeader) parseBytes(bs []byte, o int) (dataStart int, err err
 	dataStart = o + int(h.HeaderLength)
 
 	// PTS/DTS
+	var n int
 	if h.PTSDTSIndicator == PTSDTSIndicatorOnlyPTS {
-		if o, err = h.PTS.ParsePTSOrDTSBytes(bs, o); err != nil {
+		if n, err = h.PTS.ParsePTSDTS(bs[o:]); err != nil {
 			err = fmt.Errorf("astits: parsing PTS failed: %w", err)
 			return
 		}
+		o += n
 	} else if h.PTSDTSIndicator == PTSDTSIndicatorBothPresent {
-		if o, err = h.PTS.ParsePTSOrDTSBytes(bs, o); err != nil {
+		if n, err = h.PTS.ParsePTSDTS(bs[o:]); err != nil {
 			err = fmt.Errorf("astits: parsing PTS failed: %w", err)
 			return
 		}
-		if o, err = h.DTS.ParsePTSOrDTSBytes(bs, o); err != nil {
+		o += n
+		if n, err = h.DTS.ParsePTSDTS(bs[o:]); err != nil {
 			err = fmt.Errorf("astits: parsing PTS failed: %w", err)
 			return
 		}
+		o += n
 	}
 
 	// ESCR
 	if h.HasESCR {
-		if o, err = h.ESCR.ParseESCRBytes(bs, o); err != nil {
+		if n, err = h.ESCR.ParseESCR(bs[o:]); err != nil {
 			err = fmt.Errorf("astits: parsing ESCR failed: %w", err)
 			return
 		}
+		o += n
 	}
 
 	// ES rate
@@ -274,7 +279,7 @@ func (h *PESOptionalHeader) parseBytes(bs []byte, o int) (dataStart int, err err
 
 	// Extension
 	if h.HasExtension {
-		h.Extension = &PESOptionalHeaderExtension{}
+		h.Extension = &OptionalHeaderExtension{}
 		err = h.Extension.parseBytes(bs, o)
 		return
 	}
@@ -282,7 +287,7 @@ func (h *PESOptionalHeader) parseBytes(bs []byte, o int) (dataStart int, err err
 	return
 }
 
-func (h *PESOptionalHeaderExtension) parseBytes(bs []byte, o int) (err error) {
+func (h *OptionalHeaderExtension) parseBytes(bs []byte, o int) (err error) {
 	if o >= len(bs) {
 		return ts.ErrShortPacket
 	}
@@ -373,10 +378,10 @@ func parseDSMTrickMode(i byte) (m *DSMTrickMode) {
 // will count how many total bytes and payload bytes will be written when writePESData is called with the same arguments
 // should be used by the caller of writePESData to determine AF stuffing size needed to be applied
 // since the length of video PES packets are often zero, we can't just stuff it with 0xff-s at the end
-func (h *PESHeader) calcPESDataLength(payloadLeft []byte, isPayloadStart bool, bytesAvailable int) (totalBytes, payloadBytes int) {
-	totalBytes += HeaderLength
+func (h *Header) calcPESDataLength(payloadLeft []byte, isPayloadStart bool, bytesAvailable int) (totalBytes, payloadBytes int) {
+	totalBytes += HeaderSize
 	if isPayloadStart {
-		totalBytes += int(h.OptionalHeader.CalcLength())
+		totalBytes += h.OptionalHeader.CalcLength()
 	}
 	bytesAvailable -= totalBytes
 
@@ -392,7 +397,7 @@ func (h *PESHeader) calcPESDataLength(payloadLeft []byte, isPayloadStart bool, b
 // first packet will contain PES header with optional PES header and payload, if possible
 // all consequential packets will contain just payload
 // for the last packet caller must add AF with stuffing, see calcPESDataLength
-func (h *PESHeader) PutPESData(bs []byte, payloadLeft []byte, isPayloadStart bool) (totalBytesWritten, payloadBytesWritten int, err error) {
+func (h *Header) Put(bs []byte, payloadLeft []byte, isPayloadStart bool) (totalBytesWritten, payloadBytesWritten int, err error) {
 	if isPayloadStart {
 		var n int
 		if n, err = h.putBytes(bs, len(payloadLeft)); err != nil {
@@ -411,8 +416,8 @@ func (h *PESHeader) PutPESData(bs []byte, payloadLeft []byte, isPayloadStart boo
 	return
 }
 
-func (h *PESHeader) putBytes(bs []byte, payloadSize int) (n int, err error) {
-	if len(bs) < HeaderLength {
+func (h *Header) putBytes(bs []byte, payloadSize int) (n int, err error) {
+	if len(bs) < HeaderSize {
 		return 0, ts.ErrShortPacket
 	}
 	binary.BigEndian.PutUint32(bs, uint32(h.StreamID)|0x1<<8)
@@ -421,13 +426,13 @@ func (h *PESHeader) putBytes(bs []byte, payloadSize int) (n int, err error) {
 	if !h.IsVideoStream() {
 		pesPacketLength = payloadSize
 		if hasPESOptionalHeader(h.StreamID) {
-			pesPacketLength += int(h.OptionalHeader.CalcLength())
+			pesPacketLength += h.OptionalHeader.CalcLength()
 		}
 		pesPacketLength *= int((uint64(pesPacketLength) - 0x10000) >> 63)
 	}
 
 	binary.BigEndian.PutUint16(bs[4:], uint16(pesPacketLength))
-	n = HeaderLength
+	n = HeaderSize
 
 	if hasPESOptionalHeader(h.StreamID) {
 		n += h.OptionalHeader.putBytes(bs[n:])
@@ -436,21 +441,21 @@ func (h *PESHeader) putBytes(bs []byte, payloadSize int) (n int, err error) {
 	return
 }
 
-func (h *PESOptionalHeader) CalcLength() uint8 {
+func (h *OptionalHeader) CalcLength() int {
 	if h == nil {
 		return 0
 	}
-	return 3 + h.calcDataLength()
+	return 3 + int(h.calcDataLength())
 }
 
-func (h *PESOptionalHeader) calcDataLength() (length uint8) {
+func (h *OptionalHeader) calcDataLength() (length uint8) {
 	if h.PTSDTSIndicator == PTSDTSIndicatorOnlyPTS {
-		length += ts.PTSOrDTSByteLength
+		length += ts.PTSDTSSize
 	} else if h.PTSDTSIndicator == PTSDTSIndicatorBothPresent {
-		length += 2 * ts.PTSOrDTSByteLength
+		length += 2 * ts.PTSDTSSize
 	}
 
-	length += ts.ESCRByteLength * util.B2U(h.HasESCR)
+	length += ts.ESCRSize * util.B2U(h.HasESCR)
 	length += 3 * util.B2U(h.HasESRate)
 	length += dsmTrickModeLength * util.B2U(h.HasDSMTrickMode)
 	length += util.B2U(h.HasAdditionalCopyInfo)
@@ -464,7 +469,7 @@ func (h *PESOptionalHeader) calcDataLength() (length uint8) {
 	return
 }
 
-func (h *PESOptionalHeaderExtension) calcDataLength() (length uint8) {
+func (h *OptionalHeaderExtension) calcDataLength() (length uint8) {
 	length++
 	length += 16 * util.B2U(h.HasPrivateData)
 
@@ -477,7 +482,7 @@ func (h *PESOptionalHeaderExtension) calcDataLength() (length uint8) {
 	return
 }
 
-func (h *PESOptionalHeader) putBytes(bs []byte) (n int) {
+func (h *OptionalHeader) putBytes(bs []byte) (n int) {
 	if h == nil {
 		return 0
 	}
@@ -501,16 +506,16 @@ func (h *PESOptionalHeader) putBytes(bs []byte) (n int) {
 	n = 3
 
 	if h.PTSDTSIndicator == PTSDTSIndicatorOnlyPTS {
-		n += h.PTS.PutPTSOrDTSBytes(bs[n:], 0b0010)
+		n += h.PTS.PutPTSDTS(bs[n:], 0b0010)
 	}
 
 	if h.PTSDTSIndicator == PTSDTSIndicatorBothPresent {
-		n += h.PTS.PutPTSOrDTSBytes(bs[n:], 0b0011)
-		n += h.DTS.PutPTSOrDTSBytes(bs[n:], 0b0001)
+		n += h.PTS.PutPTSDTS(bs[n:], 0b0011)
+		n += h.DTS.PutPTSDTS(bs[n:], 0b0001)
 	}
 
 	if h.HasESCR {
-		n += h.ESCR.PutESCRBytes(bs[n:])
+		n += h.ESCR.PutESCR(bs[n:])
 	}
 
 	if h.HasESRate {
@@ -540,7 +545,7 @@ func (h *PESOptionalHeader) putBytes(bs []byte) (n int) {
 	return
 }
 
-func (h *PESOptionalHeaderExtension) putBytes(bs []byte) (n int) {
+func (h *OptionalHeaderExtension) putBytes(bs []byte) (n int) {
 	// exp 10110001
 	// act 10111111
 	bs[0] = util.B2U(h.HasPrivateData) << 7

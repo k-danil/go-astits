@@ -3,7 +3,8 @@ package descriptor
 import (
 	"fmt"
 
-	"github.com/asticode/go-astikit"
+	"github.com/k-danil/go-astits/internal/bytesiter"
+	"github.com/k-danil/go-astits/internal/util"
 )
 
 // VBI data service id
@@ -17,32 +18,32 @@ const (
 	VBIDataServiceIDMonochrome442Samples = 0x7
 )
 
-// DescriptorVBIData represents a VBI data descriptor
+// VBIData represents a VBI data descriptor
 // Chapter: 6.2.47 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
-type DescriptorVBIData struct {
-	Header   DescriptorHeader
-	Services []DescriptorVBIDataService
+type VBIData struct {
+	Header   Header
+	Services []VBIDataService
 }
 
-// DescriptorVBIDataService represents a vbi data service descriptor
+// VBIDataService represents a vbi data service descriptor
 // Chapter: 6.2.47 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
-type DescriptorVBIDataService struct {
+type VBIDataService struct {
 	DataServiceID uint8
-	Descriptors   []DescriptorVBIDataDescriptor
+	Descriptors   []VBIDataDescriptor
 }
 
 // DescriptorVBIDataItem represents a vbi data descriptor item
 // Chapter: 6.2.47 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
-type DescriptorVBIDataDescriptor struct {
+type VBIDataDescriptor struct {
 	FieldParity bool
 	LineOffset  uint8
 }
 
-func newDescriptorVBIData(i *astikit.BytesIterator, h DescriptorHeader, offsetEnd int) (dd Descriptor, err error) {
+func newDescriptorVBIData(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
 	// Create descriptor
-	d := &DescriptorVBIData{
+	d := &VBIData{
 		Header:   h,
-		Services: make([]DescriptorVBIDataService, (offsetEnd-i.Offset())/3),
+		Services: make([]VBIDataService, (offsetEnd-i.Offset())/3),
 	}
 	dd = d
 
@@ -79,7 +80,7 @@ func newDescriptorVBIData(i *astikit.BytesIterator, h DescriptorHeader, offsetEn
 			if d.Services[idx].DataServiceID <= VBIDataServiceIDMonochrome442Samples &&
 				d.Services[idx].DataServiceID != 0x0 && d.Services[idx].DataServiceID != 0x3 {
 				// Append data
-				d.Services[idx].Descriptors = append(d.Services[idx].Descriptors, DescriptorVBIDataDescriptor{
+				d.Services[idx].Descriptors = append(d.Services[idx].Descriptors, VBIDataDescriptor{
 					FieldParity: b&0x20 > 0,
 					LineOffset:  b & 0x1f,
 				})
@@ -89,40 +90,26 @@ func newDescriptorVBIData(i *astikit.BytesIterator, h DescriptorHeader, offsetEn
 	return
 }
 
-func (d *DescriptorVBIData) length() uint8 {
-	return uint8(3 * len(d.Services))
+func (d *VBIData) CalcLength() int {
+	return 3 * len(d.Services)
 }
 
-func (d *DescriptorVBIData) write(w *astikit.BitsWriter) (int, error) {
-	b := astikit.NewBitsWriterBatch(w)
-
-	length := d.length()
-	b.Write(uint8(d.Header.Tag))
-	b.Write(length)
-
-	if err := b.Err(); err != nil {
-		return 0, err
-	}
-	written := int(length) + 2
-
+func (d *VBIData) Append(dst []byte) []byte {
+	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
 	for _, item := range d.Services {
-		b.Write(item.DataServiceID)
+		dst = append(dst, item.DataServiceID)
 
 		if item.DataServiceID <= VBIDataServiceIDMonochrome442Samples &&
 			item.DataServiceID != 0x0 && item.DataServiceID != 0x3 {
 
-			b.Write(uint8(len(item.Descriptors))) // each descriptor is 1 byte
+			dst = append(dst, uint8(len(item.Descriptors))) // each descriptor is 1 byte
 			for _, desc := range item.Descriptors {
-				b.WriteN(uint8(0xff), 2)
-				b.Write(desc.FieldParity)
-				b.WriteN(desc.LineOffset, 5)
+				dst = append(dst, 0xc0|util.B2U(desc.FieldParity)<<5|desc.LineOffset&0x1f)
 			}
 		} else {
 			// let's put one reserved byte
-			b.Write(uint8(1))
-			b.Write(uint8(0xff))
+			dst = append(dst, uint8(1), 0xff)
 		}
 	}
-
-	return written, b.Err()
+	return dst
 }

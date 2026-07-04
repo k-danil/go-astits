@@ -6,8 +6,7 @@ import (
 	"math"
 	"time"
 
-	"github.com/asticode/go-astikit"
-
+	"github.com/k-danil/go-astits/internal/bytesiter"
 	"github.com/k-danil/go-astits/internal/util"
 )
 
@@ -18,7 +17,7 @@ import (
 // I apologize for the computation which is really messy but details are given in the documentation
 // Page: 160 | Annex C | Link: https://www.dvb.org/resources/public/standards/a38_dvb-si_specification.pdf
 // (barbashov) the link above can be broken, alternative: https://dvb.org/wp-content/uploads/2019/12/a038_tm1217r37_en300468v1_17_1_-_rev-134_-_si_specification.pdf
-func ParseTime(i *astikit.BytesIterator) (t time.Time, err error) {
+func ParseTime(i *bytesiter.Iterator) (t time.Time, err error) {
 	// Get next 2 bytes
 	var bs []byte
 	if bs, err = i.NextBytesNoCopy(2); err != nil || len(bs) < 2 {
@@ -53,7 +52,7 @@ func ParseTime(i *astikit.BytesIterator) (t time.Time, err error) {
 
 // ParseDurationMinutes parses a minutes duration
 // 16 bit field containing the duration of the event in hours, minutes. format: 4 digits, 4 - bit BCD = 18 bit
-func ParseDurationMinutes(i *astikit.BytesIterator) (d time.Duration, err error) {
+func ParseDurationMinutes(i *bytesiter.Iterator) (d time.Duration, err error) {
 	var bs []byte
 	if bs, err = i.NextBytesNoCopy(2); err != nil || len(bs) < 2 {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
@@ -65,7 +64,7 @@ func ParseDurationMinutes(i *astikit.BytesIterator) (d time.Duration, err error)
 
 // ParseDurationSeconds parses a seconds duration
 // 24 bit field containing the duration of the event in hours, minutes, seconds. format: 6 digits, 4 - bit BCD = 24 bit
-func ParseDurationSeconds(i *astikit.BytesIterator) (d time.Duration, err error) {
+func ParseDurationSeconds(i *bytesiter.Iterator) (d time.Duration, err error) {
 	var bs []byte
 	if bs, err = i.NextBytesNoCopy(3); err != nil || len(bs) < 3 {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
@@ -80,7 +79,7 @@ func parseDurationByte(i byte) time.Duration {
 	return time.Duration(i>>4*10 + i&0xf)
 }
 
-func WriteTime(w *astikit.BitsWriter, t time.Time) (int, error) {
+func AppendTime(dst []byte, t time.Time) []byte {
 	year := t.Year() - 1900
 	month := t.Month()
 	day := t.Day()
@@ -94,41 +93,23 @@ func WriteTime(w *astikit.BitsWriter, t time.Time) (int, error) {
 
 	d := t.Sub(t.Truncate(24 * time.Hour))
 
-	b := astikit.NewBitsWriterBatch(w)
-
-	b.Write(uint16(mjd))
-	bytesWritten, err := WriteDurationSeconds(w, d)
-	if err != nil {
-		return 2, err
-	}
-
-	return bytesWritten + 2, b.Err()
+	dst = append(dst, byte(mjd>>8), byte(mjd))
+	return AppendDurationSeconds(dst, d)
 }
 
-func WriteDurationMinutes(w *astikit.BitsWriter, d time.Duration) (int, error) {
-	b := astikit.NewBitsWriterBatch(w)
-
+func AppendDurationMinutes(dst []byte, d time.Duration) []byte {
 	hours := uint8(d.Hours())
 	minutes := uint8(int(d.Minutes()) % 60)
 
-	b.Write(durationByteRepresentation(hours))
-	b.Write(durationByteRepresentation(minutes))
-
-	return 2, b.Err()
+	return append(dst, durationByteRepresentation(hours), durationByteRepresentation(minutes))
 }
 
-func WriteDurationSeconds(w *astikit.BitsWriter, d time.Duration) (int, error) {
-	b := astikit.NewBitsWriterBatch(w)
-
+func AppendDurationSeconds(dst []byte, d time.Duration) []byte {
 	hours := uint8(d.Hours())
 	minutes := uint8(int(d.Minutes()) % 60)
 	seconds := uint8(int(d.Seconds()) % 60)
 
-	b.Write(durationByteRepresentation(hours))
-	b.Write(durationByteRepresentation(minutes))
-	b.Write(durationByteRepresentation(seconds))
-
-	return 3, b.Err()
+	return append(dst, durationByteRepresentation(hours), durationByteRepresentation(minutes), durationByteRepresentation(seconds))
 }
 
 func durationByteRepresentation(n uint8) uint8 {

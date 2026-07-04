@@ -4,30 +4,30 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"github.com/asticode/go-astikit"
+	"github.com/k-danil/go-astits/internal/bytesiter"
 )
 
-// DescriptorSubtitling represents a subtitling descriptor
+// Subtitling represents a subtitling descriptor
 // Chapter: 6.2.41 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
-type DescriptorSubtitling struct {
-	Header DescriptorHeader
-	Items  []DescriptorSubtitlingItem
+type Subtitling struct {
+	Header Header
+	Items  []SubtitlingItem
 }
 
-// DescriptorSubtitlingItem represents subtitling descriptor item
+// SubtitlingItem represents subtitling descriptor item
 // Chapter: 6.2.41 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
-type DescriptorSubtitlingItem struct {
+type SubtitlingItem struct {
 	AncillaryPageID   uint16
 	CompositionPageID uint16
 	Language          [3]byte
 	Type              uint8
 }
 
-func newDescriptorSubtitling(i *astikit.BytesIterator, h DescriptorHeader, offsetEnd int) (dd Descriptor, err error) {
+func newDescriptorSubtitling(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
 	// Create descriptor
-	d := &DescriptorSubtitling{
+	d := &Subtitling{
 		Header: h,
-		Items:  make([]DescriptorSubtitlingItem, (offsetEnd-i.Offset())/8),
+		Items:  make([]SubtitlingItem, (offsetEnd-i.Offset())/8),
 	}
 	dd = d
 
@@ -72,28 +72,17 @@ func newDescriptorSubtitling(i *astikit.BytesIterator, h DescriptorHeader, offse
 	return
 }
 
-func (d *DescriptorSubtitling) length() uint8 {
-	return uint8(8 * len(d.Items))
+func (d *Subtitling) CalcLength() int {
+	return 8 * len(d.Items)
 }
 
-func (d *DescriptorSubtitling) write(w *astikit.BitsWriter) (int, error) {
-	b := astikit.NewBitsWriterBatch(w)
-
-	length := d.length()
-	b.Write(uint8(d.Header.Tag))
-	b.Write(length)
-
-	if err := b.Err(); err != nil {
-		return 0, err
-	}
-	written := int(length) + 2
-
+func (d *Subtitling) Append(dst []byte) []byte {
+	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
 	for _, item := range d.Items {
-		b.Write(item.Language[:])
-		b.Write(item.Type)
-		b.Write(item.CompositionPageID)
-		b.Write(item.AncillaryPageID)
+		dst = append(dst, item.Language[:]...)
+		dst = append(dst, item.Type,
+			byte(item.CompositionPageID>>8), byte(item.CompositionPageID),
+			byte(item.AncillaryPageID>>8), byte(item.AncillaryPageID))
 	}
-
-	return written, b.Err()
+	return dst
 }

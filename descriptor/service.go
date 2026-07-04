@@ -3,7 +3,7 @@ package descriptor
 import (
 	"fmt"
 
-	"github.com/asticode/go-astikit"
+	"github.com/k-danil/go-astits/internal/bytesiter"
 )
 
 // Service types
@@ -12,16 +12,16 @@ const (
 	ServiceTypeDigitalTelevisionService = 0x1
 )
 
-// DescriptorService represents a service descriptor
+// Service represents a service descriptor
 // Chapter: 6.2.33 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
-type DescriptorService struct {
+type Service struct {
 	Name     []byte
 	Provider []byte
-	Header   DescriptorHeader
+	Header   Header
 	Type     uint8
 }
 
-func newDescriptorService(i *astikit.BytesIterator, h DescriptorHeader, _ int) (dd Descriptor, err error) {
+func newDescriptorService(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {
 	// Get next byte
 	var b byte
 	if b, err = i.NextByte(); err != nil {
@@ -30,7 +30,7 @@ func newDescriptorService(i *astikit.BytesIterator, h DescriptorHeader, _ int) (
 	}
 
 	// Create descriptor
-	d := &DescriptorService{
+	d := &Service{
 		Header: h,
 		Type:   b,
 	}
@@ -68,30 +68,14 @@ func newDescriptorService(i *astikit.BytesIterator, h DescriptorHeader, _ int) (
 	return
 }
 
-func (d *DescriptorService) length() uint8 {
-	ret := 3 // type and lengths
-	ret += len(d.Name)
-	ret += len(d.Provider)
-	return uint8(ret)
+func (d *Service) CalcLength() int {
+	return 3 + len(d.Name) + len(d.Provider) // type and lengths
 }
 
-func (d *DescriptorService) write(w *astikit.BitsWriter) (int, error) {
-	b := astikit.NewBitsWriterBatch(w)
-
-	length := d.length()
-	b.Write(uint8(d.Header.Tag))
-	b.Write(length)
-
-	if err := b.Err(); err != nil {
-		return 0, err
-	}
-	written := int(length) + 2
-
-	b.Write(d.Type)
-	b.Write(uint8(len(d.Provider)))
-	b.Write(d.Provider)
-	b.Write(uint8(len(d.Name)))
-	b.Write(d.Name)
-
-	return written, b.Err()
+func (d *Service) Append(dst []byte) []byte {
+	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	dst = append(dst, d.Type, uint8(len(d.Provider)))
+	dst = append(dst, d.Provider...)
+	dst = append(dst, uint8(len(d.Name)))
+	return append(dst, d.Name...)
 }

@@ -4,9 +4,8 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"github.com/asticode/go-astikit"
-
 	"github.com/k-danil/go-astits/descriptor"
+	"github.com/k-danil/go-astits/internal/bytesiter"
 )
 
 // Running statuses
@@ -19,17 +18,17 @@ const (
 	RunningStatusUndefined           = 0
 )
 
-// SDTData represents an SDT data
+// SDT represents an SDT data
 // Page: 33 | Chapter: 5.2.3 | Link: https://www.dvb.org/resources/public/standards/a38_dvb-si_specification.pdf
 // (barbashov) the link above can be broken, alternative: https://dvb.org/wp-content/uploads/2019/12/a038_tm1217r37_en300468v1_17_1_-_rev-134_-_si_specification.pdf
-type SDTData struct {
-	Services          []SDTDataService
+type SDT struct {
+	Services          []SDTService
 	OriginalNetworkID uint16
 	TransportStreamID uint16
 }
 
-// SDTDataService represents an SDT data service
-type SDTDataService struct {
+// SDTService represents an SDT data service
+type SDTService struct {
 	Descriptors            []descriptor.Descriptor
 	ServiceID              uint16
 	HasEITPresentFollowing bool // When true indicates that EIT present/following information for the service is present in the current TS
@@ -39,9 +38,9 @@ type SDTDataService struct {
 }
 
 // parseSDTSection parses an SDT section
-func parseSDTSection(i *astikit.BytesIterator, offsetSectionsEnd int, tableIDExtension uint16) (d *SDTData, err error) {
+func parseSDTSection(i *bytesiter.Iterator, offsetSectionsEnd int, tableIDExtension uint16) (d *SDT, err error) {
 	// Create data
-	d = &SDTData{TransportStreamID: tableIDExtension}
+	d = &SDT{TransportStreamID: tableIDExtension}
 
 	// Get next bytes
 	var bs []byte
@@ -59,7 +58,7 @@ func parseSDTSection(i *astikit.BytesIterator, offsetSectionsEnd int, tableIDExt
 	// Loop until end of section data is reached
 	for i.Offset() < offsetSectionsEnd {
 		// Create service
-		s := SDTDataService{}
+		s := SDTService{}
 
 		// Get next bytes
 		if bs, err = i.NextBytesNoCopy(2); err != nil || len(bs) < 2 {
@@ -99,10 +98,12 @@ func parseSDTSection(i *astikit.BytesIterator, offsetSectionsEnd int, tableIDExt
 		i.Skip(-1)
 
 		// Descriptors
-		if s.Descriptors, err = descriptor.ParseDescriptors(i); err != nil {
+		var dn int
+		if s.Descriptors, dn, err = descriptor.Parse(i.Bytes()); err != nil {
 			err = fmt.Errorf("astits: parsing descriptors failed: %w", err)
 			return
 		}
+		i.Skip(dn)
 
 		// Append service
 		d.Services = append(d.Services, s)

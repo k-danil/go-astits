@@ -23,8 +23,8 @@ type (
 )
 
 const (
-	MpegTsPacketSize = ts.MpegTsPacketSize
-	M2TsPacketSize   = ts.M2TsPacketSize
+	MpegTsPacketSize = ts.PacketSize
+	M2TsPacketSize   = ts.M2TSPacketSize
 
 	ScramblingControlNotScrambled         = ts.ScramblingControlNotScrambled
 	ScramblingControlReservedForFutureUse = ts.ScramblingControlReservedForFutureUse
@@ -50,10 +50,10 @@ func NewPacketList() *PacketList { return ts.NewPacketList() }
 
 type (
 	DSMTrickMode               = pes.DSMTrickMode
-	PESData                    = pes.PESData
-	PESHeader                  = pes.PESHeader
-	PESOptionalHeader          = pes.PESOptionalHeader
-	PESOptionalHeaderExtension = pes.PESOptionalHeaderExtension
+	PESData                    = pes.Data
+	PESHeader                  = pes.Header
+	PESOptionalHeader          = pes.OptionalHeader
+	PESOptionalHeaderExtension = pes.OptionalHeaderExtension
 )
 
 const (
@@ -74,58 +74,58 @@ const (
 )
 
 type (
-	EITData                = psi.EITData
-	EITDataEvent           = psi.EITDataEvent
-	NITData                = psi.NITData
-	NITDataTransportStream = psi.NITDataTransportStream
-	PATData                = psi.PATData
+	EITData                = psi.EIT
+	EITDataEvent           = psi.EITEvent
+	NITData                = psi.NIT
+	NITDataTransportStream = psi.NITTransportStream
+	PATData                = psi.PAT
 	PATProgram             = psi.PATProgram
-	PMTData                = psi.PMTData
-	PMTElementaryStream    = psi.PMTElementaryStream
-	PSIData                = psi.PSIData
-	PSISection             = psi.PSISection
-	PSISectionHeader       = psi.PSISectionHeader
-	PSISectionSyntax       = psi.PSISectionSyntax
-	PSISectionSyntaxData   = psi.PSISectionSyntaxData
-	PSISectionSyntaxHeader = psi.PSISectionSyntaxHeader
-	PSITableID             = psi.PSITableID
-	SDTData                = psi.SDTData
-	SDTDataService         = psi.SDTDataService
+	PMTData                = psi.PMT
+	PMTElementaryStream    = psi.ElementaryStream
+	PSIData                = psi.Data
+	PSISection             = psi.Section
+	PSISectionHeader       = psi.SectionHeader
+	PSISectionSyntax       = psi.SectionSyntax
+	PSISectionSyntaxData   = psi.SectionSyntaxData
+	PSISectionSyntaxHeader = psi.SectionSyntaxHeader
+	PSITableID             = psi.TableID
+	SDTData                = psi.SDT
+	SDTDataService         = psi.SDTService
 	StreamType             = psi.StreamType
-	TOTData                = psi.TOTData
+	TOTData                = psi.TOT
 )
 
 const (
-	PSITableIDBAT                        = psi.PSITableIDBAT
-	PSITableIDDIT                        = psi.PSITableIDDIT
-	PSITableIDEITEnd                     = psi.PSITableIDEITEnd
-	PSITableIDEITStart                   = psi.PSITableIDEITStart
-	PSITableIDNITVariant1                = psi.PSITableIDNITVariant1
-	PSITableIDNITVariant2                = psi.PSITableIDNITVariant2
-	PSITableIDNull                       = psi.PSITableIDNull
-	PSITableIDPAT                        = psi.PSITableIDPAT
-	PSITableIDPMT                        = psi.PSITableIDPMT
-	PSITableIDRST                        = psi.PSITableIDRST
-	PSITableIDSDTVariant1                = psi.PSITableIDSDTVariant1
-	PSITableIDSDTVariant2                = psi.PSITableIDSDTVariant2
-	PSITableIDSIT                        = psi.PSITableIDSIT
-	PSITableIDST                         = psi.PSITableIDST
-	PSITableIDTDT                        = psi.PSITableIDTDT
-	PSITableIDTOT                        = psi.PSITableIDTOT
-	PSITableTypeBAT                      = psi.PSITableTypeBAT
-	PSITableTypeDIT                      = psi.PSITableTypeDIT
-	PSITableTypeEIT                      = psi.PSITableTypeEIT
-	PSITableTypeNIT                      = psi.PSITableTypeNIT
-	PSITableTypeNull                     = psi.PSITableTypeNull
-	PSITableTypePAT                      = psi.PSITableTypePAT
-	PSITableTypePMT                      = psi.PSITableTypePMT
-	PSITableTypeRST                      = psi.PSITableTypeRST
-	PSITableTypeSDT                      = psi.PSITableTypeSDT
-	PSITableTypeSIT                      = psi.PSITableTypeSIT
-	PSITableTypeST                       = psi.PSITableTypeST
-	PSITableTypeTDT                      = psi.PSITableTypeTDT
-	PSITableTypeTOT                      = psi.PSITableTypeTOT
-	PSITableTypeUnknown                  = psi.PSITableTypeUnknown
+	PSITableIDBAT                        = psi.TableIDBAT
+	PSITableIDDIT                        = psi.TableIDDIT
+	PSITableIDEITEnd                     = psi.TableIDEITEnd
+	PSITableIDEITStart                   = psi.TableIDEITStart
+	PSITableIDNITVariant1                = psi.TableIDNITVariant1
+	PSITableIDNITVariant2                = psi.TableIDNITVariant2
+	PSITableIDNull                       = psi.TableIDNull
+	PSITableIDPAT                        = psi.TableIDPAT
+	PSITableIDPMT                        = psi.TableIDPMT
+	PSITableIDRST                        = psi.TableIDRST
+	PSITableIDSDTVariant1                = psi.TableIDSDTVariant1
+	PSITableIDSDTVariant2                = psi.TableIDSDTVariant2
+	PSITableIDSIT                        = psi.TableIDSIT
+	PSITableIDST                         = psi.TableIDST
+	PSITableIDTDT                        = psi.TableIDTDT
+	PSITableIDTOT                        = psi.TableIDTOT
+	PSITableTypeBAT                      = psi.TableTypeBAT
+	PSITableTypeDIT                      = psi.TableTypeDIT
+	PSITableTypeEIT                      = psi.TableTypeEIT
+	PSITableTypeNIT                      = psi.TableTypeNIT
+	PSITableTypeNull                     = psi.TableTypeNull
+	PSITableTypePAT                      = psi.TableTypePAT
+	PSITableTypePMT                      = psi.TableTypePMT
+	PSITableTypeRST                      = psi.TableTypeRST
+	PSITableTypeSDT                      = psi.TableTypeSDT
+	PSITableTypeSIT                      = psi.TableTypeSIT
+	PSITableTypeST                       = psi.TableTypeST
+	PSITableTypeTDT                      = psi.TableTypeTDT
+	PSITableTypeTOT                      = psi.TableTypeTOT
+	PSITableTypeUnknown                  = psi.TableTypeUnknown
 	RunningStatusNotRunning              = psi.RunningStatusNotRunning
 	RunningStatusPausing                 = psi.RunningStatusPausing
 	RunningStatusRunning                 = psi.RunningStatusRunning
@@ -160,42 +160,41 @@ const (
 
 type (
 	Descriptor                            = descriptor.Descriptor
-	DescriptorAC3                         = descriptor.DescriptorAC3
-	DescriptorAVCVideo                    = descriptor.DescriptorAVCVideo
-	DescriptorComponent                   = descriptor.DescriptorComponent
-	DescriptorContent                     = descriptor.DescriptorContent
-	DescriptorContentItem                 = descriptor.DescriptorContentItem
-	DescriptorDataStreamAlignment         = descriptor.DescriptorDataStreamAlignment
-	DescriptorEnhancedAC3                 = descriptor.DescriptorEnhancedAC3
-	DescriptorExtendedEvent               = descriptor.DescriptorExtendedEvent
-	DescriptorExtendedEventItem           = descriptor.DescriptorExtendedEventItem
-	DescriptorExtension                   = descriptor.DescriptorExtension
-	DescriptorExtensionSupplementaryAudio = descriptor.DescriptorExtensionSupplementaryAudio
-	DescriptorHeader                      = descriptor.DescriptorHeader
-	DescriptorISO639LanguageAndAudioType  = descriptor.DescriptorISO639LanguageAndAudioType
-	DescriptorLocalTimeOffset             = descriptor.DescriptorLocalTimeOffset
-	DescriptorLocalTimeOffsetItem         = descriptor.DescriptorLocalTimeOffsetItem
-	DescriptorMaximumBitrate              = descriptor.DescriptorMaximumBitrate
-	DescriptorNetworkName                 = descriptor.DescriptorNetworkName
-	DescriptorParentalRating              = descriptor.DescriptorParentalRating
-	DescriptorParentalRatingItem          = descriptor.DescriptorParentalRatingItem
-	DescriptorParser                      = descriptor.DescriptorParser
-	DescriptorPrivateDataIndicator        = descriptor.DescriptorPrivateDataIndicator
-	DescriptorPrivateDataSpecifier        = descriptor.DescriptorPrivateDataSpecifier
-	DescriptorRegistration                = descriptor.DescriptorRegistration
-	DescriptorService                     = descriptor.DescriptorService
-	DescriptorShortEvent                  = descriptor.DescriptorShortEvent
-	DescriptorStreamIdentifier            = descriptor.DescriptorStreamIdentifier
-	DescriptorSubtitling                  = descriptor.DescriptorSubtitling
-	DescriptorSubtitlingItem              = descriptor.DescriptorSubtitlingItem
-	DescriptorTag                         = descriptor.DescriptorTag
-	DescriptorTeletext                    = descriptor.DescriptorTeletext
-	DescriptorTeletextItem                = descriptor.DescriptorTeletextItem
-	DescriptorUnknown                     = descriptor.DescriptorUnknown
-	DescriptorUserDefined                 = descriptor.DescriptorUserDefined
-	DescriptorVBIData                     = descriptor.DescriptorVBIData
-	DescriptorVBIDataDescriptor           = descriptor.DescriptorVBIDataDescriptor
-	DescriptorVBIDataService              = descriptor.DescriptorVBIDataService
+	DescriptorAC3                         = descriptor.AC3
+	DescriptorAVCVideo                    = descriptor.AVCVideo
+	DescriptorComponent                   = descriptor.Component
+	DescriptorContent                     = descriptor.Content
+	DescriptorContentItem                 = descriptor.ContentItem
+	DescriptorDataStreamAlignment         = descriptor.DataStreamAlignment
+	DescriptorEnhancedAC3                 = descriptor.EnhancedAC3
+	DescriptorExtendedEvent               = descriptor.ExtendedEvent
+	DescriptorExtendedEventItem           = descriptor.ExtendedEventItem
+	DescriptorExtension                   = descriptor.Extension
+	DescriptorExtensionSupplementaryAudio = descriptor.ExtensionSupplementaryAudio
+	DescriptorHeader                      = descriptor.Header
+	DescriptorISO639LanguageAndAudioType  = descriptor.ISO639LanguageAndAudioType
+	DescriptorLocalTimeOffset             = descriptor.LocalTimeOffset
+	DescriptorLocalTimeOffsetItem         = descriptor.LocalTimeOffsetItem
+	DescriptorMaximumBitrate              = descriptor.MaximumBitrate
+	DescriptorNetworkName                 = descriptor.NetworkName
+	DescriptorParentalRating              = descriptor.ParentalRating
+	DescriptorParentalRatingItem          = descriptor.ParentalRatingItem
+	DescriptorPrivateDataIndicator        = descriptor.PrivateDataIndicator
+	DescriptorPrivateDataSpecifier        = descriptor.PrivateDataSpecifier
+	DescriptorRegistration                = descriptor.Registration
+	DescriptorService                     = descriptor.Service
+	DescriptorShortEvent                  = descriptor.ShortEvent
+	DescriptorStreamIdentifier            = descriptor.StreamIdentifier
+	DescriptorSubtitling                  = descriptor.Subtitling
+	DescriptorSubtitlingItem              = descriptor.SubtitlingItem
+	DescriptorTag                         = descriptor.Tag
+	DescriptorTeletext                    = descriptor.Teletext
+	DescriptorTeletextItem                = descriptor.TeletextItem
+	DescriptorUnknown                     = descriptor.Unknown
+	DescriptorUserDefined                 = descriptor.UserDefined
+	DescriptorVBIData                     = descriptor.VBIData
+	DescriptorVBIDataDescriptor           = descriptor.VBIDataDescriptor
+	DescriptorVBIDataService              = descriptor.VBIDataService
 )
 
 const (
@@ -207,30 +206,30 @@ const (
 	DataStreamAligmentVideoGOPOrSEQ                          = descriptor.DataStreamAligmentVideoGOPOrSEQ
 	DataStreamAligmentVideoSEQ                               = descriptor.DataStreamAligmentVideoSEQ
 	DataStreamAligmentVideoSliceOrAccessUnit                 = descriptor.DataStreamAligmentVideoSliceOrAccessUnit
-	DescriptorTagAC3                                         = descriptor.DescriptorTagAC3
-	DescriptorTagAVCVideo                                    = descriptor.DescriptorTagAVCVideo
-	DescriptorTagComponent                                   = descriptor.DescriptorTagComponent
-	DescriptorTagContent                                     = descriptor.DescriptorTagContent
-	DescriptorTagDataStreamAlignment                         = descriptor.DescriptorTagDataStreamAlignment
-	DescriptorTagEnhancedAC3                                 = descriptor.DescriptorTagEnhancedAC3
-	DescriptorTagExtendedEvent                               = descriptor.DescriptorTagExtendedEvent
-	DescriptorTagExtension                                   = descriptor.DescriptorTagExtension
-	DescriptorTagExtensionSupplementaryAudio                 = descriptor.DescriptorTagExtensionSupplementaryAudio
-	DescriptorTagISO639LanguageAndAudioType                  = descriptor.DescriptorTagISO639LanguageAndAudioType
-	DescriptorTagLocalTimeOffset                             = descriptor.DescriptorTagLocalTimeOffset
-	DescriptorTagMaximumBitrate                              = descriptor.DescriptorTagMaximumBitrate
-	DescriptorTagNetworkName                                 = descriptor.DescriptorTagNetworkName
-	DescriptorTagParentalRating                              = descriptor.DescriptorTagParentalRating
-	DescriptorTagPrivateDataIndicator                        = descriptor.DescriptorTagPrivateDataIndicator
-	DescriptorTagPrivateDataSpecifier                        = descriptor.DescriptorTagPrivateDataSpecifier
-	DescriptorTagRegistration                                = descriptor.DescriptorTagRegistration
-	DescriptorTagService                                     = descriptor.DescriptorTagService
-	DescriptorTagShortEvent                                  = descriptor.DescriptorTagShortEvent
-	DescriptorTagStreamIdentifier                            = descriptor.DescriptorTagStreamIdentifier
-	DescriptorTagSubtitling                                  = descriptor.DescriptorTagSubtitling
-	DescriptorTagTeletext                                    = descriptor.DescriptorTagTeletext
-	DescriptorTagVBIData                                     = descriptor.DescriptorTagVBIData
-	DescriptorTagVBITeletext                                 = descriptor.DescriptorTagVBITeletext
+	DescriptorTagAC3                                         = descriptor.TagAC3
+	DescriptorTagAVCVideo                                    = descriptor.TagAVCVideo
+	DescriptorTagComponent                                   = descriptor.TagComponent
+	DescriptorTagContent                                     = descriptor.TagContent
+	DescriptorTagDataStreamAlignment                         = descriptor.TagDataStreamAlignment
+	DescriptorTagEnhancedAC3                                 = descriptor.TagEnhancedAC3
+	DescriptorTagExtendedEvent                               = descriptor.TagExtendedEvent
+	DescriptorTagExtension                                   = descriptor.TagExtension
+	DescriptorTagExtensionSupplementaryAudio                 = descriptor.TagExtensionSupplementaryAudio
+	DescriptorTagISO639LanguageAndAudioType                  = descriptor.TagISO639LanguageAndAudioType
+	DescriptorTagLocalTimeOffset                             = descriptor.TagLocalTimeOffset
+	DescriptorTagMaximumBitrate                              = descriptor.TagMaximumBitrate
+	DescriptorTagNetworkName                                 = descriptor.TagNetworkName
+	DescriptorTagParentalRating                              = descriptor.TagParentalRating
+	DescriptorTagPrivateDataIndicator                        = descriptor.TagPrivateDataIndicator
+	DescriptorTagPrivateDataSpecifier                        = descriptor.TagPrivateDataSpecifier
+	DescriptorTagRegistration                                = descriptor.TagRegistration
+	DescriptorTagService                                     = descriptor.TagService
+	DescriptorTagShortEvent                                  = descriptor.TagShortEvent
+	DescriptorTagStreamIdentifier                            = descriptor.TagStreamIdentifier
+	DescriptorTagSubtitling                                  = descriptor.TagSubtitling
+	DescriptorTagTeletext                                    = descriptor.TagTeletext
+	DescriptorTagVBIData                                     = descriptor.TagVBIData
+	DescriptorTagVBITeletext                                 = descriptor.TagVBITeletext
 	ServiceTypeDigitalTelevisionService                      = descriptor.ServiceTypeDigitalTelevisionService
 	TeletextTypeAdditionalInformationPage                    = descriptor.TeletextTypeAdditionalInformationPage
 	TeletextTypeInitialTeletextPage                          = descriptor.TeletextTypeInitialTeletextPage
@@ -247,10 +246,10 @@ const (
 
 type (
 	Demuxer       = demux.Demuxer
-	DemuxerData   = demux.DemuxerData
+	DemuxerData   = demux.Data
 	PacketsParser = demux.PacketsParser
 	Muxer         = mux.Muxer
-	MuxerData     = mux.MuxerData
+	MuxerData     = mux.Data
 )
 
 var (
@@ -262,33 +261,33 @@ var (
 )
 
 func NewDemuxer(ctx context.Context, r io.Reader, opts ...func(*Demuxer)) *Demuxer {
-	return demux.NewDemuxer(ctx, r, opts...)
+	return demux.New(ctx, r, opts...)
 }
 
 func DemuxerOptPacketSize(packetSize int) func(*Demuxer) {
-	return demux.DemuxerOptPacketSize(packetSize)
+	return demux.WithPacketSize(packetSize)
 }
 
 func DemuxerOptPacketsParser(p PacketsParser) func(*Demuxer) {
-	return demux.DemuxerOptPacketsParser(p)
+	return demux.WithPacketsParser(p)
 }
 
 func DemuxerOptPacketSkipper(s PacketSkipper) func(*Demuxer) {
-	return demux.DemuxerOptPacketSkipper(s)
+	return demux.WithPacketSkipper(s)
 }
 
 func DemuxerOptSkipErrLimit(count int) func(*Demuxer) {
-	return demux.DemuxerOptSkipErrLimit(count)
+	return demux.WithSkipErrLimit(count)
 }
 
 func DemuxerOptZeroCopyPackets(batchPackets uint) func(*Demuxer) {
-	return demux.DemuxerOptZeroCopyPackets(batchPackets)
+	return demux.WithZeroCopyPackets(batchPackets)
 }
 
 func NewMuxer(ctx context.Context, w io.Writer, opts ...func(*Muxer)) *Muxer {
-	return mux.NewMuxer(ctx, w, opts...)
+	return mux.New(ctx, w, opts...)
 }
 
 func MuxerOptTablesRetransmitPeriod(newPeriod int) func(*Muxer) {
-	return mux.MuxerOptTablesRetransmitPeriod(newPeriod)
+	return mux.WithTablesRetransmitPeriod(newPeriod)
 }

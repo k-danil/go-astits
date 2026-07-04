@@ -47,8 +47,8 @@ func TestPSIDedup(t *testing.T) {
 	}
 
 	// Identical repeated sections are suppressed: same data count as from a single copy
-	single := NewDemuxer(context.Background(), bytes.NewReader(buf.Bytes()[:singleCopyLen]))
-	dmx := NewDemuxer(context.Background(), bytes.NewReader(buf.Bytes()))
+	single := New(context.Background(), bytes.NewReader(buf.Bytes()[:singleCopyLen]))
+	dmx := New(context.Background(), bytes.NewReader(buf.Bytes()))
 	want := countDatas(single)
 	require.NotZero(t, want)
 	require.Equal(t, want, countDatas(dmx))

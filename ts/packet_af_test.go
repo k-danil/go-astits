@@ -19,7 +19,7 @@ func TestPacketEmbeddedAFReuse(t *testing.T) {
 
 	// Full AF (fixture: PCR/OPCR/private/extension)
 	bs1, _ := packet(packetHeader, packetAdaptationField, []byte("payload"), false)
-	parseInto(t, p, bs1[:MpegTsPacketSize])
+	parseInto(t, p, bs1[:PacketSize])
 	require.NotNil(t, p.AdaptationField)
 	assert.Same(t, &p.af, p.AdaptationField)
 	assert.Equal(t, []byte("test"), p.AdaptationField.TransportPrivateData)
@@ -27,12 +27,12 @@ func TestPacketEmbeddedAFReuse(t *testing.T) {
 
 	// Packet without AF: the pointer must be reset to nil
 	bs2, _ := packetShort(PacketHeader{HasPayload: true, PID: 0x100}, []byte{0xde})
-	parseInto(t, p, bs2[:MpegTsPacketSize])
+	parseInto(t, p, bs2[:PacketSize])
 	assert.Nil(t, p.AdaptationField)
 
 	// Minimal AF (RAI only): stale private/extension from the first parse
 	// must not leak through
-	minimalAF := make([]byte, MpegTsPacketSize)
+	minimalAF := make([]byte, PacketSize)
 	minimalAF[0] = syncByte
 	minimalAF[1] = 0x01
 	minimalAF[2] = 0x00 // PID 0x100
@@ -48,9 +48,9 @@ func TestPacketEmbeddedAFReuse(t *testing.T) {
 
 	// AF with Length=0 (one-byte stuffing): the flags byte is not parsed at all —
 	// stale Has-flags of the previous packet used to produce phantom PCRs
-	parseInto(t, p, bs1[:MpegTsPacketSize]) // full AF with PCR again
+	parseInto(t, p, bs1[:PacketSize]) // full AF with PCR again
 	require.True(t, p.AdaptationField.HasPCR)
-	zeroLenAF := make([]byte, MpegTsPacketSize)
+	zeroLenAF := make([]byte, PacketSize)
 	zeroLenAF[0] = syncByte
 	zeroLenAF[1] = 0x01
 	zeroLenAF[2] = 0x00 // PID 0x100

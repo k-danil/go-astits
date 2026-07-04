@@ -4,9 +4,8 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"github.com/asticode/go-astikit"
-
 	"github.com/k-danil/go-astits/descriptor"
+	"github.com/k-danil/go-astits/internal/bytesiter"
 )
 
 type StreamType uint8
@@ -39,26 +38,26 @@ const (
 	StreamTypeEAC3Audio                  StreamType = 0x87
 )
 
-// PMTData represents a PMT data
+// PMT represents a PMT data
 // https://en.wikipedia.org/wiki/Program-specific_information
-type PMTData struct {
-	ElementaryStreams  []PMTElementaryStream
+type PMT struct {
+	ElementaryStreams  []ElementaryStream
 	ProgramDescriptors []descriptor.Descriptor // Program descriptors
 	ProgramNumber      uint16
 	PCRPID             uint16 // The packet identifier that contains the program clock reference used to improve the random access accuracy of the stream's timing that is derived from the program timestamp. If this is unused. then it is set to 0x1FFF (all bits on).
 }
 
-// PMTElementaryStream represents a PMT elementary stream
-type PMTElementaryStream struct {
+// ElementaryStream represents a PMT elementary stream
+type ElementaryStream struct {
 	ElementaryStreamDescriptors []descriptor.Descriptor // Elementary stream descriptors
 	ElementaryPID               uint16                  // The packet identifier that contains the stream type data.
 	StreamType                  StreamType              // This defines the structure of the data contained within the elementary packet identifier.
 }
 
 // parsePMTSection parses a PMT section
-func parsePMTSection(i *astikit.BytesIterator, offsetSectionsEnd int, tableIDExtension uint16) (d *PMTData, err error) {
+func parsePMTSection(i *bytesiter.Iterator, offsetSectionsEnd int, tableIDExtension uint16) (d *PMT, err error) {
 	// Create data
-	d = &PMTData{ProgramNumber: tableIDExtension}
+	d = &PMT{ProgramNumber: tableIDExtension}
 
 	// Get next bytes
 	var bs []byte
@@ -71,15 +70,17 @@ func parsePMTSection(i *astikit.BytesIterator, offsetSectionsEnd int, tableIDExt
 	d.PCRPID = binary.BigEndian.Uint16(bs) & 0x1fff
 
 	// Program descriptors
-	if d.ProgramDescriptors, err = descriptor.ParseDescriptors(i); err != nil {
+	var dn int
+	if d.ProgramDescriptors, dn, err = descriptor.Parse(i.Bytes()); err != nil {
 		err = fmt.Errorf("astits: parsing descriptors failed: %w", err)
 		return
 	}
+	i.Skip(dn)
 
 	// Loop until end of section data is reached
 	for i.Offset() < offsetSectionsEnd {
 		// Create stream
-		e := PMTElementaryStream{}
+		e := ElementaryStream{}
 
 		// Get next byte
 		var b byte
@@ -101,10 +102,11 @@ func parsePMTSection(i *astikit.BytesIterator, offsetSectionsEnd int, tableIDExt
 		e.ElementaryPID = binary.BigEndian.Uint16(bs) & 0x1fff
 
 		// Elementary descriptors
-		if e.ElementaryStreamDescriptors, err = descriptor.ParseDescriptors(i); err != nil {
+		if e.ElementaryStreamDescriptors, dn, err = descriptor.Parse(i.Bytes()); err != nil {
 			err = fmt.Errorf("astits: parsing descriptors failed: %w", err)
 			return
 		}
+		i.Skip(dn)
 
 		// Add elementary stream
 		d.ElementaryStreams = append(d.ElementaryStreams, e)
@@ -112,57 +114,40 @@ func parsePMTSection(i *astikit.BytesIterator, offsetSectionsEnd int, tableIDExt
 	return
 }
 
-func calcPMTProgramInfoLength(d *PMTData) uint16 {
-	ret := uint16(2) // program_info_length
-	ret += descriptor.CalcDescriptorsLength(d.ProgramDescriptors)
+func calcPMTProgramInfoLength(d *PMT) uint16 {
+	ret := 2 // program_info_length
+	ret += descriptor.CalcLength(d.ProgramDescriptors)
 
 	for _, es := range d.ElementaryStreams {
 		ret += 5 // stream_type, elementary_pid, es_info_length
-		ret += descriptor.CalcDescriptorsLength(es.ElementaryStreamDescriptors)
+		ret += descriptor.CalcLength(es.ElementaryStreamDescriptors)
 	}
 
-	return ret
+	return uint16(ret)
 }
 
-func (d *PMTData) CalcPMTSectionLength() uint16 {
-	ret := 4 + descriptor.CalcDescriptorsLength(d.ProgramDescriptors)
+func (d *PMT) CalcSectionLength() int {
+	ret := 4 + descriptor.CalcLength(d.ProgramDescriptors)
 
 	for _, es := range d.ElementaryStreams {
-		ret += 5 + descriptor.CalcDescriptorsLength(es.ElementaryStreamDescriptors)
+		ret += 5 + descriptor.CalcLength(es.ElementaryStreamDescriptors)
 	}
 
 	return ret
 }
 
-func (d *PMTData) writePMTSection(w *astikit.BitsWriter) (int, error) {
-	b := astikit.NewBitsWriterBatch(w)
-
+func (d *PMT) appendSection(dst []byte) []byte {
 	// TODO split into sections
 
-	b.WriteN(uint8(0xff), 3)
-	b.WriteN(d.PCRPID, 13)
-	bytesWritten := 2
-
-	n, err := descriptor.WriteDescriptorsWithLength(w, d.ProgramDescriptors)
-	if err != nil {
-		return 0, err
-	}
-	bytesWritten += n
+	dst = append(dst, 0xe0|byte(d.PCRPID>>8)&0x1f, byte(d.PCRPID))
+	dst = descriptor.AppendWithLength(dst, d.ProgramDescriptors)
 
 	for _, es := range d.ElementaryStreams {
-		b.Write(uint8(es.StreamType))
-		b.WriteN(uint8(0xff), 3)
-		b.WriteN(es.ElementaryPID, 13)
-		bytesWritten += 3
-
-		n, err = descriptor.WriteDescriptorsWithLength(w, es.ElementaryStreamDescriptors)
-		if err != nil {
-			return 0, err
-		}
-		bytesWritten += n
+		dst = append(dst, uint8(es.StreamType), 0xe0|byte(es.ElementaryPID>>8)&0x1f, byte(es.ElementaryPID))
+		dst = descriptor.AppendWithLength(dst, es.ElementaryStreamDescriptors)
 	}
 
-	return bytesWritten, b.Err()
+	return dst
 }
 
 func (t StreamType) IsVideo() bool {

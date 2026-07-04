@@ -3,7 +3,7 @@ package descriptor
 import (
 	"fmt"
 
-	"github.com/asticode/go-astikit"
+	"github.com/k-danil/go-astits/internal/bytesiter"
 )
 
 // Teletext types
@@ -16,27 +16,27 @@ const (
 	TeletextTypeTeletextSubtitlePageForHearingImpairedPeople = 0x5
 )
 
-// DescriptorTeletext represents a teletext descriptor
+// Teletext represents a teletext descriptor
 // Chapter: 6.2.43 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
-type DescriptorTeletext struct {
-	Header DescriptorHeader
-	Items  []DescriptorTeletextItem
+type Teletext struct {
+	Header Header
+	Items  []TeletextItem
 }
 
-// DescriptorTeletextItem represents a teletext descriptor item
+// TeletextItem represents a teletext descriptor item
 // Chapter: 6.2.43 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
-type DescriptorTeletextItem struct {
+type TeletextItem struct {
 	Language [3]byte
 	Magazine uint8
 	Page     uint8
 	Type     uint8
 }
 
-func newDescriptorTeletext(i *astikit.BytesIterator, h DescriptorHeader, offsetEnd int) (dd Descriptor, err error) {
+func newDescriptorTeletext(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
 	// Create descriptor
-	d := &DescriptorTeletext{
+	d := &Teletext{
 		Header: h,
-		Items:  make([]DescriptorTeletextItem, (offsetEnd-i.Offset())/5),
+		Items:  make([]TeletextItem, (offsetEnd-i.Offset())/5),
 	}
 	dd = d
 
@@ -75,29 +75,16 @@ func newDescriptorTeletext(i *astikit.BytesIterator, h DescriptorHeader, offsetE
 	return
 }
 
-func (d *DescriptorTeletext) length() uint8 {
-	return uint8(5 * len(d.Items))
+func (d *Teletext) CalcLength() int {
+	return 5 * len(d.Items)
 }
 
-func (d *DescriptorTeletext) write(w *astikit.BitsWriter) (int, error) {
-	b := astikit.NewBitsWriterBatch(w)
-
-	length := d.length()
-	b.Write(uint8(d.Header.Tag))
-	b.Write(length)
-
-	if err := b.Err(); err != nil {
-		return 0, err
-	}
-	written := int(length) + 2
-
+func (d *Teletext) Append(dst []byte) []byte {
+	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
 	for _, item := range d.Items {
-		b.Write(item.Language[:])
-		b.WriteN(item.Type, 5)
-		b.WriteN(item.Magazine, 3)
-		b.WriteN(item.Page/10, 4)
-		b.WriteN(item.Page%10, 4)
+		dst = append(dst, item.Language[:]...)
+		dst = append(dst, item.Type&0x1f<<3|item.Magazine&0x7)
+		dst = append(dst, item.Page/10<<4|item.Page%10&0xf)
 	}
-
-	return written, b.Err()
+	return dst
 }

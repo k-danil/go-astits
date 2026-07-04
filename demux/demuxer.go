@@ -7,7 +7,6 @@ import (
 	"io"
 
 	"github.com/k-danil/go-astits/internal/pidmap"
-	"github.com/k-danil/go-astits/internal/programmap"
 	"github.com/k-danil/go-astits/ts"
 )
 
@@ -19,8 +18,7 @@ var ErrZeroCopyNextData = errors.New("astits: NextData is unavailable with zero-
 // http://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.13.01_40/en_300468v011301o.pdf
 type Demuxer struct {
 	ctx        context.Context
-	dataBuffer []*DemuxerData
-	//l          astikit.CompleteLogger
+	dataBuffer []*Data
 
 	optPacketSize    uint
 	optSkipErrLimit  uint
@@ -29,30 +27,31 @@ type Demuxer struct {
 	optZeroCopyBatch uint
 
 	packetBuffer *ts.PacketBuffer
-	packetPool   *packetPool
-	programMap   *programmap.Map
-	psiPrev      *pidmap.Map[[]byte]
-	dsScratch    []*DemuxerData
+	packetPool   packetPool
+	programMap   pidmap.Map[uint16]
+	psiPrev      pidmap.Map[[]byte]
+	dsScratch    []*Data
+	dsArr        [4]*Data
+	pmKeysArr    [4]uint16
+	pmValsArr    [4]uint16
 	r            io.Reader
 }
 
 // PacketsParser represents an object capable of parsing a set of packets containing a unique payload spanning over those packets
 // Use the skip returned argument to indicate whether the default process should still be executed on the set of packets
-type PacketsParser func(pl *ts.PacketList) (ds []*DemuxerData, skip bool, err error)
+type PacketsParser func(pl *ts.PacketList) (ds []*Data, skip bool, err error)
 
-// NewDemuxer creates a new transport stream based on a reader
-func NewDemuxer(ctx context.Context, r io.Reader, opts ...func(*Demuxer)) (d *Demuxer) {
+// New creates a new transport stream based on a reader
+func New(ctx context.Context, r io.Reader, opts ...func(*Demuxer)) (d *Demuxer) {
 	// Init
 	d = &Demuxer{
-		ctx: ctx,
-		//l:                astikit.AdaptStdLogger(nil),
-		programMap:       programmap.New(),
+		ctx:              ctx,
 		optPacketSkipper: ts.EmptySkipper,
 		r:                r,
 	}
-	d.packetPool = newPacketPool(d.programMap)
-	d.psiPrev = &pidmap.Map[[]byte]{}
-	d.dsScratch = make([]*DemuxerData, 0, 4)
+	d.programMap = pidmap.Map[uint16]{Keys: d.pmKeysArr[:0], Vals: d.pmValsArr[:0]}
+	d.packetPool.init(&d.programMap)
+	d.dsScratch = d.dsArr[:0]
 
 	// Apply options
 	for _, opt := range opts {
@@ -63,9 +62,6 @@ func NewDemuxer(ctx context.Context, r io.Reader, opts ...func(*Demuxer)) (d *De
 }
 
 func (dmx *Demuxer) GetStats() (ret map[uint64]uint) {
-	if dmx.packetPool == nil {
-		return
-	}
 	var packetSize uint
 	if dmx.packetBuffer != nil {
 		packetSize = dmx.packetBuffer.PacketSize()
@@ -81,22 +77,15 @@ func (dmx *Demuxer) GetStats() (ret map[uint64]uint) {
 	return
 }
 
-// DemuxerOptLogger returns the option to set the logger
-//func DemuxerOptLogger(l astikit.StdLogger) func(*Demuxer) {
-//	return func(d *Demuxer) {
-//		d.l = astikit.AdaptStdLogger(l)
-//	}
-//}
-
-// DemuxerOptPacketSize returns the option to set the packet size
-func DemuxerOptPacketSize(packetSize int) func(*Demuxer) {
+// WithPacketSize returns the option to set the packet size
+func WithPacketSize(packetSize int) func(*Demuxer) {
 	return func(d *Demuxer) {
 		d.optPacketSize = uint(packetSize)
 	}
 }
 
-// DemuxerOptPacketsParser returns the option to set the packets parser
-func DemuxerOptPacketsParser(p PacketsParser) func(*Demuxer) {
+// WithPacketsParser returns the option to set the packets parser
+func WithPacketsParser(p PacketsParser) func(*Demuxer) {
 	return func(d *Demuxer) {
 		if p != nil {
 			d.optPacketsParser = p
@@ -104,8 +93,8 @@ func DemuxerOptPacketsParser(p PacketsParser) func(*Demuxer) {
 	}
 }
 
-// DemuxerOptPacketSkipper returns the option to set the packet skipper
-func DemuxerOptPacketSkipper(s ts.PacketSkipper) func(*Demuxer) {
+// WithPacketSkipper returns the option to set the packet skipper
+func WithPacketSkipper(s ts.PacketSkipper) func(*Demuxer) {
 	return func(d *Demuxer) {
 		if s != nil {
 			d.optPacketSkipper = s
@@ -113,20 +102,20 @@ func DemuxerOptPacketSkipper(s ts.PacketSkipper) func(*Demuxer) {
 	}
 }
 
-// DemuxerOptSkipErrLimit returns the option to set the packet skipper
-func DemuxerOptSkipErrLimit(count int) func(*Demuxer) {
+// WithSkipErrLimit returns the option to set the packet skipper
+func WithSkipErrLimit(count int) func(*Demuxer) {
 	return func(d *Demuxer) {
 		d.optSkipErrLimit = uint(count)
 	}
 }
 
-// DemuxerOptZeroCopyPackets makes NextPacket/NextPacketTo read the stream in batches
+// WithZeroCopyPackets makes NextPacket/NextPacketTo read the stream in batches
 // of batchPackets and return packets as views into the internal buffer: no per-packet
 // read call and no copy. A packet's memory (Payload, adaptation private data) is only
 // valid until the NextPacket/NextPacketTo call that triggers the next batch refill —
 // consume it immediately. NextData is unavailable in this mode (it accumulates packets
 // across refills) and returns ErrZeroCopyNextData.
-func DemuxerOptZeroCopyPackets(batchPackets uint) func(*Demuxer) {
+func WithZeroCopyPackets(batchPackets uint) func(*Demuxer) {
 	return func(d *Demuxer) {
 		d.optZeroCopyBatch = batchPackets
 	}
@@ -181,7 +170,7 @@ func (dmx *Demuxer) NextPacketTo(p *ts.Packet) (err error) {
 	return
 }
 
-func (dmx *Demuxer) nextData() (d *DemuxerData, err error) {
+func (dmx *Demuxer) nextData() (d *Data, err error) {
 	// packetPool accumulates packets across batch refills, which would alias
 	// reused view memory — hard error instead of silent corruption.
 	if dmx.optZeroCopyBatch > 0 {
@@ -212,12 +201,11 @@ func (dmx *Demuxer) nextData() (d *DemuxerData, err error) {
 					}
 
 					// Parse data
-					ds, errParseData := parseData(pl, dmx.optPacketsParser, dmx.programMap, dmx.psiPrev, dmx.dsScratch)
+					ds, errParseData := parseData(pl, dmx.optPacketsParser, &dmx.programMap, &dmx.psiPrev, dmx.dsScratch)
 					dmx.packetPool.recycle(pl)
 					if errParseData != nil {
-						// Log error as there may be some incomplete data here
-						// We still want to try to parse all packets, in case final data is complete
-						//dmx.l.Error(fmt.Errorf("astits: parsing data failed: %w", errParseData))
+						// Swallow the error: there may be some incomplete data here,
+						// we still want to try to parse all packets, in case final data is complete
 						continue
 					}
 
@@ -245,8 +233,8 @@ func (dmx *Demuxer) nextData() (d *DemuxerData, err error) {
 		}
 
 		// Parse data
-		var ds []*DemuxerData
-		ds, err = parseData(pl, dmx.optPacketsParser, dmx.programMap, dmx.psiPrev, dmx.dsScratch)
+		var ds []*Data
+		ds, err = parseData(pl, dmx.optPacketsParser, &dmx.programMap, &dmx.psiPrev, dmx.dsScratch)
 		dmx.packetPool.recycle(pl)
 		if err != nil {
 			err = fmt.Errorf("astits: building new data failed: %w", err)
@@ -261,7 +249,7 @@ func (dmx *Demuxer) nextData() (d *DemuxerData, err error) {
 }
 
 // NextData retrieves the next data
-func (dmx *Demuxer) NextData() (d *DemuxerData, err error) {
+func (dmx *Demuxer) NextData() (d *Data, err error) {
 	select {
 	case <-dmx.ctx.Done():
 		if err = dmx.ctx.Err(); err != nil {
@@ -273,7 +261,7 @@ func (dmx *Demuxer) NextData() (d *DemuxerData, err error) {
 	return
 }
 
-func (dmx *Demuxer) updateData(ds []*DemuxerData) (d *DemuxerData) {
+func (dmx *Demuxer) updateData(ds []*Data) (d *Data) {
 	// Check whether there is data to be processed
 	if len(ds) > 0 {
 		// Process data
@@ -286,7 +274,7 @@ func (dmx *Demuxer) updateData(ds []*DemuxerData) (d *DemuxerData) {
 				for _, pgm := range v.PAT.Programs {
 					// Program number 0 is reserved to NIT
 					if pgm.ProgramNumber > 0 {
-						dmx.programMap.SetUnlocked(pgm.ProgramMapID, pgm.ProgramNumber)
+						dmx.programMap.Set(pgm.ProgramMapID, pgm.ProgramNumber)
 					}
 				}
 			}
@@ -303,18 +291,16 @@ func (dmx *Demuxer) Close() {
 		d.Close()
 	}
 	dmx.dataBuffer = nil
-	if dmx.packetPool != nil {
-		dmx.packetPool.close()
-	}
+	dmx.packetPool.close()
 }
 
 // Rewind rewinds the demuxer reader
 func (dmx *Demuxer) Rewind() (n int64, err error) {
 	dmx.Close()
-	dmx.dataBuffer = []*DemuxerData{}
+	dmx.dataBuffer = []*Data{}
 	dmx.packetBuffer = nil
-	dmx.packetPool = newPacketPool(dmx.programMap)
-	dmx.psiPrev = &pidmap.Map[[]byte]{}
+	dmx.packetPool.init(&dmx.programMap)
+	dmx.psiPrev = pidmap.Map[[]byte]{}
 	if n, err = ts.Rewind(dmx.r); err != nil {
 		err = fmt.Errorf("astits: rewinding reader failed: %w", err)
 		return

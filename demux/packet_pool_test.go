@@ -27,7 +27,8 @@ func TestIsSameAsPrevious(t *testing.T) {
 }
 
 func TestPacketPool(t *testing.T) {
-	b := newPacketPool(nil)
+	var b packetPool
+	b.init(nil)
 	ps := b.addUnlocked(&ts.Packet{Header: ts.PacketHeader{ContinuityCounter: 0, HasPayload: true, PID: 1}})
 	assert.Nil(t, ps)
 	ps = b.addUnlocked(&ts.Packet{Header: ts.PacketHeader{ContinuityCounter: 1, HasPayload: true, PayloadUnitStartIndicator: true, PID: 1}})
