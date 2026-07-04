@@ -133,7 +133,7 @@ func (d *Data) Parse(bs []byte) (err error) {
 
 	// Validation
 	if dataEnd < dataStart {
-		err = fmt.Errorf("astits: data end %d is before data start %d", dataEnd, dataStart)
+		err = fmt.Errorf("astits: data end %d is before data start %d: %w", dataEnd, dataStart, ts.ErrInvalidData)
 		return
 	}
 	if dataStart > len(bs) || dataEnd > len(bs) {

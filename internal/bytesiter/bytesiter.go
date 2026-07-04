@@ -3,9 +3,12 @@
 // The API shape follows asticode/go-astikit (MIT, same author as the upstream fork).
 package bytesiter
 
-import "errors"
+import (
+	"github.com/k-danil/go-astits/v2/internal/errclass"
+	"github.com/k-danil/go-astits/v2/ts"
+)
 
-var ErrNoBytesLeft = errors.New("astits: not enough bytes")
+var ErrNoBytesLeft = errclass.New("astits: not enough bytes", ts.ErrInvalidData)
 
 type Iterator struct {
 	bs     []byte

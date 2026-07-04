@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/k-danil/go-astits/v2/internal/bytesiter"
+	"github.com/k-danil/go-astits/v2/ts"
 )
 
 const (
@@ -29,7 +30,7 @@ func parsePATSection(i *bytesiter.Iterator, offsetSectionsEnd int, tableIDExtens
 	// The syntax header may have overrun a lying section length
 	n := (offsetSectionsEnd - i.Offset()) / patSectionEntryBytesSize
 	if n < 0 {
-		return nil, fmt.Errorf("astits: PAT section end %d is before its start", offsetSectionsEnd)
+		return nil, fmt.Errorf("astits: PAT section end %d is before its start: %w", offsetSectionsEnd, ts.ErrInvalidData)
 	}
 
 	// Create data

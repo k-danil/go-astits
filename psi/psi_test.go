@@ -5,9 +5,11 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/k-danil/go-astits/v2/internal/bitstest"
 	"github.com/k-danil/go-astits/v2/internal/bytesiter"
+	"github.com/k-danil/go-astits/v2/ts"
 )
 
 var psi = &Data{
@@ -166,7 +168,8 @@ func TestParsePSIData(t *testing.T) {
 	_ = w.Write(totBytes())     // TOT data
 	_ = w.Write(uint32(32))     // TOT CRC32
 	_, err := Parse(buf.Bytes())
-	assert.EqualError(t, err, "astits: parsing PSI table failed: astits: Table CRC32 20 != computed CRC32 6969b13")
+	assert.ErrorIs(t, err, ErrCRC32Mismatch)
+	assert.ErrorIs(t, err, ts.ErrInvalidData)
 
 	// Valid
 	d, err := Parse(psiBytes())
@@ -363,4 +366,20 @@ func BenchmarkParsePSIData(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		Parse(pb)
 	}
+}
+
+// Parsed tables must own their payloads: no field may keep a view into the
+// input buffer, the demuxer returns it to a pool right after parsing.
+func TestParseOwnsInput(t *testing.T) {
+	src := psiBytes()
+	reference, err := Parse(append([]byte(nil), src...))
+	require.NoError(t, err)
+
+	parsed, err := Parse(src)
+	require.NoError(t, err)
+	for i := range src {
+		src[i] = 0xa5
+	}
+
+	assert.Equal(t, reference, parsed)
 }

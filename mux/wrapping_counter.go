@@ -7,7 +7,7 @@ type wrappingCounter struct {
 	wrapAt int
 }
 
-var ErrCounterOverflow = errors.New("counter overflow")
+var ErrCounterOverflow = errors.New("astits: counter overflow")
 
 func newWrappingCounter(wrapAt int) wrappingCounter {
 	return wrappingCounter{

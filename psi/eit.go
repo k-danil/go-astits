@@ -83,7 +83,7 @@ func parseEITSection(i *bytesiter.Iterator, offsetSectionsEnd int, tableIDExtens
 
 		// Start time
 		if e.StartTime, err = dvb.ParseTime(i); err != nil {
-			err = fmt.Errorf("astits: parsing DVB time")
+			err = fmt.Errorf("astits: parsing DVB time failed: %w", err)
 			return
 		}
 

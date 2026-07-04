@@ -2,9 +2,11 @@ package psi
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 
 	"github.com/k-danil/go-astits/v2/internal/bytesiter"
+	"github.com/k-danil/go-astits/v2/internal/errclass"
 	"github.com/k-danil/go-astits/v2/internal/util"
 	"github.com/k-danil/go-astits/v2/ts"
 )
@@ -26,6 +28,12 @@ const (
 	TableTypeTOT     = "TOT"
 	TableTypeUnknown = "Unknown"
 )
+
+// ErrCRC32Mismatch reports a section whose CRC32 does not match its content.
+var ErrCRC32Mismatch = errclass.New("astits: CRC32 mismatch", ts.ErrInvalidData)
+
+// ErrTableNotImplemented reports a table type whose serialization is not implemented.
+var ErrTableNotImplemented = errors.New("astits: table serialization is not implemented")
 
 type TableID uint8
 
@@ -176,7 +184,7 @@ func parsePSISection(i *bytesiter.Iterator) (s Section, stop bool, err error) {
 
 			// Check CRC32
 			if crc32 != s.CRC32 {
-				err = fmt.Errorf("astits: Table CRC32 %x != computed CRC32 %x", s.CRC32, crc32)
+				err = fmt.Errorf("astits: table CRC32 %x != computed CRC32 %x: %w", s.CRC32, crc32, ErrCRC32Mismatch)
 				return
 			}
 		}
@@ -253,7 +261,7 @@ func (h *SectionHeader) parsePSISectionHeader(i *bytesiter.Iterator) (offsets ps
 		offsets.sectionsEnd -= 4
 	}
 	if offsets.sectionsEnd < offsets.sectionsStart {
-		err = fmt.Errorf("astits: section length %d is too short", h.SectionLength)
+		err = fmt.Errorf("astits: section length %d is too short: %w", h.SectionLength, ts.ErrInvalidData)
 	}
 	return
 }
@@ -487,7 +495,7 @@ func (s *Section) calcPSISectionLength() (ret uint16) {
 
 func (s *Section) appendSection(dst []byte) ([]byte, error) {
 	if s.Header.TableID != TableIDPAT && s.Header.TableID != TableIDPMT {
-		return dst, fmt.Errorf("astits: appending table %s is not implemented", s.Header.TableID.Type())
+		return dst, fmt.Errorf("astits: appending table %s: %w", s.Header.TableID.Type(), ErrTableNotImplemented)
 	}
 
 	sectionLength := s.calcPSISectionLength()

@@ -129,7 +129,7 @@ func autoDetectPacketSize(r io.Reader) (packetSize uint, err error) {
 			return
 		}
 	}
-	err = fmt.Errorf("astits: only one sync byte detected in first %d bytes", l)
+	err = fmt.Errorf("astits: only one sync byte detected in first %d bytes: %w", l, ErrInvalidData)
 	return
 }
 
