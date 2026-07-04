@@ -63,8 +63,6 @@ How:
   `Rewind()` cleans up after itself.
 - **Muxer**: raw packet passthrough (`WritePacket` of `Packet.Raw()` with `UpdateHeader`),
   `SetCC`, table retransmission from cache.
-- Byte-for-byte output identity across optimizations is guarded by golden tests on real
-  streams (demux differential against an independent parser + remux references).
 
 ## Problems and deliberate trade-offs
 
@@ -82,8 +80,6 @@ How:
 - `demux.Data` is large (~1 KB due to embedded structs): cheap to allocate, expensive to
   retain by the thousands.
 - Requires **Go ≥ 1.26**.
-- Part of the test suite runs against real assets (env `GOLDEN_TS_DIR`); without it only
-  unit tests run.
 
 ## Roadmap
 
