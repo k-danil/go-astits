@@ -61,13 +61,16 @@ How:
 - **Circular memory lifecycle**: payload buffers cycle through size-classed pools, PES units
   through their own pool; embedded structs instead of pointer fields (AF inside `ts.Packet`,
   PES data and an owned AF copy inside `demux.PES`, optional header inside `pes.Header`),
-  compact generic `pidmap` tables instead of maps keyed by PID.
+  compact generic `pidmap` tables instead of maps keyed by PID. The AF has no inline
+  private-data buffer: `TransportPrivateData` views the packet and is copied (into a reused
+  backing) only when a unit is retained.
 - **Escape-analysis-friendly dispatch**: descriptor parsing dispatches through a switch, not
   a parser LUT — iterators stay on the stack; demuxer and muxer instances embed their slot
   arrays and scratch buffers, so a short-lived instance costs a handful of allocations.
 - **Zero-copy view mode** (`demux.WithZeroCopyPackets`): batched reads, packets are views
   into the batch buffer; the accumulator copies payloads out before the refill, so the event
-  API works unchanged in this mode.
+  API works unchanged in this mode. `Packet.Raw()` returns the view as well, so packet-level
+  passthrough and PID rewrite over `Raw()` run without leaving zero-copy.
 - **`ts.PacketSkipper`** — header-level filtering before any payload work.
 - **`Packet.Offset`** — a byte map of the stream, correct even with a skipper installed.
 - **PSI dedup**: byte-identical repeats of PAT/PMT/… are neither parsed nor emitted (unless

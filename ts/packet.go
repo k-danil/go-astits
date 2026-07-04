@@ -33,9 +33,9 @@ var poolOfPacket = sync.Pool{
 // Packet represents a packet
 // https://en.wikipedia.org/wiki/MPEG_transport_stream
 type Packet struct {
-	bs [M2TSPacketSize]byte
-	s  uint
-	af PacketAdaptationField // AdaptationField points here — no per-packet allocation
+	bs  [M2TSPacketSize]byte
+	raw []byte // the on-wire bytes: a subslice of bs in copy mode, a batch view in zero-copy mode
+	af  PacketAdaptationField // AdaptationField points here — no per-packet allocation
 
 	Header          PacketHeader
 	AdaptationField *PacketAdaptationField
@@ -45,12 +45,14 @@ type Packet struct {
 	// within the demuxed stream, counted from the Demuxer's first packet. Packets
 	// dropped by a PacketSkipper advance it too, so it stays a valid byte map.
 	Offset int64
-
-	next *Packet
 }
 
 func (p *Packet) UpdateHeader() {
-	p.Header.Put(p.bs[:])
+	bs := p.raw
+	if bs == nil {
+		bs = p.bs[:]
+	}
+	p.Header.Put(bs)
 }
 
 // PacketHeader represents a packet header
@@ -65,16 +67,13 @@ type PacketHeader struct {
 	TransportScramblingControl uint8
 }
 
-// transportPrivateDataMaxSize bounds AF private data: the whole AF is at most 183
-// payload bytes.
-const transportPrivateDataMaxSize = 184
 
 // PacketAdaptationField represents a packet adaptation field
 type PacketAdaptationField struct {
 	AdaptationExtensionField          *PacketAdaptationExtensionField
 	OPCR                              ClockReference // Original Program clock reference. Helps when one TS is copied into another
 	PCR                               ClockReference // Program clock reference
-	TransportPrivateData              []byte         // points into privBuf after parse — owned by this struct, survives value copies via repoint
+	TransportPrivateData              []byte         // a view into the packet buffer after parse; CopyFrom takes an owned copy
 	TransportPrivateDataLength        uint8
 	Length                            uint8
 	StuffingLength                    uint8 // Only used in writePacketAdaptationField to request stuffing
@@ -88,21 +87,15 @@ type PacketAdaptationField struct {
 	HasSplicingCountdown              bool
 	HasTransportPrivateData           bool
 	HasAdaptationExtensionField       bool
-
-	privBuf [transportPrivateDataMaxSize]byte
 }
 
 // Reset clears everything parse may NOT overwrite: pointers/slices must not outlive
 // their packet, and when af.Length == 0 the flags byte is not parsed at all — a stale
-// HasPCR used to produce phantom PCRs. PCR/OPCR/privBuf values behind cleared Has-flags
-// are garbage: reading them without checking the flag is forbidden anyway.
+// HasPCR used to produce phantom PCRs. PCR/OPCR values behind cleared Has-flags are
+// garbage: reading them without checking the flag is forbidden anyway.
 func (af *PacketAdaptationField) Reset() {
 	af.AdaptationExtensionField = nil
 	af.TransportPrivateData = nil
-	// Clear only the used prefix: privBuf stays deterministic (zeros beyond the
-	// current content), comparisons/copies don't depend on previous packets.
-	// The length is clamped: the field is writable by the user.
-	clear(af.privBuf[:min(int(af.TransportPrivateDataLength), len(af.privBuf))])
 	af.TransportPrivateDataLength = 0
 	af.Length = 0
 	af.StuffingLength = 0
@@ -118,12 +111,16 @@ func (af *PacketAdaptationField) Reset() {
 	af.HasAdaptationExtensionField = false
 }
 
-// CopyFrom stores an owned copy of src: private data is copied into the
-// receiver's own buffer so the field does not alias the source struct.
+// CopyFrom stores an owned copy of src, so the receiver survives reuse of the
+// packet buffer src's private data still views. The private-data copy reuses
+// the receiver's own backing across calls; callers must not CopyFrom into an
+// af whose TransportPrivateData still views a read buffer (the pooled slot/PES
+// receivers never do — they are populated only by CopyFrom).
 func (af *PacketAdaptationField) CopyFrom(src *PacketAdaptationField) {
+	priv := af.TransportPrivateData[:0]
 	*af = *src
 	if src.TransportPrivateData != nil {
-		af.TransportPrivateData = af.privBuf[:copy(af.privBuf[:], src.TransportPrivateData)]
+		af.TransportPrivateData = append(priv, src.TransportPrivateData...)
 	}
 }
 
@@ -146,14 +143,10 @@ func NewPacket() (p *Packet) {
 	return
 }
 
-func (p *Packet) Next() *Packet {
-	return p.next
-}
-
-// Raw returns the raw packet bytes as read from the stream; empty for packets
-// that were not read in copy mode (views, hand-built packets).
+// Raw returns the on-wire packet bytes (copy-mode buffer or zero-copy view);
+// nil for hand-built packets, whose bytes exist only once serialized via Put.
 func (p *Packet) Raw() []byte {
-	return p.bs[:p.s]
+	return p.raw
 }
 
 // SetAdaptationField stores an owned copy in the packet's embedded field,
@@ -173,12 +166,11 @@ func (p *Packet) Close() {
 // Reset deliberately keeps bs: it is fully overwritten by the next read before any
 // parse, and zeroing it per packet doubles the per-packet memory traffic.
 func (p *Packet) Reset() {
-	p.s = 0
+	p.raw = nil
 	p.Header = PacketHeader{}
 	p.AdaptationField = nil
 	p.Payload = nil
 	p.Offset = 0
-	p.next = nil
 }
 
 // parse parses a packet from bs. Direct slice parsing: no BytesIterator on the hot
@@ -313,22 +305,17 @@ func (af *PacketAdaptationField) Parse(bs []byte) (n int, err error) {
 			if o >= len(bs) {
 				return o, ErrShortPacket
 			}
-			// Validate against privBuf before storing: a poisoned length would
-			// crash the Reset of a pooled packet later.
 			l := bs[o]
 			o++
-			if int(l) > len(af.privBuf) {
-				return o, ErrShortPacket
-			}
 			af.TransportPrivateDataLength = l
-			if af.TransportPrivateDataLength > 0 {
-				end := o + int(af.TransportPrivateDataLength)
+			if l > 0 {
+				end := o + int(l)
 				if end > len(bs) {
 					return o, ErrShortPacket
 				}
-				// Copy into privBuf: the slice no longer views the read buffer and
-				// survives value copies of the struct (with a repoint)
-				af.TransportPrivateData = af.privBuf[:copy(af.privBuf[:], bs[o:end])]
+				// A view into the packet buffer, like Payload; CopyFrom takes an
+				// owned copy for anything retained past the packet's lifetime.
+				af.TransportPrivateData = bs[o:end]
 				o = end
 			}
 		}

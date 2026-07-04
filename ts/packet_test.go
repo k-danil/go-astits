@@ -184,7 +184,6 @@ var packetAdaptationField = &PacketAdaptationField{
 	SpliceCountdown:                   2,
 	TransportPrivateDataLength:        4,
 	TransportPrivateData:              []byte("test"),
-	privBuf:                           [transportPrivateDataMaxSize]byte{'t', 'e', 's', 't'},
 	StuffingLength:                    5,
 }
 

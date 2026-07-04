@@ -180,8 +180,11 @@ func (pb *PacketBuffer) nextView(p *Packet) (err error) {
 		p.Offset = pb.pos
 		pb.pos += int64(ps)
 
+		view := pb.batch.next(ps)
+		p.raw = view
+
 		var skip bool
-		if skip, err = p.parse(pb.batch.next(ps), pb.s); err != nil {
+		if skip, err = p.parse(view, pb.s); err != nil {
 			if skip && pb.skipErrCounter < pb.skipErrLimit {
 				pb.skipErrCounter++
 			} else {
@@ -208,6 +211,7 @@ func (pb *PacketBuffer) Next(p *Packet) (err error) {
 	}
 
 	bs := p.bs[:pb.packetSize]
+	p.raw = bs
 
 	var skip bool
 	// Loop to make sure we return a packet even if first packets are skipped
@@ -222,7 +226,6 @@ func (pb *PacketBuffer) Next(p *Packet) (err error) {
 		}
 
 		// Parse packet
-		p.s = pb.packetSize
 		p.Offset = pb.pos
 		pb.pos += int64(pb.packetSize)
 		if skip, err = p.parse(bs, pb.s); err != nil {

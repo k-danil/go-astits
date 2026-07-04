@@ -14,11 +14,11 @@ func TestPacketResetKeepsParseCorrect(t *testing.T) {
 	for i := range p.bs {
 		p.bs[i] = 0xa5
 	}
-	p.s = PacketSize
+	p.raw = p.bs[:]
 	p.Offset = 42
 
 	p.Reset()
-	assert.Equal(t, uint(0), p.s)
+	assert.Nil(t, p.raw)
 	assert.Equal(t, int64(0), p.Offset)
 	assert.Equal(t, PacketHeader{}, p.Header)
 	assert.Nil(t, p.AdaptationField)
