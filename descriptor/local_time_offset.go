@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/k-danil/go-astits/internal/bytesiter"
-	"github.com/k-danil/go-astits/internal/dvb"
-	"github.com/k-danil/go-astits/internal/util"
+	"github.com/k-danil/go-astits/v2/internal/bytesiter"
+	"github.com/k-danil/go-astits/v2/internal/dvb"
+	"github.com/k-danil/go-astits/v2/internal/util"
 )
 
 // LocalTimeOffset represents a local time offset descriptor

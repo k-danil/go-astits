@@ -5,19 +5,19 @@ import (
 	"context"
 	"testing"
 
-	"github.com/asticode/go-astikit"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/k-danil/go-astits/pes"
-	"github.com/k-danil/go-astits/psi"
-	"github.com/k-danil/go-astits/ts"
+	"github.com/k-danil/go-astits/v2/internal/bitstest"
+	"github.com/k-danil/go-astits/v2/pes"
+	"github.com/k-danil/go-astits/v2/psi"
+	"github.com/k-danil/go-astits/v2/ts"
 )
 
 const syncByte byte = '\x47'
 
 func patExpectedBytes(versionNumber uint8, cc uint8) []byte {
 	buf := bytes.Buffer{}
-	w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: &buf})
+	w := bitstest.NewWriter(&buf)
 	w.Write(syncByte)
 	w.Write("010") // no transport error, payload start, no priority
 	w.WriteN(ts.PIDPAT, 13)
@@ -75,7 +75,7 @@ func TestMuxer_generatePAT(t *testing.T) {
 
 func pmtExpectedBytesVideoOnly(versionNumber, cc uint8) []byte {
 	buf := bytes.Buffer{}
-	w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: &buf})
+	w := bitstest.NewWriter(&buf)
 	w.Write(syncByte)
 	w.Write("010") // no transport error, payload start, no priority
 	w.WriteN(pmtStartPID, 13)
@@ -115,7 +115,7 @@ func pmtExpectedBytesVideoOnly(versionNumber, cc uint8) []byte {
 
 func pmtExpectedBytesVideoAndAudio(versionNumber uint8, cc uint8) []byte {
 	buf := bytes.Buffer{}
-	w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: &buf})
+	w := bitstest.NewWriter(&buf)
 	w.Write(syncByte)
 	w.Write("010") // no transport error, payload start, no priority
 	w.WriteN(pmtStartPID, 13)

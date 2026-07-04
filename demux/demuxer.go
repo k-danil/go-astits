@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/k-danil/go-astits/internal/pidmap"
-	"github.com/k-danil/go-astits/ts"
+	"github.com/k-danil/go-astits/v2/internal/pidmap"
+	"github.com/k-danil/go-astits/v2/ts"
 )
 
 var ErrZeroCopyNextData = errors.New("astits: NextData is unavailable with zero-copy packets")

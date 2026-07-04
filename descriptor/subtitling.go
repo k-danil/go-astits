@@ -4,7 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"github.com/k-danil/go-astits/internal/bytesiter"
+	"github.com/k-danil/go-astits/v2/internal/bytesiter"
 )
 
 // Subtitling represents a subtitling descriptor

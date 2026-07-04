@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/k-danil/go-astits/internal/util"
+	"github.com/k-danil/go-astits/v2/internal/util"
 )
 
 // Scrambling Controls

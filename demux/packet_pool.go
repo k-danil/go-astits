@@ -1,8 +1,8 @@
 package demux
 
 import (
-	"github.com/k-danil/go-astits/internal/pidmap"
-	"github.com/k-danil/go-astits/ts"
+	"github.com/k-danil/go-astits/v2/internal/pidmap"
+	"github.com/k-danil/go-astits/v2/ts"
 )
 
 // pidSlot is the per-PID state: a packet accumulator plus a stats counter.

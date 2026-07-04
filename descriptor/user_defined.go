@@ -1,6 +1,6 @@
 package descriptor
 
-import "github.com/k-danil/go-astits/internal/bytesiter"
+import "github.com/k-danil/go-astits/v2/internal/bytesiter"
 
 func newDescriptorUserDefined(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {
 	d := &UserDefined{

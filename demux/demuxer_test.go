@@ -10,11 +10,11 @@ import (
 	"testing"
 	"unicode"
 
-	"github.com/asticode/go-astikit"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/k-danil/go-astits/psi"
-	"github.com/k-danil/go-astits/ts"
+	"github.com/k-danil/go-astits/v2/internal/bitstest"
+	"github.com/k-danil/go-astits/v2/psi"
+	"github.com/k-danil/go-astits/v2/ts"
 )
 
 func hexToBytes(in string) []byte {
@@ -51,7 +51,7 @@ func TestDemuxerNextPacket(t *testing.T) {
 
 	// Valid
 	buf := &bytes.Buffer{}
-	w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: buf})
+	w := bitstest.NewWriter(buf)
 	b1, p1 := packet(packetHeader, packetAdaptationField, []byte("1"), true)
 	w.Write(b1)
 	b2, p2 := packet(packetHeader, packetAdaptationField, []byte("2"), true)
@@ -86,7 +86,7 @@ func TestDemuxerNextPacket(t *testing.T) {
 func TestDemuxerNextData(t *testing.T) {
 	// Init
 	buf := &bytes.Buffer{}
-	w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: buf})
+	w := bitstest.NewWriter(buf)
 	b := psiBytes()
 	b1, _ := packet(ts.PacketHeader{ContinuityCounter: uint8(0), PayloadUnitStartIndicator: true, PID: ts.PIDPAT}, &ts.PacketAdaptationField{}, b[:147], true)
 	w.Write(b1)
@@ -124,7 +124,7 @@ func TestDemuxerNextData(t *testing.T) {
 
 func TestDemuxerNextDataUnknownDataPackets(t *testing.T) {
 	buf := &bytes.Buffer{}
-	bufWriter := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: buf})
+	bufWriter := bitstest.NewWriter(buf)
 
 	// ts.Packet that isn't a data packet (PSI or PES)
 	b1, _ := packet(ts.PacketHeader{
@@ -197,7 +197,7 @@ func BenchmarkDemuxer_NextData(b *testing.B) {
 	b.ReportAllocs()
 
 	buf := &bytes.Buffer{}
-	w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: buf})
+	w := bitstest.NewWriter(buf)
 	bs := psiBytes()
 	b1, _ := packet(ts.PacketHeader{ContinuityCounter: uint8(0), PayloadUnitStartIndicator: true, PID: ts.PIDPAT}, &ts.PacketAdaptationField{}, bs[:147], true)
 	w.Write(b1)

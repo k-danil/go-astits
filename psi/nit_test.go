@@ -4,10 +4,10 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/asticode/go-astikit"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/k-danil/go-astits/internal/bytesiter"
+	"github.com/k-danil/go-astits/v2/internal/bitstest"
+	"github.com/k-danil/go-astits/v2/internal/bytesiter"
 )
 
 var nit = &NIT{
@@ -22,7 +22,7 @@ var nit = &NIT{
 
 func nitBytes() []byte {
 	buf := &bytes.Buffer{}
-	w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: buf})
+	w := bitstest.NewWriter(buf)
 	w.Write("0000")         // Reserved for future use
 	descriptorsBytes(w)     // Network descriptors
 	w.Write("0000")         // Reserved for future use

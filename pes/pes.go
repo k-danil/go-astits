@@ -4,8 +4,8 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"github.com/k-danil/go-astits/internal/util"
-	"github.com/k-danil/go-astits/ts"
+	"github.com/k-danil/go-astits/v2/internal/util"
+	"github.com/k-danil/go-astits/v2/ts"
 )
 
 // P-STD buffer scales

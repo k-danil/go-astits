@@ -6,16 +6,16 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/asticode/go-astikit"
 	"github.com/stretchr/testify/require"
 
-	"github.com/k-danil/go-astits/ts"
+	"github.com/k-danil/go-astits/v2/internal/bitstest"
+	"github.com/k-danil/go-astits/v2/ts"
 )
 
 func TestPSIDedup(t *testing.T) {
 	const psiCopies = 3
 	buf := &bytes.Buffer{}
-	w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: buf})
+	w := bitstest.NewWriter(buf)
 	b := psiBytes()
 	cc := uint8(0)
 	writePSI := func() {

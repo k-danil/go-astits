@@ -4,10 +4,10 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/asticode/go-astikit"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/k-danil/go-astits/internal/bytesiter"
+	"github.com/k-danil/go-astits/v2/internal/bitstest"
+	"github.com/k-danil/go-astits/v2/internal/bytesiter"
 )
 
 var tot = &TOT{
@@ -17,7 +17,7 @@ var tot = &TOT{
 
 func totBytes() []byte {
 	buf := &bytes.Buffer{}
-	w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: buf})
+	w := bitstest.NewWriter(buf)
 	w.Write(dvbTimeBytes) // UTC time
 	w.Write("0000")       // Reserved
 	descriptorsBytes(w)   // Service #1 descriptors

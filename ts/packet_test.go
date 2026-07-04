@@ -5,13 +5,14 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/asticode/go-astikit"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/k-danil/go-astits/v2/internal/bitstest"
 )
 
 func packet(h PacketHeader, a *PacketAdaptationField, i []byte, packet192bytes bool) ([]byte, *Packet) {
 	buf := &bytes.Buffer{}
-	w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: buf})
+	w := bitstest.NewWriter(buf)
 	w.Write(syncByte) // Sync byte
 	if packet192bytes {
 		w.Write([]byte("test")) // Sometimes packets are 192 bytes
@@ -31,7 +32,7 @@ func packet(h PacketHeader, a *PacketAdaptationField, i []byte, packet192bytes b
 
 func packetShort(h PacketHeader, payload []byte) ([]byte, *Packet) {
 	buf := &bytes.Buffer{}
-	w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: buf})
+	w := bitstest.NewWriter(buf)
 	w.Write(syncByte)                   // Sync byte
 	w.Write(packetHeaderBytes(h, "01")) // Header
 	p := append(payload, bytes.Repeat([]byte{0}, PacketSize-buf.Len())...)
@@ -123,7 +124,7 @@ var packetHeader = PacketHeader{
 
 func packetHeaderBytes(h PacketHeader, afControl string) []byte {
 	buf := &bytes.Buffer{}
-	w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: buf})
+	w := bitstest.NewWriter(buf)
 	w.Write(h.TransportErrorIndicator)                // Transport error indicator
 	w.Write(h.PayloadUnitStartIndicator)              // Payload unit start indicator
 	w.Write("1")                                      // Transport priority
@@ -189,7 +190,7 @@ var packetAdaptationField = &PacketAdaptationField{
 
 func packetAdaptationFieldBytes(a *PacketAdaptationField) []byte {
 	buf := &bytes.Buffer{}
-	w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: buf})
+	w := bitstest.NewWriter(buf)
 	w.Write(uint8(36))                // Length
 	w.Write(a.DiscontinuityIndicator) // Discontinuity indicator
 	w.Write("1")                      // Random access indicator
@@ -247,7 +248,7 @@ var pcr = NewClockReference(5726623061, 341)
 
 func pcrBytes() []byte {
 	buf := &bytes.Buffer{}
-	w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: buf})
+	w := bitstest.NewWriter(buf)
 	w.Write("101010101010101010101010101010101") // Base
 	w.Write("111111")                            // Reserved
 	w.Write("101010101")                         // Extension

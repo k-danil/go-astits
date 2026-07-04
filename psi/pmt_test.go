@@ -4,10 +4,10 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/asticode/go-astikit"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/k-danil/go-astits/internal/bytesiter"
+	"github.com/k-danil/go-astits/v2/internal/bitstest"
+	"github.com/k-danil/go-astits/v2/internal/bytesiter"
 )
 
 var pmt = &PMT{
@@ -23,7 +23,7 @@ var pmt = &PMT{
 
 func pmtBytes() []byte {
 	buf := &bytes.Buffer{}
-	w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: buf})
+	w := bitstest.NewWriter(buf)
 	w.Write("111")                       // Reserved bits
 	w.Write("1010101010101")             // PCR PID
 	w.Write("1111")                      // Reserved

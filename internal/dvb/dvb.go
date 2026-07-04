@@ -6,8 +6,8 @@ import (
 	"math"
 	"time"
 
-	"github.com/k-danil/go-astits/internal/bytesiter"
-	"github.com/k-danil/go-astits/internal/util"
+	"github.com/k-danil/go-astits/v2/internal/bytesiter"
+	"github.com/k-danil/go-astits/v2/internal/util"
 )
 
 // ParseTime parses a DVB time

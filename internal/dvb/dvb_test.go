@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/k-danil/go-astits/internal/bytesiter"
+	"github.com/k-danil/go-astits/v2/internal/bytesiter"
 )
 
 var (

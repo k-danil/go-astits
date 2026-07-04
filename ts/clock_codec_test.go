@@ -4,15 +4,16 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/asticode/go-astikit"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/k-danil/go-astits/v2/internal/bitstest"
 )
 
 var ptsClockReference = NewClockReference(5726623061, 0)
 
 func ptsBytes(flag string) []byte {
 	buf := &bytes.Buffer{}
-	w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: buf})
+	w := bitstest.NewWriter(buf)
 	w.Write(flag)              // Flag
 	w.Write("101")             // 32...30
 	w.Write("1")               // Dummy
@@ -27,7 +28,7 @@ var dtsClockReference = NewClockReference(5726623060, 0)
 
 func dtsBytes(flag string) []byte {
 	buf := &bytes.Buffer{}
-	w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: buf})
+	w := bitstest.NewWriter(buf)
 	w.Write(flag)              // Flag
 	w.Write("101")             // 32...30
 	w.Write("1")               // Dummy
@@ -40,7 +41,7 @@ func dtsBytes(flag string) []byte {
 
 func escrBytes() []byte {
 	buf := &bytes.Buffer{}
-	w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: buf})
+	w := bitstest.NewWriter(buf)
 	w.Write("11")              // Dummy
 	w.Write("011")             // 32...30
 	w.Write("1")               // Dummy

@@ -4,10 +4,10 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/asticode/go-astikit"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/k-danil/go-astits/internal/bytesiter"
+	"github.com/k-danil/go-astits/v2/internal/bitstest"
+	"github.com/k-danil/go-astits/v2/internal/bytesiter"
 )
 
 var psi = &Data{
@@ -98,7 +98,7 @@ var psi = &Data{
 
 func psiBytes() []byte {
 	buf := &bytes.Buffer{}
-	w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: buf})
+	w := bitstest.NewWriter(buf)
 	w.Write(uint8(4))                      // Pointer field
 	w.Write([]byte("test"))                // Pointer field bytes
 	w.Write(uint8(78))                     // EIT table ID
@@ -156,7 +156,7 @@ func psiBytes() []byte {
 func TestParsePSIData(t *testing.T) {
 	// Invalid CRC32
 	buf := &bytes.Buffer{}
-	w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: buf})
+	w := bitstest.NewWriter(buf)
 	w.Write(uint8(0))       // Pointer field
 	w.Write(uint8(115))     // TOT table ID
 	w.Write("1")            // TOT syntax section indicator
@@ -183,7 +183,7 @@ var psiSectionHeader = SectionHeader{
 
 func psiSectionHeaderBytes() []byte {
 	buf := &bytes.Buffer{}
-	w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: buf})
+	w := bitstest.NewWriter(buf)
 	w.Write(uint8(0))       // Table ID
 	w.Write("1")            // Syntax section indicator
 	w.Write("1")            // Private bit
@@ -195,7 +195,7 @@ func psiSectionHeaderBytes() []byte {
 func TestParsePSISectionHeader(t *testing.T) {
 	// Unknown table type
 	buf := &bytes.Buffer{}
-	w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: buf})
+	w := bitstest.NewWriter(buf)
 	w.Write(uint8(254)) // Table ID
 	w.Write("1")        // Syntax section indicator
 	w.Write("0000000")  // Finish the byte
@@ -249,7 +249,7 @@ var psiSectionSyntaxHeader = SectionSyntaxHeader{
 
 func psiSectionSyntaxHeaderBytes() []byte {
 	buf := &bytes.Buffer{}
-	w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: buf})
+	w := bitstest.NewWriter(buf)
 	w.Write(uint16(1)) // Table ID extension
 	w.Write("11")      // Reserved bits
 	w.Write("10101")   // Version number
@@ -268,14 +268,14 @@ func TestParsePSISectionSyntaxHeader(t *testing.T) {
 
 type psiDataTestCase struct {
 	name      string
-	bytesFunc func(*astikit.BitsWriter)
+	bytesFunc func(*bitstest.Writer)
 	data      *Data
 }
 
 var psiDataTestCases = []psiDataTestCase{
 	{
 		"PAT",
-		func(w *astikit.BitsWriter) {
+		func(w *bitstest.Writer) {
 			w.Write(uint8(4))                      // Pointer field
 			w.Write([]byte{0, 0, 0, 0})            // Pointer field bytes
 			w.Write(uint8(0))                      // PAT table ID
@@ -308,7 +308,7 @@ var psiDataTestCases = []psiDataTestCase{
 	},
 	{
 		"PMT",
-		func(w *astikit.BitsWriter) {
+		func(w *bitstest.Writer) {
 			w.Write(uint8(4))                      // Pointer field
 			w.Write([]byte{0, 0, 0, 0})            // Pointer field bytes
 			w.Write(uint8(2))                      // PMT table ID
@@ -345,7 +345,7 @@ func TestWritePSIData(t *testing.T) {
 	for _, tc := range psiDataTestCases {
 		t.Run(tc.name, func(t *testing.T) {
 			bufExpected := bytes.Buffer{}
-			wExpected := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: &bufExpected})
+			wExpected := bitstest.NewWriter(&bufExpected)
 
 			tc.bytesFunc(wExpected)
 

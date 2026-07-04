@@ -1,8 +1,8 @@
 package mux
 
 import (
-	"github.com/k-danil/go-astits/pes"
-	"github.com/k-danil/go-astits/ts"
+	"github.com/k-danil/go-astits/v2/pes"
+	"github.com/k-danil/go-astits/v2/ts"
 )
 
 // Data represents a data to be written by Muxer

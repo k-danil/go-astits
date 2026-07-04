@@ -1,5 +1,6 @@
 // Package bytesiter is a minimal byte iterator for the cold parse paths
 // (PSI tables, descriptors, DVB time): hot paths parse slices directly.
+// The API shape follows asticode/go-astikit (MIT, same author as the upstream fork).
 package bytesiter
 
 import "errors"

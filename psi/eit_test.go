@@ -4,10 +4,10 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/asticode/go-astikit"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/k-danil/go-astits/internal/bytesiter"
+	"github.com/k-danil/go-astits/v2/internal/bitstest"
+	"github.com/k-danil/go-astits/v2/internal/bytesiter"
 )
 
 var eit = &EIT{
@@ -28,7 +28,7 @@ var eit = &EIT{
 
 func eitBytes() []byte {
 	buf := &bytes.Buffer{}
-	w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: buf})
+	w := bitstest.NewWriter(buf)
 	w.Write(uint16(2))               // Transport stream ID
 	w.Write(uint16(3))               // Original network ID
 	w.Write(uint8(4))                // Segment last section number

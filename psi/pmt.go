@@ -4,8 +4,8 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"github.com/k-danil/go-astits/descriptor"
-	"github.com/k-danil/go-astits/internal/bytesiter"
+	"github.com/k-danil/go-astits/v2/descriptor"
+	"github.com/k-danil/go-astits/v2/internal/bytesiter"
 )
 
 type StreamType uint8

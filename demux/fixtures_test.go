@@ -4,16 +4,15 @@ import (
 	"bytes"
 	"fmt"
 
-	"github.com/asticode/go-astikit"
-
-	"github.com/k-danil/go-astits/ts"
+	"github.com/k-danil/go-astits/v2/internal/bitstest"
+	"github.com/k-danil/go-astits/v2/ts"
 )
 
 const syncByte byte = '\x47'
 
 func packet(h ts.PacketHeader, a *ts.PacketAdaptationField, i []byte, packet192bytes bool) ([]byte, *ts.Packet) {
 	buf := &bytes.Buffer{}
-	w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: buf})
+	w := bitstest.NewWriter(buf)
 	w.Write(syncByte) // Sync byte
 	if packet192bytes {
 		w.Write([]byte("test")) // Sometimes packets are 192 bytes
@@ -32,7 +31,7 @@ func packet(h ts.PacketHeader, a *ts.PacketAdaptationField, i []byte, packet192b
 
 func packetShort(h ts.PacketHeader, payload []byte) ([]byte, *ts.Packet) {
 	buf := &bytes.Buffer{}
-	w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: buf})
+	w := bitstest.NewWriter(buf)
 	w.Write(syncByte)                   // Sync byte
 	w.Write(packetHeaderBytes(h, "01")) // Header
 	p := append(payload, bytes.Repeat([]byte{0}, ts.PacketSize-buf.Len())...)
@@ -56,7 +55,7 @@ var packetHeader = ts.PacketHeader{
 
 func packetHeaderBytes(h ts.PacketHeader, afControl string) []byte {
 	buf := &bytes.Buffer{}
-	w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: buf})
+	w := bitstest.NewWriter(buf)
 	w.Write(h.TransportErrorIndicator)                // Transport error indicator
 	w.Write(h.PayloadUnitStartIndicator)              // Payload unit start indicator
 	w.Write("1")                                      // Transport priority
@@ -98,7 +97,7 @@ var packetAdaptationField = &ts.PacketAdaptationField{
 
 func packetAdaptationFieldBytes(a *ts.PacketAdaptationField) []byte {
 	buf := &bytes.Buffer{}
-	w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: buf})
+	w := bitstest.NewWriter(buf)
 	w.Write(uint8(36))                // Length
 	w.Write(a.DiscontinuityIndicator) // Discontinuity indicator
 	w.Write("1")                      // Random access indicator
@@ -133,7 +132,7 @@ var dtsClockReference = ts.NewClockReference(5726623060, 0)
 
 func dtsBytes(flag string) []byte {
 	buf := &bytes.Buffer{}
-	w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: buf})
+	w := bitstest.NewWriter(buf)
 	w.Write(flag)              // Flag
 	w.Write("101")             // 32...30
 	w.Write("1")               // Dummy
@@ -146,7 +145,7 @@ func dtsBytes(flag string) []byte {
 
 func pcrBytes() []byte {
 	buf := &bytes.Buffer{}
-	w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: buf})
+	w := bitstest.NewWriter(buf)
 	w.Write("101010101010101010101010101010101") // Base
 	w.Write("111111")                            // Reserved
 	w.Write("101010101")                         // Extension

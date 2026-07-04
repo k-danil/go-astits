@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/k-danil/go-astits/ts"
+	"github.com/k-danil/go-astits/v2/ts"
 )
 
 func TestHasDiscontinuity(t *testing.T) {

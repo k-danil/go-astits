@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/k-danil/go-astits/descriptor"
-	"github.com/k-danil/go-astits/internal/bytesiter"
-	"github.com/k-danil/go-astits/internal/dvb"
+	"github.com/k-danil/go-astits/v2/descriptor"
+	"github.com/k-danil/go-astits/v2/internal/bytesiter"
+	"github.com/k-danil/go-astits/v2/internal/dvb"
 )
 
 // EIT represents an EIT data

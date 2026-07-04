@@ -4,10 +4,10 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/asticode/go-astikit"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/k-danil/go-astits/ts"
+	"github.com/k-danil/go-astits/v2/internal/bitstest"
+	"github.com/k-danil/go-astits/v2/ts"
 )
 
 func TestHasPESOptionalHeader(t *testing.T) {
@@ -27,7 +27,7 @@ var dsmTrickModeSlow = &DSMTrickMode{
 
 func dsmTrickModeSlowBytes() []byte {
 	buf := &bytes.Buffer{}
-	w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: buf})
+	w := bitstest.NewWriter(buf)
 	w.Write("001")   // Control
 	w.Write("10101") // Repeat control
 	return buf.Bytes()
@@ -35,14 +35,14 @@ func dsmTrickModeSlowBytes() []byte {
 
 type dsmTrickModeTestCase struct {
 	name      string
-	bytesFunc func(w *astikit.BitsWriter)
+	bytesFunc func(w *bitstest.Writer)
 	trickMode *DSMTrickMode
 }
 
 var dsmTrickModeTestCases = []dsmTrickModeTestCase{
 	{
 		"fast_forward",
-		func(w *astikit.BitsWriter) {
+		func(w *bitstest.Writer) {
 			w.Write("000") // Control
 			w.Write("10")  // Field ID
 			w.Write("1")   // Intra slice refresh
@@ -57,7 +57,7 @@ var dsmTrickModeTestCases = []dsmTrickModeTestCase{
 	},
 	{
 		"slow_motion",
-		func(w *astikit.BitsWriter) {
+		func(w *bitstest.Writer) {
 			w.Write("001")
 			w.Write("10101")
 		},
@@ -68,7 +68,7 @@ var dsmTrickModeTestCases = []dsmTrickModeTestCase{
 	},
 	{
 		"freeze_frame",
-		func(w *astikit.BitsWriter) {
+		func(w *bitstest.Writer) {
 			w.Write("010") // Control
 			w.Write("10")  // Field ID
 			w.Write("111") // Reserved
@@ -80,7 +80,7 @@ var dsmTrickModeTestCases = []dsmTrickModeTestCase{
 	},
 	{
 		"fast_reverse",
-		func(w *astikit.BitsWriter) {
+		func(w *bitstest.Writer) {
 			w.Write("011") // Control
 			w.Write("10")  // Field ID
 			w.Write("1")   // Intra slice refresh
@@ -95,7 +95,7 @@ var dsmTrickModeTestCases = []dsmTrickModeTestCase{
 	},
 	{
 		"slow_reverse",
-		func(w *astikit.BitsWriter) {
+		func(w *bitstest.Writer) {
 			w.Write("100")
 			w.Write("01010")
 		},
@@ -106,7 +106,7 @@ var dsmTrickModeTestCases = []dsmTrickModeTestCase{
 	},
 	{
 		"reserved",
-		func(w *astikit.BitsWriter) {
+		func(w *bitstest.Writer) {
 			w.Write("101")
 			w.Write("11111")
 		},
@@ -120,7 +120,7 @@ func TestParseDSMTrickMode(t *testing.T) {
 	for _, tc := range dsmTrickModeTestCases {
 		t.Run(tc.name, func(t *testing.T) {
 			buf := &bytes.Buffer{}
-			w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: buf})
+			w := bitstest.NewWriter(buf)
 			tc.bytesFunc(w)
 			assert.Equal(t, parseDSMTrickMode(buf.Bytes()[0]), tc.trickMode)
 		})
@@ -131,7 +131,7 @@ func TestWriteDSMTrickMode(t *testing.T) {
 	for _, tc := range dsmTrickModeTestCases {
 		t.Run(tc.name, func(t *testing.T) {
 			bufExpected := &bytes.Buffer{}
-			wExpected := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: bufExpected})
+			wExpected := bitstest.NewWriter(bufExpected)
 			tc.bytesFunc(wExpected)
 
 			bs := make([]byte, dsmTrickModeLength)
@@ -146,7 +146,7 @@ var ptsClockReference = ts.NewClockReference(5726623061, 0)
 
 func ptsBytes(flag string) []byte {
 	buf := &bytes.Buffer{}
-	w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: buf})
+	w := bitstest.NewWriter(buf)
 	w.Write(flag)              // Flag
 	w.Write("101")             // 32...30
 	w.Write("1")               // Dummy
@@ -163,7 +163,7 @@ var clockReference = ts.NewClockReference(3271034319, 58)
 
 func dtsBytes(flag string) []byte {
 	buf := &bytes.Buffer{}
-	w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: buf})
+	w := bitstest.NewWriter(buf)
 	w.Write(flag)              // Flag
 	w.Write("101")             // 32...30
 	w.Write("1")               // Dummy
@@ -176,7 +176,7 @@ func dtsBytes(flag string) []byte {
 
 func escrBytes() []byte {
 	buf := &bytes.Buffer{}
-	w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: buf})
+	w := bitstest.NewWriter(buf)
 	w.Write("11")              // Dummy
 	w.Write("011")             // 32...30
 	w.Write("1")               // Dummy
@@ -191,24 +191,24 @@ func escrBytes() []byte {
 
 type pesTestCase struct {
 	name                    string
-	headerBytesFunc         func(w *astikit.BitsWriter, withStuffing bool, withCRC bool)
-	optionalHeaderBytesFunc func(w *astikit.BitsWriter, withStuffing bool, withCRC bool)
-	bytesFunc               func(w *astikit.BitsWriter, withStuffing bool, withCRC bool)
+	headerBytesFunc         func(w *bitstest.Writer, withStuffing bool, withCRC bool)
+	optionalHeaderBytesFunc func(w *bitstest.Writer, withStuffing bool, withCRC bool)
+	bytesFunc               func(w *bitstest.Writer, withStuffing bool, withCRC bool)
 	pesData                 *Data
 }
 
 var pesTestCases = []pesTestCase{
 	{
 		"without_header",
-		func(w *astikit.BitsWriter, withStuffing bool, withCRC bool) {
+		func(w *bitstest.Writer, withStuffing bool, withCRC bool) {
 			w.Write("000000000000000000000001")   // Prefix
 			w.Write(uint8(StreamIDPaddingStream)) // Stream ID
 			w.Write(uint16(4))                    // Packet length
 		},
-		func(w *astikit.BitsWriter, withStuffing bool, withCRC bool) {
+		func(w *bitstest.Writer, withStuffing bool, withCRC bool) {
 			// do nothing here
 		},
-		func(w *astikit.BitsWriter, withStuffing bool, withCRC bool) {
+		func(w *bitstest.Writer, withStuffing bool, withCRC bool) {
 			w.Write([]byte("data")) // Data
 		},
 		&Data{
@@ -221,7 +221,7 @@ var pesTestCases = []pesTestCase{
 	},
 	{
 		"with_header",
-		func(w *astikit.BitsWriter, withStuffing bool, withCRC bool) {
+		func(w *bitstest.Writer, withStuffing bool, withCRC bool) {
 			packetLength := 67
 			stuffing := []byte("stuff")
 
@@ -238,7 +238,7 @@ var pesTestCases = []pesTestCase{
 			w.Write(uint16(packetLength))       // Packet length
 
 		},
-		func(w *astikit.BitsWriter, withStuffing bool, withCRC bool) {
+		func(w *bitstest.Writer, withStuffing bool, withCRC bool) {
 			optionalHeaderLength := 60
 			stuffing := []byte("stuff")
 
@@ -290,7 +290,7 @@ var pesTestCases = []pesTestCase{
 				w.Write(stuffing) // Optional header stuffing bytes
 			}
 		},
-		func(w *astikit.BitsWriter, withStuffing bool, withCRC bool) {
+		func(w *bitstest.Writer, withStuffing bool, withCRC bool) {
 			stuffing := []byte("stuff")
 			w.Write([]byte("data")) // Data
 			if withStuffing {
@@ -349,7 +349,7 @@ var pesTestCases = []pesTestCase{
 // used by TestParseData
 func pesWithHeaderBytes() []byte {
 	buf := bytes.Buffer{}
-	w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: &buf})
+	w := bitstest.NewWriter(&buf)
 	pesTestCases[1].headerBytesFunc(w, true, true)
 	pesTestCases[1].optionalHeaderBytesFunc(w, true, true)
 	pesTestCases[1].bytesFunc(w, true, true)
@@ -375,7 +375,7 @@ func TestParsePESData(t *testing.T) {
 	for _, tc := range pesTestCases {
 		t.Run(tc.name, func(t *testing.T) {
 			buf := bytes.Buffer{}
-			w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: &buf})
+			w := bitstest.NewWriter(&buf)
 			tc.headerBytesFunc(w, true, true)
 			tc.optionalHeaderBytesFunc(w, true, true)
 			tc.bytesFunc(w, true, true)
@@ -391,7 +391,7 @@ func TestWritePESData(t *testing.T) {
 	for _, tc := range pesTestCases {
 		t.Run(tc.name, func(t *testing.T) {
 			bufExpected := bytes.Buffer{}
-			wExpected := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: &bufExpected})
+			wExpected := bitstest.NewWriter(&bufExpected)
 			tc.headerBytesFunc(wExpected, false, false)
 			tc.optionalHeaderBytesFunc(wExpected, false, false)
 			tc.bytesFunc(wExpected, false, false)
@@ -428,7 +428,7 @@ func TestWritePESHeader(t *testing.T) {
 	for _, tc := range pesTestCases {
 		t.Run(tc.name, func(t *testing.T) {
 			bufExpected := bytes.Buffer{}
-			wExpected := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: &bufExpected})
+			wExpected := bitstest.NewWriter(&bufExpected)
 			tc.headerBytesFunc(wExpected, false, false)
 			tc.optionalHeaderBytesFunc(wExpected, false, false)
 
@@ -458,7 +458,7 @@ func TestWritePESOptionalHeader(t *testing.T) {
 	for _, tc := range pesTestCases {
 		t.Run(tc.name, func(t *testing.T) {
 			bufExpected := bytes.Buffer{}
-			wExpected := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: &bufExpected})
+			wExpected := bitstest.NewWriter(&bufExpected)
 			tc.optionalHeaderBytesFunc(wExpected, false, false)
 
 			bs := make([]byte, ts.PacketSize)
@@ -474,7 +474,7 @@ func BenchmarkParsePESData(b *testing.B) {
 
 	for ti, tc := range pesTestCases {
 		buf := bytes.Buffer{}
-		w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: &buf})
+		w := bitstest.NewWriter(&buf)
 		tc.headerBytesFunc(w, true, true)
 		tc.optionalHeaderBytesFunc(w, true, true)
 		tc.bytesFunc(w, true, true)

@@ -4,12 +4,12 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/asticode/go-astikit"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/k-danil/go-astits/internal/pidmap"
-	"github.com/k-danil/go-astits/psi"
-	"github.com/k-danil/go-astits/ts"
+	"github.com/k-danil/go-astits/v2/internal/bitstest"
+	"github.com/k-danil/go-astits/v2/internal/pidmap"
+	"github.com/k-danil/go-astits/v2/psi"
+	"github.com/k-danil/go-astits/v2/ts"
 )
 
 func TestParseData(t *testing.T) {
@@ -107,7 +107,7 @@ func TestIsPSIPayload(t *testing.T) {
 
 func TestIsPESPayload(t *testing.T) {
 	buf := &bytes.Buffer{}
-	w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: buf})
+	w := bitstest.NewWriter(buf)
 	w.Write("000000000000000100000000")
 	assert.False(t, isPESPayload(buf.Bytes()))
 	buf.Reset()

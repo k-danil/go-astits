@@ -5,6 +5,28 @@ on hot-path performance of MPEG-TS demuxing and remuxing (live video and archive
 cost of upstream compatibility. The API and semantics have diverged from the original for
 good; this module is not and will never be a drop-in replacement.
 
+Module path: `github.com/k-danil/go-astits/v2`.
+
+## Layout
+
+Dependency arrows point strictly downwards, no cycles:
+
+| Package | Contents |
+|---|---|
+| `ts` | packet, header, adaptation field: parse + serialization, clock codecs (PCR/PTS/DTS/ESCR), CRC32, packet reader (copy and zero-copy view modes), `Packet.Raw()` |
+| `pes` | PES packets: parse + serialization |
+| `psi` | PSI tables (PAT/PMT/EIT/NIT/SDT/TOT): parse + serialization |
+| `descriptor` | DVB/MPEG descriptors, one file per descriptor |
+| `demux` | demuxer: per-PID packet accumulation, payload assembly, PSI dedup |
+| `mux` | muxer: PES packetization, table generation and retransmission, raw passthrough |
+
+API conventions: `Parse(bs []byte) (n int, err error)` on slices; `Put(bs []byte)` for
+fixed-size serialization (panics on short buffer, like `binary.BigEndian`); `Append(dst
+[]byte) []byte` for variable-size; `CalcLength() int` everywhere; constructors `demux.New` /
+`mux.New`; functional options `WithX`. No dependencies outside the standard
+library (`testify` in tests): direct slice parsing and byte appending throughout, bit-level
+test fixtures are built with an internal ~80-line bit writer.
+
 ## Pros
 
 Measurements: one-hour SD stream (2.1 Mbit/s, 952 MB), single CPU thread (Apple M-series);
@@ -12,31 +34,35 @@ upstream — v1.15.0.
 
 | Path | This fork | Upstream | Delta |
 |---|---|---|---|
-| Packet walk (`NextPacketTo`) | 5.4 GB/s, **15 allocs/hour** | 1.85 GB/s, 10.5M allocs | ×2.9 / ×700,000 |
-| Same, view mode + skipper | **9.0 GB/s** | — | — |
+| Packet walk (`NextPacketTo`) | 5.4 GB/s, **~10 allocs/hour** | 1.85 GB/s, 10.5M allocs | ×2.9 / ×1,000,000 |
+| Same, view mode + skipper | **9.2 GB/s** | — | — |
 | PES assembly (`NextData`) | **3.3 GB/s**, 147k allocs, 75 MB garbage | 0.28 GB/s, 32.9M, 4.1 GB | ×11.8 / ×224 / ×54 |
 
 How:
 
-- **Direct parsing and serialization**: no `BytesIterator`/`BitsWriter` on hot paths —
-  slice cursors for reads, packet assembly in a scratch buffer with a single `Write` per
-  packet for writes.
+- **Direct parsing and serialization**: no bit-writer/byte-iterator abstractions on hot
+  paths — slice cursors for reads, packet assembly in a scratch buffer with a single
+  `Write` per packet; tables and descriptors serialize append-style with CRC computed over
+  the produced slice.
 - **Circular memory lifecycle**: packet pool + demuxer-local freelist (chain-linked returns,
   drained back to the global pool on EOF), payload and list pools, embedded structs instead
-  of pointer fields (AF inside `Packet`, PES and an owned AF copy inside `DemuxerData`,
-  optional header inside `PESHeader`), compact generic `pidMap` tables instead of maps
+  of pointer fields (AF inside `ts.Packet`, PES and an owned AF copy inside `demux.Data`,
+  optional header inside `pes.Header`), compact generic `pidmap` tables instead of maps
   keyed by PID.
-- **Zero-copy view mode** (`DemuxerOptZeroCopyPackets`): batched reads, packets are views
+- **Escape-analysis-friendly dispatch**: descriptor parsing dispatches through a switch, not
+  a parser LUT — iterators stay on the stack; demuxer and muxer instances embed their slot
+  arrays and scratch buffers, so a short-lived instance costs a handful of allocations.
+- **Zero-copy view mode** (`demux.WithZeroCopyPackets`): batched reads, packets are views
   into the batch buffer.
-- **`PacketSkipper`** — header-level filtering before any payload work.
+- **`ts.PacketSkipper`** — header-level filtering before any payload work.
 - **`Packet.Offset`** — a byte map of the stream, correct even with a skipper installed.
 - **PSI dedup**: byte-identical repeats of PAT/PMT/… are neither parsed nor emitted.
-- **Data ownership**: `AdaptationField`/`TransportPrivateData` inside `DemuxerData` are
+- **Data ownership**: `AdaptationField`/`TransportPrivateData` inside `demux.Data` are
   owned copies; retaining data on the consumer side is safe from pool reuse.
 - **`Demuxer.Close()`** — deterministic resource return for demuxers abandoned before EOF;
   `Rewind()` cleans up after itself.
-- **Muxer**: raw packet passthrough (`WritePacket` with `UpdateHeader`), `SetCC`,
-  table retransmission from cache.
+- **Muxer**: raw packet passthrough (`WritePacket` of `Packet.Raw()` with `UpdateHeader`),
+  `SetCC`, table retransmission from cache.
 - Byte-for-byte output identity across optimizations is guarded by golden tests on real
   streams (demux differential against an independent parser + remux references).
 
@@ -44,7 +70,7 @@ How:
 
 - **Incompatible with upstream** in both API and semantics. Compatibility is a non-goal.
 - **The demuxer is single-goroutine** by contract — no internal locking.
-- **Close discipline is mandatory**: `DemuxerData.Close()` after use; a demuxer abandoned
+- **Close discipline is mandatory**: `demux.Data.Close()` after use; a demuxer abandoned
   before EOF must be released via `Demuxer.Close()` — otherwise held resources go to the GC
   instead of the pools.
 - **View mode**: packet memory is valid only until the next batch refill; `NextData` is
@@ -53,16 +79,15 @@ How:
   delivered to the consumer. The first occurrence and any change are.
 - **The PSI path retains its payload buffer forever** (descriptors are views into it):
   a deliberate leak of one buffer per section change.
-- `DemuxerData` is large (~1 KB due to embedded structs): cheap to allocate, expensive to
+- `demux.Data` is large (~1 KB due to embedded structs): cheap to allocate, expensive to
   retain by the thousands.
-- Upstream `cmd/` tools are unsupported and do not build.
 - Requires **Go ≥ 1.26**.
 - Part of the test suite runs against real assets (env `GOLDEN_TS_DIR`); without it only
   unit tests run.
 
 ## Roadmap
 
-- Split into packages (`ts` / `pes` / `psi` / `demux` / `mux`) with a move to `/v2`.
-- Fuzz and roundtrip tests for parsers/serializers.
+- Fuzz and roundtrip tests for parsers/serializers; typed errors.
 - Per-PID byte accumulator: view-compatible `NextData`, one copy less.
-- Full `DemuxerData` pooling and PSI ownership (descriptor copying).
+- Full `demux.Data` pooling and PSI ownership (descriptor copying).
+- Packet-level primitives: in-place PCR patching, PID rewrite over `Raw()`.

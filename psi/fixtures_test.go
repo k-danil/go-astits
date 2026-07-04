@@ -3,9 +3,8 @@ package psi
 import (
 	"time"
 
-	"github.com/asticode/go-astikit"
-
-	"github.com/k-danil/go-astits/descriptor"
+	"github.com/k-danil/go-astits/v2/descriptor"
+	"github.com/k-danil/go-astits/v2/internal/bitstest"
 )
 
 var descriptors = []descriptor.Descriptor{
@@ -17,7 +16,7 @@ var descriptors = []descriptor.Descriptor{
 		ComponentTag: 0x7},
 }
 
-func descriptorsBytes(w *astikit.BitsWriter) {
+func descriptorsBytes(w *bitstest.Writer) {
 	w.Write("000000000011")                        // Overall length
 	w.Write(uint8(descriptor.TagStreamIdentifier)) // Tag
 	w.Write(uint8(1))                              // Length

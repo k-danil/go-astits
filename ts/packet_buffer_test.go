@@ -4,14 +4,15 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/asticode/go-astikit"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/k-danil/go-astits/v2/internal/bitstest"
 )
 
 func TestAutoDetectPacketSize(t *testing.T) {
 	// Packet should start with a sync byte
 	buf := &bytes.Buffer{}
-	w := astikit.NewBitsWriter(astikit.BitsWriterOptions{Writer: buf})
+	w := bitstest.NewWriter(buf)
 	w.Write(uint8(2))
 	w.Write(syncByte)
 	_, err := autoDetectPacketSize(bytes.NewReader(buf.Bytes()))

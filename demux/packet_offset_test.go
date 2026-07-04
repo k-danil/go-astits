@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/k-danil/go-astits/ts"
+	"github.com/k-danil/go-astits/v2/ts"
 )
 
 func offsetTestStream(pids []uint16) []byte {

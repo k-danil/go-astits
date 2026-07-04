@@ -6,10 +6,10 @@ import (
 	"errors"
 	"io"
 
-	"github.com/k-danil/go-astits/internal/pidmap"
-	"github.com/k-danil/go-astits/pes"
-	"github.com/k-danil/go-astits/psi"
-	"github.com/k-danil/go-astits/ts"
+	"github.com/k-danil/go-astits/v2/internal/pidmap"
+	"github.com/k-danil/go-astits/v2/pes"
+	"github.com/k-danil/go-astits/v2/psi"
+	"github.com/k-danil/go-astits/v2/ts"
 )
 
 const (
