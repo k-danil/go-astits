@@ -364,7 +364,7 @@ func BenchmarkParsePSIData(b *testing.B) {
 	pb := psiBytes()
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		Parse(pb)
+		_, _ = Parse(pb)
 	}
 }
 

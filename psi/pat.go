@@ -33,22 +33,18 @@ func parsePATSection(i *bytesiter.Iterator, offsetSectionsEnd int, tableIDExtens
 		return nil, fmt.Errorf("astits: PAT section end %d is before its start: %w", offsetSectionsEnd, ts.ErrInvalidData)
 	}
 
-	// Create data
 	d = &PAT{
 		TransportStreamID: tableIDExtension,
 		Programs:          make([]PATProgram, n),
 	}
 
-	// Loop until end of section data is reached
 	for idx := range d.Programs {
-		// Get next bytes
 		var bs []byte
 		if bs, err = i.NextBytesNoCopy(4); err != nil || len(bs) < 4 {
 			err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 			return
 		}
 		val := binary.BigEndian.Uint32(bs)
-		// Append program
 		d.Programs[idx] = PATProgram{
 			ProgramMapID:  uint16(val & 0x1fff),
 			ProgramNumber: uint16(val >> 16),

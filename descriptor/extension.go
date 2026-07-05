@@ -23,21 +23,18 @@ type Extension struct {
 }
 
 func newDescriptorExtension(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
-	// Get next byte
 	var b byte
 	if b, err = i.NextByte(); err != nil {
 		err = fmt.Errorf("astits: fetching next byte failed: %w", err)
 		return
 	}
 
-	// Create descriptor
 	d := &Extension{
 		Header: h,
 		Tag:    b,
 	}
 	dd = d
 
-	// Switch on tag
 	switch d.Tag {
 	case TagExtensionSupplementaryAudio:
 		if d.SupplementaryAudio, err = newDescriptorExtensionSupplementaryAudio(i, offsetEnd); err != nil {
@@ -91,21 +88,18 @@ type ExtensionSupplementaryAudio struct {
 }
 
 func newDescriptorExtensionSupplementaryAudio(i *bytesiter.Iterator, offsetEnd int) (d *ExtensionSupplementaryAudio, err error) {
-	// Get next byte
 	var b byte
 	if b, err = i.NextByte(); err != nil {
 		err = fmt.Errorf("astits: fetching next byte failed: %w", err)
 		return
 	}
 
-	// Init
 	d = &ExtensionSupplementaryAudio{
 		EditorialClassification: b >> 2 & 0x1f,
 		HasLanguageCode:         b&0x1 > 0,
 		MixType:                 b&0x80 > 0,
 	}
 
-	// Language code
 	if d.HasLanguageCode {
 		var bs []byte
 		if bs, err = i.NextBytesNoCopy(3); err != nil {
@@ -115,7 +109,6 @@ func newDescriptorExtensionSupplementaryAudio(i *bytesiter.Iterator, offsetEnd i
 		copy(d.LanguageCode[:], bs)
 	}
 
-	// Private data
 	if i.Offset() < offsetEnd {
 		if d.PrivateData, err = i.NextBytes(offsetEnd - i.Offset()); err != nil {
 			err = fmt.Errorf("astits: fetching next bytes failed: %w", err)

@@ -19,44 +19,35 @@ type Component struct {
 }
 
 func newDescriptorComponent(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
-	// Init
 	d := &Component{
 		Header: h,
 	}
 	dd = d
 
-	// Get next byte
 	var b byte
 	if b, err = i.NextByte(); err != nil {
 		err = fmt.Errorf("astits: fetching next byte failed: %w", err)
 		return
 	}
 
-	// Stream content ext
 	d.StreamContentExt = b >> 4
 
-	// Stream content
 	d.StreamContent = b & 0xf
 
-	// Get next byte
 	if b, err = i.NextByte(); err != nil {
 		err = fmt.Errorf("astits: fetching next byte failed: %w", err)
 		return
 	}
 
-	// Component type
 	d.ComponentType = b
 
-	// Get next byte
 	if b, err = i.NextByte(); err != nil {
 		err = fmt.Errorf("astits: fetching next byte failed: %w", err)
 		return
 	}
 
-	// Component tag
 	d.ComponentTag = b
 
-	// ISO639 language code
 	var bs []byte
 	if bs, err = i.NextBytesNoCopy(3); err != nil {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
@@ -64,7 +55,6 @@ func newDescriptorComponent(i *bytesiter.Iterator, h Header, offsetEnd int) (dd 
 	}
 	copy(d.ISO639LanguageCode[:], bs)
 
-	// Text
 	if i.Offset() < offsetEnd {
 		if d.Text, err = i.NextBytes(offsetEnd - i.Offset()); err != nil {
 			err = fmt.Errorf("astits: fetching next bytes failed: %w", err)

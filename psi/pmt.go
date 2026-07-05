@@ -57,20 +57,16 @@ type ElementaryStream struct {
 
 // parsePMTSection parses a PMT section
 func parsePMTSection(i *bytesiter.Iterator, offsetSectionsEnd int, tableIDExtension uint16) (d *PMT, err error) {
-	// Create data
 	d = &PMT{ProgramNumber: tableIDExtension}
 
-	// Get next bytes
 	var bs []byte
 	if bs, err = i.NextBytesNoCopy(2); err != nil || len(bs) < 2 {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return
 	}
 
-	// PCR PID
 	d.PCRPID = binary.BigEndian.Uint16(bs) & 0x1fff
 
-	// Program descriptors
 	var dn int
 	if d.ProgramDescriptors, dn, err = descriptor.Parse(i.Bytes()); err != nil {
 		err = fmt.Errorf("astits: parsing descriptors failed: %w", err)
@@ -78,53 +74,33 @@ func parsePMTSection(i *bytesiter.Iterator, offsetSectionsEnd int, tableIDExtens
 	}
 	i.Skip(dn)
 
-	// Loop until end of section data is reached
 	for i.Offset() < offsetSectionsEnd {
-		// Create stream
 		e := ElementaryStream{}
 
-		// Get next byte
 		var b byte
 		if b, err = i.NextByte(); err != nil {
 			err = fmt.Errorf("astits: fetching next byte failed: %w", err)
 			return
 		}
 
-		// Stream type
 		e.StreamType = StreamType(b)
 
-		// Get next bytes
 		if bs, err = i.NextBytesNoCopy(2); err != nil || len(bs) < 2 {
 			err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 			return
 		}
 
-		// Elementary PID
 		e.ElementaryPID = binary.BigEndian.Uint16(bs) & 0x1fff
 
-		// Elementary descriptors
 		if e.ElementaryStreamDescriptors, dn, err = descriptor.Parse(i.Bytes()); err != nil {
 			err = fmt.Errorf("astits: parsing descriptors failed: %w", err)
 			return
 		}
 		i.Skip(dn)
 
-		// Add elementary stream
 		d.ElementaryStreams = append(d.ElementaryStreams, e)
 	}
 	return
-}
-
-func calcPMTProgramInfoLength(d *PMT) uint16 {
-	ret := 2 // program_info_length
-	ret += descriptor.CalcLength(d.ProgramDescriptors)
-
-	for _, es := range d.ElementaryStreams {
-		ret += 5 // stream_type, elementary_pid, es_info_length
-		ret += descriptor.CalcLength(es.ElementaryStreamDescriptors)
-	}
-
-	return uint16(ret)
 }
 
 func (d *PMT) CalcSectionLength() int {

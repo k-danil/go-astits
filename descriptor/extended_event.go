@@ -25,26 +25,21 @@ type ExtendedEventItem struct {
 }
 
 func newDescriptorExtendedEvent(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {
-	// Init
 	d := &ExtendedEvent{
 		Header: h,
 	}
 	dd = d
 
-	// Get next byte
 	var b byte
 	if b, err = i.NextByte(); err != nil {
 		err = fmt.Errorf("astits: fetching next byte failed: %w", err)
 		return
 	}
 
-	// Number
 	d.Number = b >> 4
 
-	// Last descriptor number
 	d.LastDescriptorNumber = b & 0xf
 
-	// ISO639 language code
 	var bs []byte
 	if bs, err = i.NextBytesNoCopy(3); err != nil {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
@@ -53,39 +48,31 @@ func newDescriptorExtendedEvent(i *bytesiter.Iterator, h Header, _ int) (dd Desc
 
 	copy(d.ISO639LanguageCode[:], bs)
 
-	// Get next byte
 	if b, err = i.NextByte(); err != nil {
 		err = fmt.Errorf("astits: fetching next byte failed: %w", err)
 		return
 	}
 
-	// Items length
 	itemsLength := int(b)
 
-	// Items
 	offsetEnd := i.Offset() + itemsLength
 	for i.Offset() < offsetEnd {
-		// Create item
 		var item ExtendedEventItem
 		if err = item.newDescriptorExtendedEventItem(i); err != nil {
 			err = fmt.Errorf("astits: creating extended event item failed: %w", err)
 			return
 		}
 
-		// Append item
 		d.Items = append(d.Items, item)
 	}
 
-	// Get next byte
 	if b, err = i.NextByte(); err != nil {
 		err = fmt.Errorf("astits: fetching next byte failed: %w", err)
 		return
 	}
 
-	// Text length
 	textLength := int(b)
 
-	// Text
 	if d.Text, err = i.NextBytes(textLength); err != nil {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return
@@ -94,32 +81,26 @@ func newDescriptorExtendedEvent(i *bytesiter.Iterator, h Header, _ int) (dd Desc
 }
 
 func (d *ExtendedEventItem) newDescriptorExtendedEventItem(i *bytesiter.Iterator) (err error) {
-	// Get next byte
 	var b byte
 	if b, err = i.NextByte(); err != nil {
 		err = fmt.Errorf("astits: fetching next byte failed: %w", err)
 		return
 	}
 
-	// Description length
 	descriptionLength := int(b)
 
-	// Description
 	if d.Description, err = i.NextBytes(descriptionLength); err != nil {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return
 	}
 
-	// Get next byte
 	if b, err = i.NextByte(); err != nil {
 		err = fmt.Errorf("astits: fetching next byte failed: %w", err)
 		return
 	}
 
-	// Content length
 	contentLength := int(b)
 
-	// Content
 	if d.Content, err = i.NextBytes(contentLength); err != nil {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return

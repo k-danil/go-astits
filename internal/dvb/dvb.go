@@ -16,14 +16,12 @@ import (
 // Page: 160 | Annex C | Link: https://www.dvb.org/resources/public/standards/a38_dvb-si_specification.pdf
 // (barbashov) the link above can be broken, alternative: https://dvb.org/wp-content/uploads/2019/12/a038_tm1217r37_en300468v1_17_1_-_rev-134_-_si_specification.pdf
 func ParseTime(i *bytesiter.Iterator) (t time.Time, err error) {
-	// Get next 2 bytes
 	var bs []byte
 	if bs, err = i.NextBytesNoCopy(2); err != nil || len(bs) < 2 {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return
 	}
 
-	// Date
 	day := mjdEpoch.Add(time.Duration(binary.BigEndian.Uint16(bs)) * 24 * time.Hour)
 
 	if bs, err = i.NextBytesNoCopy(3); err != nil || len(bs) < 3 {

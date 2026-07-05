@@ -122,17 +122,14 @@ func (h *Header) IsVideoStream() bool {
 
 // Parse parses a PES data
 func (d *Data) Parse(bs []byte) (err error) {
-	// Skip first 3 bytes that are there to identify the PES payload
 	const pesPayloadPrefixSize = 3
 
-	// Parse header
 	var dataStart, dataEnd int
 	if dataStart, dataEnd, err = d.Header.parseBytes(bs, pesPayloadPrefixSize); err != nil {
 		err = fmt.Errorf("astits: parsing PES header failed: %w", err)
 		return
 	}
 
-	// Validation
 	if dataEnd < dataStart {
 		err = fmt.Errorf("astits: data end %d is before data start %d: %w", dataEnd, dataStart, ts.ErrInvalidData)
 		return
@@ -160,14 +157,12 @@ func (h *Header) parseBytes(bs []byte, o int) (dataStart, dataEnd int, err error
 	h.PacketLength = binary.BigEndian.Uint16(bs[o+1 : o+3])
 	o += 3
 
-	// Update data end
 	if h.PacketLength > 0 {
 		dataEnd = o + int(h.PacketLength)
 	} else {
 		dataEnd = len(bs)
 	}
 
-	// Optional header
 	if hasPESOptionalHeader(h.StreamID) {
 		h.optionalHeader = OptionalHeader{}
 		h.OptionalHeader = &h.optionalHeader
@@ -197,7 +192,6 @@ func (h *OptionalHeader) parseBytes(bs []byte, o int) (dataStart int, err error)
 	b = bs[o+1]
 	h.PTSDTSIndicator = b >> 6 & 0x3
 
-	// Flags
 	h.HasESCR = b&0x20 > 0
 	h.HasESRate = b&0x10 > 0
 	h.HasDSMTrickMode = b&0x8 > 0
@@ -205,22 +199,20 @@ func (h *OptionalHeader) parseBytes(bs []byte, o int) (dataStart int, err error)
 	h.HasCRC = b&0x2 > 0
 	h.HasExtension = b&0x1 > 0
 
-	// Header length
 	h.HeaderLength = bs[o+2]
 	o += 3
 
-	// Update data start
 	dataStart = o + int(h.HeaderLength)
 
-	// PTS/DTS
 	var n int
-	if h.PTSDTSIndicator == PTSDTSIndicatorOnlyPTS {
+	switch h.PTSDTSIndicator {
+	case PTSDTSIndicatorOnlyPTS:
 		if n, err = h.PTS.ParsePTSDTS(bs[o:]); err != nil {
 			err = fmt.Errorf("astits: parsing PTS failed: %w", err)
 			return
 		}
 		o += n
-	} else if h.PTSDTSIndicator == PTSDTSIndicatorBothPresent {
+	case PTSDTSIndicatorBothPresent:
 		if n, err = h.PTS.ParsePTSDTS(bs[o:]); err != nil {
 			err = fmt.Errorf("astits: parsing PTS failed: %w", err)
 			return
@@ -233,7 +225,6 @@ func (h *OptionalHeader) parseBytes(bs []byte, o int) (dataStart int, err error)
 		o += n
 	}
 
-	// ESCR
 	if h.HasESCR {
 		if n, err = h.ESCR.ParseESCR(bs[o:]); err != nil {
 			err = fmt.Errorf("astits: parsing ESCR failed: %w", err)
@@ -242,7 +233,6 @@ func (h *OptionalHeader) parseBytes(bs []byte, o int) (dataStart int, err error)
 		o += n
 	}
 
-	// ES rate
 	if h.HasESRate {
 		if o+3 > len(bs) {
 			return 0, ts.ErrShortPacket
@@ -251,7 +241,6 @@ func (h *OptionalHeader) parseBytes(bs []byte, o int) (dataStart int, err error)
 		o += 3
 	}
 
-	// Trick mode
 	if h.HasDSMTrickMode {
 		if o >= len(bs) {
 			return 0, ts.ErrShortPacket
@@ -260,7 +249,6 @@ func (h *OptionalHeader) parseBytes(bs []byte, o int) (dataStart int, err error)
 		o++
 	}
 
-	// Additional copy info
 	if h.HasAdditionalCopyInfo {
 		if o >= len(bs) {
 			return 0, ts.ErrShortPacket
@@ -269,7 +257,6 @@ func (h *OptionalHeader) parseBytes(bs []byte, o int) (dataStart int, err error)
 		o++
 	}
 
-	// CRC
 	if h.HasCRC {
 		if o+2 > len(bs) {
 			return 0, ts.ErrShortPacket
@@ -278,7 +265,6 @@ func (h *OptionalHeader) parseBytes(bs []byte, o int) (dataStart int, err error)
 		o += 2
 	}
 
-	// Extension
 	if h.HasExtension {
 		h.Extension = &OptionalHeaderExtension{}
 		err = h.Extension.parseBytes(bs, o)
@@ -295,14 +281,12 @@ func (h *OptionalHeaderExtension) parseBytes(bs []byte, o int) (err error) {
 	b := bs[o]
 	o++
 
-	// Flags
 	h.HasPrivateData = b&0x80 > 0
 	h.HasPackHeaderField = b&0x40 > 0
 	h.HasProgramPacketSequenceCounter = b&0x20 > 0
 	h.HasPSTDBuffer = b&0x10 > 0
 	h.HasExtension2 = b&0x1 > 0
 
-	// Private data
 	if h.HasPrivateData {
 		if o+16 > len(bs) {
 			return ts.ErrShortPacket
@@ -325,7 +309,6 @@ func (h *OptionalHeaderExtension) parseBytes(bs []byte, o int) (err error) {
 		}
 	}
 
-	// Program packet sequence counter
 	if h.HasProgramPacketSequenceCounter {
 		if o+2 > len(bs) {
 			return ts.ErrShortPacket
@@ -336,7 +319,6 @@ func (h *OptionalHeaderExtension) parseBytes(bs []byte, o int) (err error) {
 		o += 2
 	}
 
-	// P-STD buffer
 	if h.HasPSTDBuffer {
 		if o+2 > len(bs) {
 			return ts.ErrShortPacket
@@ -346,16 +328,13 @@ func (h *OptionalHeaderExtension) parseBytes(bs []byte, o int) (err error) {
 		o += 2
 	}
 
-	// Extension 2
 	if h.HasExtension2 {
-		// Length
 		if o >= len(bs) {
 			return ts.ErrShortPacket
 		}
 		h.Extension2Length = bs[o] & 0x7f
 		o++
 
-		// Data
 		if o+int(h.Extension2Length) > len(bs) {
 			return ts.ErrShortPacket
 		}
@@ -368,13 +347,14 @@ func (h *OptionalHeaderExtension) parseBytes(bs []byte, o int) (err error) {
 func parseDSMTrickMode(i byte) (m *DSMTrickMode) {
 	m = &DSMTrickMode{}
 	m.TrickModeControl = i >> 5
-	if m.TrickModeControl == TrickModeControlFastForward || m.TrickModeControl == TrickModeControlFastReverse {
+	switch m.TrickModeControl {
+	case TrickModeControlFastForward, TrickModeControlFastReverse:
 		m.FieldID = i >> 3 & 0x3
 		m.IntraSliceRefresh = i >> 2 & 0x1
 		m.FrequencyTruncation = i & 0x3
-	} else if m.TrickModeControl == TrickModeControlFreezeFrame {
+	case TrickModeControlFreezeFrame:
 		m.FieldID = i >> 3 & 0x3
-	} else if m.TrickModeControl == TrickModeControlSlowMotion || m.TrickModeControl == TrickModeControlSlowReverse {
+	case TrickModeControlSlowMotion, TrickModeControlSlowReverse:
 		m.RepeatControl = i & 0x1f
 	}
 	return
@@ -468,9 +448,10 @@ func (h *OptionalHeader) CalcLength() int {
 }
 
 func (h *OptionalHeader) calcDataLength() (length uint8) {
-	if h.PTSDTSIndicator == PTSDTSIndicatorOnlyPTS {
+	switch h.PTSDTSIndicator {
+	case PTSDTSIndicatorOnlyPTS:
 		length += ts.PTSDTSSize
-	} else if h.PTSDTSIndicator == PTSDTSIndicatorBothPresent {
+	case PTSDTSIndicatorBothPresent:
 		length += 2 * ts.PTSDTSSize
 	}
 
@@ -612,13 +593,14 @@ func (h *OptionalHeaderExtension) putBytes(bs []byte) (n int) {
 func (m *DSMTrickMode) putBytes(bs []byte) int {
 	b := m.TrickModeControl << 5
 
-	if m.TrickModeControl == TrickModeControlFastForward || m.TrickModeControl == TrickModeControlFastReverse {
+	switch m.TrickModeControl {
+	case TrickModeControlFastForward, TrickModeControlFastReverse:
 		b |= m.FieldID<<3 | m.IntraSliceRefresh<<2 | m.FrequencyTruncation
-	} else if m.TrickModeControl == TrickModeControlFreezeFrame {
+	case TrickModeControlFreezeFrame:
 		b |= m.FieldID<<3 | 7
-	} else if m.TrickModeControl == TrickModeControlSlowMotion || m.TrickModeControl == TrickModeControlSlowReverse {
+	case TrickModeControlSlowMotion, TrickModeControlSlowReverse:
 		b |= m.RepeatControl
-	} else {
+	default:
 		b |= 0x1f
 	}
 

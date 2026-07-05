@@ -40,7 +40,6 @@ type VBIDataDescriptor struct {
 }
 
 func newDescriptorVBIData(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
-	// Create descriptor
 	d := &VBIData{Header: h}
 	dd = d
 
@@ -48,29 +47,23 @@ func newDescriptorVBIData(i *bytesiter.Iterator, h Header, offsetEnd int) (dd De
 	for i.Offset() < offsetEnd {
 		var svc VBIDataService
 
-		// Get next byte
 		var b byte
 		if b, err = i.NextByte(); err != nil {
 			err = fmt.Errorf("astits: fetching next byte failed: %w", err)
 			return
 		}
 
-		// Data service ID
 		svc.DataServiceID = b
 
-		// Get next byte
 		if b, err = i.NextByte(); err != nil {
 			err = fmt.Errorf("astits: fetching next byte failed: %w", err)
 			return
 		}
 
-		// Data service descriptor length
 		dataServiceDescriptorLength := int(b)
 
-		// Data service descriptor
 		offsetDataEnd := i.Offset() + dataServiceDescriptorLength
 		for i.Offset() < offsetDataEnd {
-			// Get next byte
 			if b, err = i.NextByte(); err != nil {
 				err = fmt.Errorf("astits: fetching next byte failed: %w", err)
 				return
@@ -78,7 +71,6 @@ func newDescriptorVBIData(i *bytesiter.Iterator, h Header, offsetEnd int) (dd De
 
 			if svc.DataServiceID <= VBIDataServiceIDMonochrome442Samples &&
 				svc.DataServiceID != 0x0 && svc.DataServiceID != 0x3 {
-				// Append data
 				svc.Descriptors = append(svc.Descriptors, VBIDataDescriptor{
 					FieldParity: b&0x20 > 0,
 					LineOffset:  b & 0x1f,

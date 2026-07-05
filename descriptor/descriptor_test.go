@@ -12,27 +12,11 @@ import (
 )
 
 var (
-	dvbDurationMinutes      = time.Hour + 45*time.Minute
-	dvbDurationMinutesBytes = []byte{0x1, 0x45} // 0145
+	dvbMinutesDuration      = time.Hour + 45*time.Minute
+	dvbMinutesDurationBytes = []byte{0x1, 0x45} // 0145
 	dvbTime, _              = time.Parse("2006-01-02 15:04:05", "1993-10-13 12:45:00")
 	dvbTimeBytes            = []byte{0xc0, 0x79, 0x12, 0x45, 0x0} // C079124500
 )
-
-var descriptors = []Descriptor{
-	&StreamIdentifier{
-		Header: Header{
-			Tag:    TagStreamIdentifier,
-			Length: 0x1,
-		},
-		ComponentTag: 0x7},
-}
-
-func descriptorsBytes(w *bitstest.Writer) {
-	_ = w.Write("000000000011")             // Overall length
-	_ = w.Write(uint8(TagStreamIdentifier)) // Tag
-	_ = w.Write(uint8(1))                   // Length
-	_ = w.Write(uint8(7))                   // Component tag
-}
 
 type descriptorTest struct {
 	name      string
@@ -408,9 +392,9 @@ var descriptorTestTable = []descriptorTest{
 			_ = w.Write("101010")                  // Country region ID
 			_ = w.Write("1")                       // Reserved
 			_ = w.Write("1")                       // Local time offset polarity
-			_ = w.Write(dvbDurationMinutesBytes)   // Local time offset
+			_ = w.Write(dvbMinutesDurationBytes)   // Local time offset
 			_ = w.Write(dvbTimeBytes)              // Time of change
-			_ = w.Write(dvbDurationMinutesBytes)   // Next time offset
+			_ = w.Write(dvbMinutesDurationBytes)   // Next time offset
 		},
 		&LocalTimeOffset{
 			Header: Header{
@@ -420,9 +404,9 @@ var descriptorTestTable = []descriptorTest{
 			Items: []LocalTimeOffsetItem{{
 				CountryCode:             [3]byte{0x63, 0x6f, 0x75}, // cou
 				CountryRegionID:         42,
-				LocalTimeOffset:         dvbDurationMinutes,
+				LocalTimeOffset:         dvbMinutesDuration,
 				LocalTimeOffsetPolarity: true,
-				NextTimeOffset:          dvbDurationMinutes,
+				NextTimeOffset:          dvbMinutesDuration,
 				TimeOfChange:            dvbTime,
 			}}}},
 	{
@@ -716,7 +700,7 @@ func BenchmarkParseDescriptor(b *testing.B) {
 		b.Run(tc.name, func(b *testing.B) {
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {
-				Parse(bs)
+				_, _, _ = Parse(bs)
 			}
 		})
 	}

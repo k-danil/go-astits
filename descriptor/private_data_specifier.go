@@ -14,14 +14,12 @@ type PrivateDataSpecifier struct {
 }
 
 func newDescriptorPrivateDataSpecifier(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {
-	// Get next bytes
 	var bs []byte
 	if bs, err = i.NextBytesNoCopy(4); err != nil || len(bs) < 4 {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return
 	}
 
-	// Create descriptor
 	d := &PrivateDataSpecifier{
 		Header:    h,
 		Specifier: binary.BigEndian.Uint32(bs),

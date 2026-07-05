@@ -16,10 +16,6 @@ func newWrappingCounter(wrapAt int) wrappingCounter {
 	}
 }
 
-func (c *wrappingCounter) get() int {
-	return c.value
-}
-
 func (c *wrappingCounter) set(v int) error {
 	if v > c.wrapAt {
 		return ErrCounterOverflow

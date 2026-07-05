@@ -23,14 +23,12 @@ type AC3 struct {
 }
 
 func newDescriptorAC3(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
-	// Get next byte
 	var b byte
 	if b, err = i.NextByte(); err != nil {
 		err = fmt.Errorf("astits: fetching next byte failed: %w", err)
 		return
 	}
 
-	// Create descriptor
 	d := &AC3{
 		Header:           h,
 		HasASVC:          uint8(b&0x10) > 0,
@@ -40,7 +38,6 @@ func newDescriptorAC3(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descri
 	}
 	dd = d
 
-	// Component type
 	if d.HasComponentType {
 		if b, err = i.NextByte(); err != nil {
 			err = fmt.Errorf("astits: fetching next byte failed: %w", err)
@@ -49,7 +46,6 @@ func newDescriptorAC3(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descri
 		d.ComponentType = b
 	}
 
-	// BSID
 	if d.HasBSID {
 		if b, err = i.NextByte(); err != nil {
 			err = fmt.Errorf("astits: fetching next byte failed: %w", err)
@@ -58,7 +54,6 @@ func newDescriptorAC3(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descri
 		d.BSID = b
 	}
 
-	// Main ID
 	if d.HasMainID {
 		if b, err = i.NextByte(); err != nil {
 			err = fmt.Errorf("astits: fetching next byte failed: %w", err)
@@ -67,7 +62,6 @@ func newDescriptorAC3(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descri
 		d.MainID = b
 	}
 
-	// ASVC
 	if d.HasASVC {
 		if b, err = i.NextByte(); err != nil {
 			err = fmt.Errorf("astits: fetching next byte failed: %w", err)
@@ -76,7 +70,6 @@ func newDescriptorAC3(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descri
 		d.ASVC = b
 	}
 
-	// Additional info
 	if i.Offset() < offsetEnd {
 		if d.AdditionalInfo, err = i.NextBytes(offsetEnd - i.Offset()); err != nil {
 			err = fmt.Errorf("astits: fetching next bytes failed: %w", err)

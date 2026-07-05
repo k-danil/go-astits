@@ -33,16 +33,13 @@ type TeletextItem struct {
 }
 
 func newDescriptorTeletext(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
-	// Create descriptor
 	d := &Teletext{
 		Header: h,
 		Items:  make([]TeletextItem, (offsetEnd-i.Offset())/5),
 	}
 	dd = d
 
-	// Loop
 	for idx := range d.Items {
-		// Language
 		var bs []byte
 		if bs, err = i.NextBytesNoCopy(3); err != nil {
 			err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
@@ -50,26 +47,21 @@ func newDescriptorTeletext(i *bytesiter.Iterator, h Header, offsetEnd int) (dd D
 		}
 		copy(d.Items[idx].Language[:], bs)
 
-		// Get next byte
 		var b byte
 		if b, err = i.NextByte(); err != nil {
 			err = fmt.Errorf("astits: fetching next byte failed: %w", err)
 			return
 		}
 
-		// Type
 		d.Items[idx].Type = b >> 3
 
-		// Magazine
 		d.Items[idx].Magazine = b & 0x7
 
-		// Get next byte
 		if b, err = i.NextByte(); err != nil {
 			err = fmt.Errorf("astits: fetching next byte failed: %w", err)
 			return
 		}
 
-		// Page
 		d.Items[idx].Page = b>>4*10 + b&0xf
 	}
 	return

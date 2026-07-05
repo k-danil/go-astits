@@ -30,14 +30,12 @@ type EnhancedAC3 struct {
 }
 
 func newDescriptorEnhancedAC3(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
-	// Get next byte
 	var b byte
 	if b, err = i.NextByte(); err != nil {
 		err = fmt.Errorf("astits: fetching next byte failed: %w", err)
 		return
 	}
 
-	// Create descriptor
 	d := &EnhancedAC3{
 		Header:           h,
 		HasASVC:          uint8(b&0x10) > 0,
@@ -51,9 +49,7 @@ func newDescriptorEnhancedAC3(i *bytesiter.Iterator, h Header, offsetEnd int) (d
 	}
 	dd = d
 
-	// Component type
 	if d.HasComponentType {
-		// Get next byte
 		if b, err = i.NextByte(); err != nil {
 			err = fmt.Errorf("astits: fetching next byte failed: %w", err)
 			return
@@ -61,9 +57,7 @@ func newDescriptorEnhancedAC3(i *bytesiter.Iterator, h Header, offsetEnd int) (d
 		d.ComponentType = b
 	}
 
-	// BSID
 	if d.HasBSID {
-		// Get next byte
 		if b, err = i.NextByte(); err != nil {
 			err = fmt.Errorf("astits: fetching next byte failed: %w", err)
 			return
@@ -71,9 +65,7 @@ func newDescriptorEnhancedAC3(i *bytesiter.Iterator, h Header, offsetEnd int) (d
 		d.BSID = b
 	}
 
-	// Main ID
 	if d.HasMainID {
-		// Get next byte
 		if b, err = i.NextByte(); err != nil {
 			err = fmt.Errorf("astits: fetching next byte failed: %w", err)
 			return
@@ -81,9 +73,7 @@ func newDescriptorEnhancedAC3(i *bytesiter.Iterator, h Header, offsetEnd int) (d
 		d.MainID = b
 	}
 
-	// ASVC
 	if d.HasASVC {
-		// Get next byte
 		if b, err = i.NextByte(); err != nil {
 			err = fmt.Errorf("astits: fetching next byte failed: %w", err)
 			return
@@ -91,9 +81,7 @@ func newDescriptorEnhancedAC3(i *bytesiter.Iterator, h Header, offsetEnd int) (d
 		d.ASVC = b
 	}
 
-	// Substream 1
 	if d.HasSubStream1 {
-		// Get next byte
 		if b, err = i.NextByte(); err != nil {
 			err = fmt.Errorf("astits: fetching next byte failed: %w", err)
 			return
@@ -101,9 +89,7 @@ func newDescriptorEnhancedAC3(i *bytesiter.Iterator, h Header, offsetEnd int) (d
 		d.SubStream1 = b
 	}
 
-	// Substream 2
 	if d.HasSubStream2 {
-		// Get next byte
 		if b, err = i.NextByte(); err != nil {
 			err = fmt.Errorf("astits: fetching next byte failed: %w", err)
 			return
@@ -111,9 +97,7 @@ func newDescriptorEnhancedAC3(i *bytesiter.Iterator, h Header, offsetEnd int) (d
 		d.SubStream2 = b
 	}
 
-	// Substream 3
 	if d.HasSubStream3 {
-		// Get next byte
 		if b, err = i.NextByte(); err != nil {
 			err = fmt.Errorf("astits: fetching next byte failed: %w", err)
 			return
@@ -121,7 +105,6 @@ func newDescriptorEnhancedAC3(i *bytesiter.Iterator, h Header, offsetEnd int) (d
 		d.SubStream3 = b
 	}
 
-	// Additional info
 	if i.Offset() < offsetEnd {
 		if d.AdditionalInfo, err = i.NextBytes(offsetEnd - i.Offset()); err != nil {
 			err = fmt.Errorf("astits: fetching next bytes failed: %w", err)

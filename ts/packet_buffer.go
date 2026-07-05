@@ -62,7 +62,6 @@ type PacketBuffer struct {
 
 // NewPacketBuffer creates a new packet buffer
 func NewPacketBuffer(r io.Reader, packetSize, skipErrLimit uint, s PacketSkipper, zeroCopyBatch uint) (pb *PacketBuffer, err error) {
-	// Init
 	pb = &PacketBuffer{
 		packetSize:   packetSize,
 		s:            s,
@@ -70,9 +69,7 @@ func NewPacketBuffer(r io.Reader, packetSize, skipErrLimit uint, s PacketSkipper
 		skipErrLimit: skipErrLimit,
 	}
 
-	// Packet size is not set
 	if pb.packetSize == 0 {
-		// Auto detect packet size
 		if pb.packetSize, err = autoDetectPacketSize(r); err != nil {
 			err = fmt.Errorf("astits: auto detecting packet size failed: %w", err)
 			return
@@ -89,7 +86,6 @@ func NewPacketBuffer(r io.Reader, packetSize, skipErrLimit uint, s PacketSkipper
 // Minimum packet size is 188 and is bounded by 2 sync bytes
 // Assumption is made that the first byte of the reader is a sync byte
 func autoDetectPacketSize(r io.Reader) (packetSize uint, err error) {
-	// Read first bytes
 	const l = 193
 	var bs = make([]byte, l)
 	shouldRewind, rerr := peek(r, bs)
@@ -98,23 +94,19 @@ func autoDetectPacketSize(r io.Reader) (packetSize uint, err error) {
 		return
 	}
 
-	// Packet must start with a sync byte
 	if bs[0] != syncByte {
 		err = ErrPacketMustStartWithASyncByte
 		return
 	}
 
-	// Look for sync bytes
 	for idx, b := range bs {
 		if b == syncByte && idx >= PacketSize {
-			// Update packet size
 			packetSize = uint(idx)
 
 			if !shouldRewind {
 				return
 			}
 
-			// Rewind or sync reader
 			var n int64
 			if n, err = Rewind(r); err != nil {
 				err = fmt.Errorf("astits: rewinding failed: %w", err)
@@ -225,7 +217,6 @@ func (pb *PacketBuffer) Next(p *Packet) (err error) {
 			return err
 		}
 
-		// Parse packet
 		p.Offset = pb.pos
 		pb.pos += int64(pb.packetSize)
 		if skip, err = p.parse(bs, pb.s); err != nil {

@@ -155,7 +155,6 @@ func WithPSIRepeats() func(*Demuxer) {
 }
 
 func (dmx *Demuxer) nextPacket(p *ts.Packet) (err error) {
-	// Create packet buffer if not exists
 	if dmx.packetBuffer == nil {
 		if dmx.packetBuffer, err = ts.NewPacketBuffer(dmx.r, dmx.optPacketSize, dmx.optSkipErrLimit, dmx.optPacketSkipper, dmx.optZeroCopyBatch); err != nil {
 			err = fmt.Errorf("astits: creating packet buffer failed: %w", err)
@@ -163,7 +162,6 @@ func (dmx *Demuxer) nextPacket(p *ts.Packet) (err error) {
 		}
 	}
 
-	// Fetch next packet from buffer
 	if err = dmx.packetBuffer.Next(p); err != nil {
 		if err != ts.ErrNoMorePackets {
 			err = fmt.Errorf("astits: fetching next packet from buffer failed: %w", err)

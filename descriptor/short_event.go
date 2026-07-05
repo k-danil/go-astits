@@ -16,13 +16,11 @@ type ShortEvent struct {
 }
 
 func newDescriptorShortEvent(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {
-	// Create descriptor
 	d := &ShortEvent{
 		Header: h,
 	}
 	dd = d
 
-	// Language
 	var bs []byte
 	if bs, err = i.NextBytesNoCopy(3); err != nil {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
@@ -31,32 +29,26 @@ func newDescriptorShortEvent(i *bytesiter.Iterator, h Header, _ int) (dd Descrip
 
 	copy(d.Language[:], bs)
 
-	// Get next byte
 	var b byte
 	if b, err = i.NextByte(); err != nil {
 		err = fmt.Errorf("astits: fetching next byte failed: %w", err)
 		return
 	}
 
-	// Event length
 	eventLength := int(b)
 
-	// Event name
 	if d.EventName, err = i.NextBytes(eventLength); err != nil {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return
 	}
 
-	// Get next byte
 	if b, err = i.NextByte(); err != nil {
 		err = fmt.Errorf("astits: fetching next byte failed: %w", err)
 		return
 	}
 
-	// Text length
 	textLength := int(b)
 
-	// Text
 	if d.Text, err = i.NextBytes(textLength); err != nil {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return

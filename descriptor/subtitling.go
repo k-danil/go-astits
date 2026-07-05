@@ -24,16 +24,13 @@ type SubtitlingItem struct {
 }
 
 func newDescriptorSubtitling(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
-	// Create descriptor
 	d := &Subtitling{
 		Header: h,
 		Items:  make([]SubtitlingItem, (offsetEnd-i.Offset())/8),
 	}
 	dd = d
 
-	// Loop
 	for idx := range d.Items {
-		// Language
 		var bs []byte
 		if bs, err = i.NextBytesNoCopy(3); err != nil {
 			err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
@@ -41,32 +38,26 @@ func newDescriptorSubtitling(i *bytesiter.Iterator, h Header, offsetEnd int) (dd
 		}
 		copy(d.Items[idx].Language[:], bs)
 
-		// Get next byte
 		var b byte
 		if b, err = i.NextByte(); err != nil {
 			err = fmt.Errorf("astits: fetching next byte failed: %w", err)
 			return
 		}
 
-		// Type
 		d.Items[idx].Type = b
 
-		// Get next bytes
 		if bs, err = i.NextBytesNoCopy(2); err != nil || len(bs) < 2 {
 			err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 			return
 		}
 
-		// Composition page ID
 		d.Items[idx].CompositionPageID = binary.BigEndian.Uint16(bs)
 
-		// Get next bytes
 		if bs, err = i.NextBytesNoCopy(2); err != nil || len(bs) < 2 {
 			err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 			return
 		}
 
-		// Ancillary page ID
 		d.Items[idx].AncillaryPageID = binary.BigEndian.Uint16(bs)
 	}
 	return

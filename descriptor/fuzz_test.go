@@ -20,6 +20,6 @@ func FuzzParse(f *testing.F) {
 		f.Add(bs)
 	}
 	f.Fuzz(func(t *testing.T, bs []byte) {
-		Parse(bs)
+		_, _, _ = Parse(bs)
 	})
 }

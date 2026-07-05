@@ -19,16 +19,13 @@ type TOT struct {
 
 // parseTOTSection parses a TOT section
 func parseTOTSection(i *bytesiter.Iterator) (d *TOT, err error) {
-	// Create data
 	d = &TOT{}
 
-	// UTC time
 	if d.UTCTime, err = dvb.ParseTime(i); err != nil {
 		err = fmt.Errorf("astits: parsing DVB time failed: %w", err)
 		return
 	}
 
-	// Descriptors
 	var dn int
 	if d.Descriptors, dn, err = descriptor.Parse(i.Bytes()); err != nil {
 		err = fmt.Errorf("astits: parsing descriptors failed: %w", err)

@@ -49,17 +49,14 @@ func Parse(bs []byte) (ds []Descriptor, n int, err error) {
 }
 
 func parseDescriptors(i *bytesiter.Iterator) (o []Descriptor, err error) {
-	// Get next 2 bytes
 	var bs []byte
 	if bs, err = i.NextBytesNoCopy(2); err != nil || len(bs) < 2 {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return
 	}
 
-	// Get length
 	length := int(binary.BigEndian.Uint16(bs) & 0xfff)
 
-	// Loop
 	if length > 0 {
 		curOffset := i.Offset()
 		offsetEnd := i.Offset() + length
@@ -81,7 +78,6 @@ func parseDescriptors(i *bytesiter.Iterator) (o []Descriptor, err error) {
 		o = make([]Descriptor, descrCount)
 
 		for idx := range o {
-			// Get next 2 bytes
 			if bs, err = i.NextBytesNoCopy(2); err != nil || len(bs) < 2 {
 				err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 				return
@@ -92,7 +88,6 @@ func parseDescriptors(i *bytesiter.Iterator) (o []Descriptor, err error) {
 				Length: bs[1],
 			}
 
-			// Parse data
 			if h.Length > 0 {
 				// Unfortunately there's no way to be sure the real descriptor length is the same as the one indicated
 				// previously therefore we must fetch bytes in descriptor functions and seek at the end

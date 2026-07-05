@@ -39,65 +39,51 @@ type SDTService struct {
 
 // parseSDTSection parses an SDT section
 func parseSDTSection(i *bytesiter.Iterator, offsetSectionsEnd int, tableIDExtension uint16) (d *SDT, err error) {
-	// Create data
 	d = &SDT{TransportStreamID: tableIDExtension}
 
-	// Get next bytes
 	var bs []byte
 	if bs, err = i.NextBytesNoCopy(2); err != nil || len(bs) < 2 {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return
 	}
 
-	// Original network ID
 	d.OriginalNetworkID = binary.BigEndian.Uint16(bs)
 
 	// Reserved for future use
 	i.Skip(1)
 
-	// Loop until end of section data is reached
 	for i.Offset() < offsetSectionsEnd {
-		// Create service
 		s := SDTService{}
 
-		// Get next bytes
 		if bs, err = i.NextBytesNoCopy(2); err != nil || len(bs) < 2 {
 			err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 			return
 		}
 
-		// Service ID
 		s.ServiceID = binary.BigEndian.Uint16(bs)
 
-		// Get next byte
 		var b byte
 		if b, err = i.NextByte(); err != nil {
 			err = fmt.Errorf("astits: fetching next byte failed: %w", err)
 			return
 		}
 
-		// EIT schedule flag
 		s.HasEITSchedule = uint8(b&0x2) > 0
 
-		// EIT present/following flag
 		s.HasEITPresentFollowing = uint8(b&0x1) > 0
 
-		// Get next byte
 		if b, err = i.NextByte(); err != nil {
 			err = fmt.Errorf("astits: fetching next byte failed: %w", err)
 			return
 		}
 
-		// Running status
 		s.RunningStatus = b >> 5
 
-		// Free CA mode
 		s.HasFreeCSAMode = uint8(b&0x10) > 0
 
 		// We need to rewind since the current byte is used by the descriptor as well
 		i.Skip(-1)
 
-		// Descriptors
 		var dn int
 		if s.Descriptors, dn, err = descriptor.Parse(i.Bytes()); err != nil {
 			err = fmt.Errorf("astits: parsing descriptors failed: %w", err)
@@ -105,7 +91,6 @@ func parseSDTSection(i *bytesiter.Iterator, offsetSectionsEnd int, tableIDExtens
 		}
 		i.Skip(dn)
 
-		// Append service
 		d.Services = append(d.Services, s)
 	}
 	return

@@ -53,7 +53,7 @@ func BenchmarkParsePMTSection(b *testing.B) {
 	bs := pmtBytes()
 
 	for i := 0; i < b.N; i++ {
-		parsePMTSection(bytesiter.New(bs), len(bs), uint16(1))
+		_, _ = parsePMTSection(bytesiter.New(bs), len(bs), uint16(1))
 	}
 }
 

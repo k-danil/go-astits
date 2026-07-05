@@ -108,29 +108,24 @@ type SectionSyntaxHeader struct {
 }
 
 // SectionSyntaxData represents a PSI section syntax data
-type SectionSyntaxData interface{}
+type SectionSyntaxData any
 
 // Parse parses a PSI data
 func Parse(bs []byte) (d *Data, err error) {
 	i := bytesiter.New(bs)
 
-	// Init data
 	d = &Data{}
 
-	// Get next byte
 	var b byte
 	if b, err = i.NextByte(); err != nil {
 		err = fmt.Errorf("astits: fetching next byte failed: %w", err)
 		return
 	}
 
-	// Pointer field
 	d.PointerField = int(b)
 
-	// Pointer filler bytes
 	i.Skip(d.PointerField)
 
-	// Parse sections
 	var s Section
 	var stop bool
 	for i.HasBytesLeft() {
@@ -148,38 +143,30 @@ func Parse(bs []byte) (d *Data, err error) {
 
 // parsePSISection parses a PSI section
 func parsePSISection(i *bytesiter.Iterator) (s Section, stop bool, err error) {
-	// Parse header
 	var offsets psiOffsets
 	if offsets, stop, err = s.Header.parsePSISectionHeader(i); err != nil {
 		err = fmt.Errorf("astits: parsing PSI section header failed: %w", err)
 		return
 	}
 
-	// Check whether we need to stop the parsing
 	if stop {
 		return
 	}
 
-	// Check whether there's a syntax section
 	if s.Header.SectionLength > 0 {
-		// Parse syntax
 		if s.Syntax, err = parsePSISectionSyntax(i, &s.Header, offsets.sectionsEnd); err != nil {
 			err = fmt.Errorf("astits: parsing PSI section syntax failed: %w", err)
 			return
 		}
 
-		// Process CRC32
 		if s.Header.TableID.hasCRC32() {
-			// Seek to the end of the sections
 			i.Seek(offsets.sectionsEnd)
 
-			// Parse CRC32
 			if s.CRC32, err = parseCRC32(i); err != nil {
 				err = fmt.Errorf("astits: parsing CRC32 failed: %w", err)
 				return
 			}
 
-			// Get CRC32 data
 			i.Seek(offsets.start)
 			var crc32Data []byte
 			if crc32Data, err = i.NextBytesNoCopy(offsets.sectionsEnd - offsets.start); err != nil {
@@ -187,10 +174,8 @@ func parsePSISection(i *bytesiter.Iterator) (s Section, stop bool, err error) {
 				return
 			}
 
-			// Compute CRC32
 			crc32 := ts.ComputeCRC32(crc32Data)
 
-			// Check CRC32
 			if crc32 != s.CRC32 {
 				err = fmt.Errorf("astits: table CRC32 %x != computed CRC32 %x: %w", s.CRC32, crc32, ErrCRC32Mismatch)
 				return
@@ -198,7 +183,6 @@ func parsePSISection(i *bytesiter.Iterator) (s Section, stop bool, err error) {
 		}
 	}
 
-	// Seek to the end of the section
 	i.Seek(offsets.end)
 	return
 }
@@ -229,22 +213,18 @@ type psiOffsets struct {
 func (h *SectionHeader) parsePSISectionHeader(i *bytesiter.Iterator) (offsets psiOffsets, stop bool, err error) {
 	offsets.start = i.Offset()
 
-	// Get next byte
 	var b byte
 	if b, err = i.NextByte(); err != nil {
 		err = fmt.Errorf("astits: fetching next byte failed: %w", err)
 		return
 	}
 
-	// Table ID
 	h.TableID = TableID(b)
 
-	// Check whether we need to stop the parsing
 	if stop = h.TableID.StopsParsing(); stop {
 		return
 	}
 
-	// Get next bytes
 	var bs []byte
 	if bs, err = i.NextBytesNoCopy(2); err != nil || len(bs) < 2 {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
@@ -252,16 +232,12 @@ func (h *SectionHeader) parsePSISectionHeader(i *bytesiter.Iterator) (offsets ps
 	}
 
 	val := binary.BigEndian.Uint16(bs)
-	// Section syntax indicator
 	h.SectionSyntaxIndicator = val&0x8000 > 0
 
-	// Private bit
 	h.PrivateBit = val&0x4000 > 0
 
-	// Section length
 	h.SectionLength = val & 0xfff
 
-	// Offsets
 	offsets.sectionsStart = i.Offset()
 	offsets.end = offsets.sectionsStart + int(h.SectionLength)
 	offsets.sectionsEnd = offsets.end
@@ -348,10 +324,8 @@ func (t TableID) IsUnknown() bool {
 
 // parsePSISectionSyntax parses a PSI section syntax
 func parsePSISectionSyntax(i *bytesiter.Iterator, h *SectionHeader, offsetSectionsEnd int) (s *SectionSyntax, err error) {
-	// Init
 	s = &SectionSyntax{}
 
-	// Header
 	if h.TableID.hasPSISyntaxHeader() {
 		if err = s.Header.parsePSISectionSyntaxHeader(i); err != nil {
 			err = fmt.Errorf("astits: parsing PSI section syntax header failed: %w", err)
@@ -359,7 +333,6 @@ func parsePSISectionSyntax(i *bytesiter.Iterator, h *SectionHeader, offsetSectio
 		}
 	}
 
-	// Parse data
 	if s.Data, err = parsePSISectionSyntaxData(i, h, &s.Header, offsetSectionsEnd); err != nil {
 		err = fmt.Errorf("astits: parsing PSI section syntax data failed: %w", err)
 		return
@@ -369,14 +342,12 @@ func parsePSISectionSyntax(i *bytesiter.Iterator, h *SectionHeader, offsetSectio
 
 // parsePSISectionSyntaxHeader parses a PSI section syntax header
 func (h *SectionSyntaxHeader) parsePSISectionSyntaxHeader(i *bytesiter.Iterator) (err error) {
-	// Get next 2 bytes
 	var bs []byte
 	if bs, err = i.NextBytesNoCopy(2); err != nil || len(bs) < 2 {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return
 	}
 
-	// Table ID extension
 	h.TableIDExtension = binary.BigEndian.Uint16(bs)
 
 	// Get next byte
@@ -386,35 +357,28 @@ func (h *SectionSyntaxHeader) parsePSISectionSyntaxHeader(i *bytesiter.Iterator)
 		return
 	}
 
-	// Version number
 	h.VersionNumber = b & 0x3f >> 1
 
-	// Current/Next indicator
 	h.CurrentNextIndicator = b&0x1 > 0
 
-	// Get next byte
 	if b, err = i.NextByte(); err != nil {
 		err = fmt.Errorf("astits: fetching next byte failed: %w", err)
 		return
 	}
 
-	// Section number
 	h.SectionNumber = b
 
-	// Get next byte
 	if b, err = i.NextByte(); err != nil {
 		err = fmt.Errorf("astits: fetching next byte failed: %w", err)
 		return
 	}
 
-	// Last section number
 	h.LastSectionNumber = b
 	return
 }
 
 // parsePSISectionSyntaxData parses a PSI section data
 func parsePSISectionSyntaxData(i *bytesiter.Iterator, h *SectionHeader, sh *SectionSyntaxHeader, offsetSectionsEnd int) (d SectionSyntaxData, err error) {
-	// Switch on table type
 	switch h.TableID {
 	case TableIDBAT:
 		// TODO Parse BAT

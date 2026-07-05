@@ -138,7 +138,7 @@ func TestDemuxerNextUnknownDataPackets(t *testing.T) {
 		PayloadUnitStartIndicator: true,
 		HasPayload:                true,
 	}, &ts.PacketAdaptationField{}, []byte{0x01, 0x02, 0x03, 0x04}, true)
-	bufWriter.Write(b1)
+	_ = bufWriter.Write(b1)
 
 	dmx := New(context.Background(), bytes.NewReader(buf.Bytes()),
 		WithPacketSize(188))
@@ -314,9 +314,9 @@ func fuzzSeedStream() []byte {
 	w := bitstest.NewWriter(buf)
 	bs := psiBytes()
 	b1, _ := packet(ts.PacketHeader{ContinuityCounter: uint8(0), PayloadUnitStartIndicator: true, PID: ts.PIDPAT}, &ts.PacketAdaptationField{}, bs[:147], true)
-	w.Write(b1)
+	_ = w.Write(b1)
 	b2, _ := packet(ts.PacketHeader{ContinuityCounter: uint8(1), PID: ts.PIDPAT}, &ts.PacketAdaptationField{}, bs[147:], true)
-	w.Write(b2)
+	_ = w.Write(b2)
 	return buf.Bytes()
 }
 

@@ -22,45 +22,37 @@ type Service struct {
 }
 
 func newDescriptorService(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {
-	// Get next byte
 	var b byte
 	if b, err = i.NextByte(); err != nil {
 		err = fmt.Errorf("astits: fetching next byte failed: %w", err)
 		return
 	}
 
-	// Create descriptor
 	d := &Service{
 		Header: h,
 		Type:   b,
 	}
 	dd = d
 
-	// Get next byte
 	if b, err = i.NextByte(); err != nil {
 		err = fmt.Errorf("astits: fetching next byte failed: %w", err)
 		return
 	}
 
-	// Provider length
 	providerLength := int(b)
 
-	// Provider
 	if d.Provider, err = i.NextBytes(providerLength); err != nil {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return
 	}
 
-	// Get next byte
 	if b, err = i.NextByte(); err != nil {
 		err = fmt.Errorf("astits: fetching next byte failed: %w", err)
 		return
 	}
 
-	// Name length
 	nameLength := int(b)
 
-	// Name
 	if d.Name, err = i.NextBytes(nameLength); err != nil {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return

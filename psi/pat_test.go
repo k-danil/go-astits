@@ -48,7 +48,7 @@ func BenchmarkParsePATSection(b *testing.B) {
 	bs := patBytes()
 
 	for i := 0; i < b.N; i++ {
-		parsePATSection(bytesiter.New(bs), len(bs), uint16(1))
+		_, _ = parsePATSection(bytesiter.New(bs), len(bs), uint16(1))
 	}
 }
 

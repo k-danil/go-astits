@@ -25,7 +25,7 @@ const (
 const syncByte byte = '\x47'
 
 var poolOfPacket = sync.Pool{
-	New: func() interface{} {
+	New: func() any {
 		return &Packet{}
 	},
 }
@@ -196,7 +196,6 @@ func (p *Packet) parse(bs []byte, s PacketSkipper) (skip bool, err error) {
 	hdr := len(bs) - PacketSize + 1
 	p.Header.parseBytes(bs[hdr : hdr+3 : hdr+3])
 
-	// Skip packet
 	if s(p) {
 		return true, nil
 	}
@@ -206,7 +205,6 @@ func (p *Packet) parse(bs []byte, s PacketSkipper) (skip bool, err error) {
 	p.AdaptationField = nil
 	p.Payload = nil
 
-	// Parse adaptation field
 	if p.Header.HasAdaptationField {
 		p.af.Reset()
 		p.AdaptationField = &p.af
@@ -215,7 +213,6 @@ func (p *Packet) parse(bs []byte, s PacketSkipper) (skip bool, err error) {
 		}
 	}
 
-	// Build payload
 	if p.Header.HasPayload {
 		payloadAt := hdr + 3
 		if p.Header.HasAdaptationField {
@@ -259,7 +256,6 @@ func (af *PacketAdaptationField) Parse(bs []byte) (n int, err error) {
 	o := 1
 	bodyStart := o
 
-	// Valid length
 	if af.Length > 0 {
 		if o >= len(bs) {
 			return o, ErrShortPacket
@@ -267,7 +263,6 @@ func (af *PacketAdaptationField) Parse(bs []byte) (n int, err error) {
 		b := bs[o]
 		o++
 
-		// Flags
 		af.DiscontinuityIndicator = b&0x80 > 0
 		af.RandomAccessIndicator = b&0x40 > 0
 		af.ElementaryStreamPriorityIndicator = b&0x20 > 0
@@ -277,7 +272,6 @@ func (af *PacketAdaptationField) Parse(bs []byte) (n int, err error) {
 		af.HasTransportPrivateData = b&0x02 > 0
 		af.HasAdaptationExtensionField = b&0x01 > 0
 
-		// PCR
 		if af.HasPCR {
 			var pn int
 			if pn, err = af.PCR.ParsePCR(bs[o:]); err != nil {
@@ -286,7 +280,6 @@ func (af *PacketAdaptationField) Parse(bs []byte) (n int, err error) {
 			o += pn
 		}
 
-		// OPCR
 		if af.HasOPCR {
 			var pn int
 			if pn, err = af.OPCR.ParsePCR(bs[o:]); err != nil {
@@ -295,7 +288,6 @@ func (af *PacketAdaptationField) Parse(bs []byte) (n int, err error) {
 			o += pn
 		}
 
-		// Splicing countdown
 		if af.HasSplicingCountdown {
 			if o >= len(bs) {
 				return o, ErrShortPacket
@@ -304,7 +296,6 @@ func (af *PacketAdaptationField) Parse(bs []byte) (n int, err error) {
 			o++
 		}
 
-		// Transport private data
 		if af.HasTransportPrivateData {
 			if o >= len(bs) {
 				return o, ErrShortPacket
@@ -324,7 +315,6 @@ func (af *PacketAdaptationField) Parse(bs []byte) (n int, err error) {
 			}
 		}
 
-		// Adaptation extension
 		if af.HasAdaptationExtensionField {
 			af.AdaptationExtensionField = &PacketAdaptationExtensionField{}
 			var en int
@@ -361,12 +351,10 @@ func (afe *PacketAdaptationExtensionField) Parse(bs []byte) (n int, err error) {
 		b := bs[o]
 		o++
 
-		// Basic
 		afe.HasLegalTimeWindow = b&0x80 > 0
 		afe.HasPiecewiseRate = b&0x40 > 0
 		afe.HasSeamlessSplice = b&0x20 > 0
 
-		// Legal time window
 		if afe.HasLegalTimeWindow {
 			if o+2 > len(bs) {
 				return o, ErrShortPacket
@@ -376,7 +364,6 @@ func (afe *PacketAdaptationExtensionField) Parse(bs []byte) (n int, err error) {
 			o += 2
 		}
 
-		// Piecewise rate
 		if afe.HasPiecewiseRate {
 			if o+3 > len(bs) {
 				return o, ErrShortPacket
@@ -385,7 +372,6 @@ func (afe *PacketAdaptationExtensionField) Parse(bs []byte) (n int, err error) {
 			o += 3
 		}
 
-		// Seamless splice
 		if afe.HasSeamlessSplice {
 			if o >= len(bs) {
 				return o, ErrShortPacket

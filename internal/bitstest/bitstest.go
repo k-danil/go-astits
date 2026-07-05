@@ -22,7 +22,7 @@ func (w *Writer) WriteBit(set bool) {
 	}
 	w.bits++
 	if w.bits == 8 {
-		w.w.Write([]byte{w.cache})
+		_, _ = w.w.Write([]byte{w.cache})
 		w.cache = 0
 		w.bits = 0
 	}

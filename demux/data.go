@@ -23,7 +23,7 @@ type PES struct {
 }
 
 var poolOfPES = sync.Pool{
-	New: func() interface{} {
+	New: func() any {
 		return &PES{}
 	},
 }

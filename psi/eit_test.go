@@ -13,7 +13,7 @@ import (
 var eit = &EIT{
 	Events: []EITEvent{{
 		Descriptors:    descriptors,
-		Duration:       dvbDurationSeconds,
+		Duration:       dvbSecondsDuration,
 		EventID:        6,
 		HasFreeCSAMode: true,
 		RunningStatus:  7,
@@ -35,7 +35,7 @@ func eitBytes() []byte {
 	_ = w.Write(uint8(5))                // Last table id
 	_ = w.Write(uint16(6))               // Event #1 id
 	_ = w.Write(dvbTimeBytes)            // Event #1 start time
-	_ = w.Write(dvbDurationSecondsBytes) // Event #1 duration
+	_ = w.Write(dvbSecondsDurationBytes) // Event #1 duration
 	_ = w.Write("111")                   // Event #1 running status
 	_ = w.Write("1")                     // Event #1 free CA mode
 	descriptorsBytes(w)                  // Event #1 descriptors

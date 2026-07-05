@@ -14,13 +14,11 @@ type NetworkName struct {
 }
 
 func newDescriptorNetworkName(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
-	// Create descriptor
 	d := &NetworkName{
 		Header: h,
 	}
 	dd = d
 
-	// Name
 	if d.Name, err = i.NextBytes(offsetEnd - i.Offset()); err != nil {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return

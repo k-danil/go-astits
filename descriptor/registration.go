@@ -16,21 +16,18 @@ type Registration struct {
 }
 
 func newDescriptorRegistration(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
-	// Get next bytes
 	var bs []byte
 	if bs, err = i.NextBytesNoCopy(4); err != nil || len(bs) < 4 {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return
 	}
 
-	// Create descriptor
 	d := &Registration{
 		Header:           h,
 		FormatIdentifier: binary.BigEndian.Uint32(bs),
 	}
 	dd = d
 
-	// Additional identification info
 	if i.Offset() < offsetEnd {
 		if d.AdditionalIdentificationInfo, err = i.NextBytes(offsetEnd - i.Offset()); err != nil {
 			err = fmt.Errorf("astits: fetching next bytes failed: %w", err)

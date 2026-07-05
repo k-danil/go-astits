@@ -347,21 +347,6 @@ var pesTestCases = []pesTestCase{
 	},
 }
 
-// used by TestParseData
-func pesWithHeaderBytes() []byte {
-	buf := bytes.Buffer{}
-	w := bitstest.NewWriter(&buf)
-	pesTestCases[1].headerBytesFunc(w, true, true)
-	pesTestCases[1].optionalHeaderBytesFunc(w, true, true)
-	pesTestCases[1].bytesFunc(w, true, true)
-	return buf.Bytes()
-}
-
-// used by TestParseData
-func pesWithHeader() *Data {
-	return pesTestCases[1].pesData
-}
-
 // embedPESFixture normalizes a fixture to its post-parse shape: OptionalHeader
 // points into the embedded Header storage
 func embedPESFixture(pd *Data) *Data {
@@ -463,7 +448,7 @@ func BenchmarkWritePESHeader(b *testing.B) {
 		b.Run(tc.name, func(b *testing.B) {
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {
-				wh.putBytes(bs, len(tc.pesData.Data))
+				_, _ = wh.putBytes(bs, len(tc.pesData.Data))
 			}
 		})
 	}
@@ -501,7 +486,7 @@ func BenchmarkParsePESData(b *testing.B) {
 		b.Run(tc.name, func(b *testing.B) {
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {
-				d.Parse(bss[ti])
+				_ = d.Parse(bss[ti])
 				*d = Data{}
 			}
 		})
@@ -513,29 +498,29 @@ func BenchmarkParsePESData(b *testing.B) {
 func TestParseOptionalHeaderSkipsPackHeader(t *testing.T) {
 	buf := bytes.Buffer{}
 	w := bitstest.NewWriter(&buf)
-	w.Write("10")               // Marker bits
-	w.Write("00")               // Scrambling control
-	w.Write("0")                // Priority
-	w.Write("0")                // Data alignment indicator
-	w.Write("0")                // Copyright
-	w.Write("0")                // Original or copy
-	w.Write("00")               // PTS/DTS indicator
-	w.Write("0")                // ESCR flag
-	w.Write("0")                // ES rate flag
-	w.Write("0")                // DSM trick mode flag
-	w.Write("0")                // Additional copy flag
-	w.Write("0")                // CRC flag
-	w.Write("1")                // Extension flag
-	w.Write(uint8(9))           // Header length
-	w.Write("0")                // Private data flag
-	w.Write("1")                // Pack header field flag
-	w.Write("0")                // Program packet sequence counter flag
-	w.Write("1")                // PSTD buffer flag
-	w.Write("111")              // Dummy
-	w.Write("0")                // Extension 2 flag
-	w.Write(uint8(4))           // Pack field: pack_header length
-	w.Write(uint32(0xdeadbeef)) // pack_header body to be skipped
-	w.Write("0111010101010101") // PSTD buffer
+	_ = w.Write("10")               // Marker bits
+	_ = w.Write("00")               // Scrambling control
+	_ = w.Write("0")                // Priority
+	_ = w.Write("0")                // Data alignment indicator
+	_ = w.Write("0")                // Copyright
+	_ = w.Write("0")                // Original or copy
+	_ = w.Write("00")               // PTS/DTS indicator
+	_ = w.Write("0")                // ESCR flag
+	_ = w.Write("0")                // ES rate flag
+	_ = w.Write("0")                // DSM trick mode flag
+	_ = w.Write("0")                // Additional copy flag
+	_ = w.Write("0")                // CRC flag
+	_ = w.Write("1")                // Extension flag
+	_ = w.Write(uint8(9))           // Header length
+	_ = w.Write("0")                // Private data flag
+	_ = w.Write("1")                // Pack header field flag
+	_ = w.Write("0")                // Program packet sequence counter flag
+	_ = w.Write("1")                // PSTD buffer flag
+	_ = w.Write("111")              // Dummy
+	_ = w.Write("0")                // Extension 2 flag
+	_ = w.Write(uint8(4))           // Pack field: pack_header length
+	_ = w.Write(uint32(0xdeadbeef)) // pack_header body to be skipped
+	_ = w.Write("0111010101010101") // PSTD buffer
 
 	var h OptionalHeader
 	_, err := h.parseBytes(buf.Bytes(), 0)

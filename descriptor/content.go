@@ -22,22 +22,18 @@ type ContentItem struct {
 }
 
 func newDescriptorContent(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
-	// Init
 	d := &Content{
 		Header: h,
 	}
 	dd = d
 
-	// Add items
 	for i.Offset() < offsetEnd {
-		// Get next bytes
 		var bs []byte
 		if bs, err = i.NextBytesNoCopy(2); err != nil || len(bs) < 2 {
 			err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 			return
 		}
 
-		// Append item
 		d.Items = append(d.Items, ContentItem{
 			ContentNibbleLevel1: bs[0] >> 4,
 			ContentNibbleLevel2: bs[0] & 0xf,

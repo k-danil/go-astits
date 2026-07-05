@@ -13,7 +13,6 @@ import (
 )
 
 const (
-	startPID           uint16 = 0x0100
 	pmtStartPID        uint16 = 0x1000
 	programNumberStart uint16 = 1
 	packetMaxPayload          = 184
@@ -489,10 +488,7 @@ func (m *Muxer) generatePMT() (err error) {
 	l := len(m.pmtData)
 	for i := 0; i <= l/packetMaxPayload; i++ {
 		start := i * packetMaxPayload
-		stop := start + packetMaxPayload
-		if stop > l {
-			stop = l
-		}
+		stop := min(start+packetMaxPayload, l)
 		pkt := ts.Packet{
 			Header: ts.PacketHeader{
 				HasPayload:                true,

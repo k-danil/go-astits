@@ -14,13 +14,11 @@ type Unknown struct {
 }
 
 func newDescriptorUnknown(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {
-	// Create descriptor
 	d := &Unknown{
 		Header: h,
 	}
 	dd = d
 
-	// Get next bytes
 	if d.Content, err = i.NextBytes(int(h.Length)); err != nil {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return

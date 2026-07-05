@@ -18,7 +18,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	write(fmt.Fprintf(file, "%s\n%s\n\n", disclaimer, packet))
 	generateTable(file)
@@ -33,7 +33,7 @@ func generateTable(w io.Writer) {
 			if (k^j)&0x80000000 != 0 {
 				k = (k << 1) ^ 0x04c11db7
 			} else {
-				k = (k << 1) ^ 0
+				k = k << 1
 			}
 		}
 

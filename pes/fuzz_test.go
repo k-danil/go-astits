@@ -18,6 +18,6 @@ func FuzzParse(f *testing.F) {
 	}
 	f.Fuzz(func(t *testing.T, bs []byte) {
 		var d Data
-		d.Parse(bs)
+		_ = d.Parse(bs)
 	})
 }

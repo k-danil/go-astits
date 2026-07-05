@@ -28,14 +28,12 @@ type ISO639Item struct {
 }
 
 func newDescriptorISO639LanguageAndAudioType(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
-	// Get next bytes
 	var bs []byte
 	if bs, err = i.NextBytesNoCopy(offsetEnd - i.Offset()); err != nil {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return
 	}
 
-	// Create descriptor
 	d := &ISO639LanguageAndAudioType{
 		Header: h,
 		Items:  make([]ISO639Item, 0, len(bs)/4),

@@ -87,7 +87,7 @@ func BenchmarkWritePacket(b *testing.B) {
 
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		ep.Put(scratch)
+		_, _ = ep.Put(scratch)
 	}
 }
 
@@ -239,7 +239,7 @@ func BenchmarkWritePacketAdaptationField(b *testing.B) {
 
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		packetAdaptationField.Put(bs)
+		_, _ = packetAdaptationField.Put(bs)
 	}
 }
 
@@ -269,7 +269,7 @@ func BenchmarkParsePCR(b *testing.B) {
 
 	var v ClockReference
 	for i := 0; i < b.N; i++ {
-		v.ParsePCR(bs)
+		_, _ = v.ParsePCR(bs)
 	}
 	_ = v
 }
@@ -297,7 +297,7 @@ func BenchmarkParsePacket(b *testing.B) {
 	b.Run("ParsePacket", func(b *testing.B) {
 		b.ReportAllocs()
 		for i := 0; i < b.N; i++ {
-			p.parse(bs, EmptySkipper)
+			_, _ = p.parse(bs, EmptySkipper)
 		}
 		p.Reset()
 	})

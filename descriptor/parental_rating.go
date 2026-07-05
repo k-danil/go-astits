@@ -30,16 +30,13 @@ func (d ParentalRatingItem) MinimumAge() int {
 }
 
 func newDescriptorParentalRating(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
-	// Create descriptor
 	d := &ParentalRating{
 		Header: h,
 		Items:  make([]ParentalRatingItem, (offsetEnd-i.Offset())/4),
 	}
 	dd = d
 
-	// Add items
 	for idx := range d.Items {
-		// Get next bytes
 		var bs []byte
 		if bs, err = i.NextBytesNoCopy(4); err != nil {
 			err = fmt.Errorf("astits: fetching next bytes failed: %w", err)

@@ -28,16 +28,13 @@ type LocalTimeOffsetItem struct {
 }
 
 func newDescriptorLocalTimeOffset(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
-	// Init
 	d := &LocalTimeOffset{
 		Header: h,
 		Items:  make([]LocalTimeOffsetItem, (offsetEnd-i.Offset())/13),
 	}
 	dd = d
 
-	// Add items
 	for idx := range d.Items {
-		// Country code
 		var bs []byte
 		if bs, err = i.NextBytesNoCopy(3); err != nil {
 			err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
@@ -45,32 +42,26 @@ func newDescriptorLocalTimeOffset(i *bytesiter.Iterator, h Header, offsetEnd int
 		}
 		copy(d.Items[idx].CountryCode[:], bs)
 
-		// Get next byte
 		var b byte
 		if b, err = i.NextByte(); err != nil {
 			err = fmt.Errorf("astits: fetching next byte failed: %w", err)
 			return
 		}
 
-		// Country region ID
 		d.Items[idx].CountryRegionID = b >> 2
 
-		// Local time offset polarity
 		d.Items[idx].LocalTimeOffsetPolarity = b&0x1 > 0
 
-		// Local time offset
 		if d.Items[idx].LocalTimeOffset, err = dvb.ParseDurationMinutes(i); err != nil {
 			err = fmt.Errorf("astits: parsing DVB durationminutes failed: %w", err)
 			return
 		}
 
-		// Time of change
 		if d.Items[idx].TimeOfChange, err = dvb.ParseTime(i); err != nil {
 			err = fmt.Errorf("astits: parsing DVB time failed: %w", err)
 			return
 		}
 
-		// Next time offset
 		if d.Items[idx].NextTimeOffset, err = dvb.ParseDurationMinutes(i); err != nil {
 			err = fmt.Errorf("astits: parsing DVB duration minutes failed: %w", err)
 			return

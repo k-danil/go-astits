@@ -15,7 +15,7 @@ func FuzzPacketParse(f *testing.F) {
 	f.Fuzz(func(t *testing.T, bs []byte) {
 		p := NewPacket()
 		defer p.Close()
-		p.parse(bs, EmptySkipper)
+		_, _ = p.parse(bs, EmptySkipper)
 	})
 }
 
@@ -25,7 +25,7 @@ func FuzzAdaptationFieldParse(f *testing.F) {
 	f.Add([]byte{0x01, 0x40})
 	f.Fuzz(func(t *testing.T, bs []byte) {
 		var af PacketAdaptationField
-		af.Parse(bs)
+		_, _ = af.Parse(bs)
 	})
 }
 
@@ -33,8 +33,8 @@ func FuzzClockParse(f *testing.F) {
 	f.Add(pcrBytes())
 	f.Fuzz(func(t *testing.T, bs []byte) {
 		var cr ClockReference
-		cr.ParsePCR(bs)
-		cr.ParsePTSDTS(bs)
-		cr.ParseESCR(bs)
+		_, _ = cr.ParsePCR(bs)
+		_, _ = cr.ParsePTSDTS(bs)
+		_, _ = cr.ParseESCR(bs)
 	})
 }
