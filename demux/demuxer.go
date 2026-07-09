@@ -41,6 +41,7 @@ type Demuxer struct {
 	optZeroCopyBatch uint
 	optDVBTables     bool
 	optPSIRepeats    bool
+	optPacketHook    func(*ts.Packet)
 
 	packetBuffer *ts.PacketBuffer
 	acc          accumulator
@@ -154,6 +155,15 @@ func WithPSIRepeats() func(*Demuxer) {
 	}
 }
 
+// WithPacketHook runs fn on every raw packet as it is read, before unit
+// assembly, letting one traversal serve both packet- and unit-level work. The
+// packet is valid only for the duration of the call.
+func WithPacketHook(fn func(*ts.Packet)) func(*Demuxer) {
+	return func(d *Demuxer) {
+		d.optPacketHook = fn
+	}
+}
+
 func (dmx *Demuxer) nextPacket(p *ts.Packet) (err error) {
 	if dmx.packetBuffer == nil {
 		if dmx.packetBuffer, err = ts.NewPacketBuffer(dmx.r, dmx.optPacketSize, dmx.optSkipErrLimit, dmx.optPacketSkipper, dmx.optZeroCopyBatch); err != nil {
@@ -163,9 +173,13 @@ func (dmx *Demuxer) nextPacket(p *ts.Packet) (err error) {
 	}
 
 	if err = dmx.packetBuffer.Next(p); err != nil {
-		if err != ts.ErrNoMorePackets {
+		if !errors.Is(err, ts.ErrNoMorePackets) {
 			err = fmt.Errorf("astits: fetching next packet from buffer failed: %w", err)
 		}
+		return
+	}
+	if dmx.optPacketHook != nil {
+		dmx.optPacketHook(p)
 	}
 	return
 }

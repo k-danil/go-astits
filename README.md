@@ -73,6 +73,10 @@ How:
   passthrough and PID rewrite over `Raw()` run without leaving zero-copy.
 - **`ts.PacketSkipper`** — header-level filtering before any payload work.
 - **`Packet.Offset`** — a byte map of the stream, correct even with a skipper installed.
+- **`demux.WithPacketHook`** — a callback run on every raw packet as it is read (after the
+  skipper, before unit assembly), so one `Next` traversal can serve both packet-level work
+  (indexing, PID/PCR sampling) and unit-level demuxing without a second pass. The packet is
+  valid only for the duration of the call.
 - **PSI dedup**: byte-identical repeats of PAT/PMT/… are neither parsed nor emitted (unless
   `WithPSIRepeats` is set, and even then repeats reuse the cached parse — no re-parse).
 - **Data ownership**: `AdaptationField`/`TransportPrivateData` inside a claimed `demux.PES`
