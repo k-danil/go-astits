@@ -27,6 +27,12 @@ const (
 	EventEIT
 	EventTDT
 	EventCAT
+	EventBAT
+	EventRST
+	EventDIT
+	EventSIT
+	EventST
+	EventTSDT
 )
 
 // Demuxer represents a demuxer

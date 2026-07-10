@@ -72,7 +72,7 @@ type unit struct {
 func (a *accumulator) isPSIPID(pid uint16) bool {
 	return pid == ts.PIDPAT ||
 		a.programMap.Has(pid) ||
-		(a.dvbTables && (pid == ts.PIDCAT || (pid >= 0x10 && pid <= 0x14) || (pid >= 0x1e && pid <= 0x1f)))
+		(a.dvbTables && (pid == ts.PIDCAT || pid == ts.PIDTSDT || (pid >= 0x10 && pid <= 0x14) || (pid >= 0x1e && pid <= 0x1f)))
 }
 
 // add consumes the packet's payload and appends completed units (zero, one,

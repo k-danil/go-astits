@@ -73,6 +73,18 @@ func tableEventKind(d psi.SectionSyntaxData) (ev Event, ok bool) {
 		return EventEIT, true
 	case *psi.TDT:
 		return EventTDT, true
+	case *psi.BAT:
+		return EventBAT, true
+	case *psi.RST:
+		return EventRST, true
+	case *psi.DIT:
+		return EventDIT, true
+	case *psi.SIT:
+		return EventSIT, true
+	case *psi.ST:
+		return EventST, true
+	case *psi.TSDT:
+		return EventTSDT, true
 	}
 	return 0, false
 }

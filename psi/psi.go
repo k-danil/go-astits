@@ -27,6 +27,7 @@ const (
 	TableTypeST      = "ST"
 	TableTypeTDT     = "TDT"
 	TableTypeTOT     = "TOT"
+	TableTypeTSDT    = "TSDT"
 	TableTypeUnknown = "Unknown"
 )
 
@@ -47,9 +48,10 @@ const maxSectionLength = 1021
 type TableID uint8
 
 const (
-	TableIDPAT TableID = 0x00
-	TableIDCAT TableID = 0x01
-	TableIDPMT TableID = 0x02
+	TableIDPAT  TableID = 0x00
+	TableIDCAT  TableID = 0x01
+	TableIDPMT  TableID = 0x02
+	TableIDTSDT TableID = 0x03
 
 	TableIDNITVariant1 TableID = 0x40
 	TableIDNITVariant2 TableID = 0x41
@@ -273,6 +275,8 @@ func (t TableID) Type() string {
 		return TableTypePAT
 	case t == TableIDPMT:
 		return TableTypePMT
+	case t == TableIDTSDT:
+		return TableTypeTSDT
 	case t == TableIDRST:
 		return TableTypeRST
 	case t == TableIDSDTVariant1, t == TableIDSDTVariant2:
@@ -295,8 +299,11 @@ func (t TableID) hasPSISyntaxHeader() bool {
 	return t == TableIDPAT ||
 		t == TableIDCAT ||
 		t == TableIDPMT ||
+		t == TableIDTSDT ||
+		t == TableIDBAT ||
 		t == TableIDNITVariant1 || t == TableIDNITVariant2 ||
 		t == TableIDSDTVariant1 || t == TableIDSDTVariant2 ||
+		t == TableIDSIT ||
 		(t >= TableIDEITStart && t <= TableIDEITEnd)
 }
 
@@ -314,6 +321,7 @@ func (t TableID) IsUnknown() bool {
 		TableIDNull,
 		TableIDPAT,
 		TableIDPMT,
+		TableIDTSDT,
 		TableIDRST,
 		TableIDSDTVariant1, TableIDSDTVariant2,
 		TableIDSIT,
@@ -387,9 +395,15 @@ func (h *SectionSyntaxHeader) parsePSISectionSyntaxHeader(i *bytesiter.Iterator)
 func parsePSISectionSyntaxData(i *bytesiter.Iterator, h *SectionHeader, sh *SectionSyntaxHeader, offsetSectionsEnd int) (d SectionSyntaxData, err error) {
 	switch h.TableID {
 	case TableIDBAT:
-		// TODO Parse BAT
+		if d, err = parseBATSection(i, sh.TableIDExtension); err != nil {
+			err = fmt.Errorf("astits: parsing BAT section failed: %w", err)
+			return
+		}
 	case TableIDDIT:
-		// TODO Parse DIT
+		if d, err = parseDITSection(i); err != nil {
+			err = fmt.Errorf("astits: parsing DIT section failed: %w", err)
+			return
+		}
 	case TableIDNITVariant1, TableIDNITVariant2:
 		if d, err = parseNITSection(i, sh.TableIDExtension); err != nil {
 			err = fmt.Errorf("astits: parsing NIT section failed: %w", err)
@@ -410,17 +424,28 @@ func parsePSISectionSyntaxData(i *bytesiter.Iterator, h *SectionHeader, sh *Sect
 			err = fmt.Errorf("astits: parsing PMT section failed: %w", err)
 			return
 		}
+	case TableIDTSDT:
+		if d, err = parseTSDTSection(i, offsetSectionsEnd); err != nil {
+			err = fmt.Errorf("astits: parsing TSDT section failed: %w", err)
+			return
+		}
 	case TableIDRST:
-		// TODO Parse RST
+		if d, err = parseRSTSection(i, offsetSectionsEnd); err != nil {
+			err = fmt.Errorf("astits: parsing RST section failed: %w", err)
+			return
+		}
 	case TableIDSDTVariant1, TableIDSDTVariant2:
 		if d, err = parseSDTSection(i, offsetSectionsEnd, sh.TableIDExtension); err != nil {
 			err = fmt.Errorf("astits: parsing PMT section failed: %w", err)
 			return
 		}
 	case TableIDSIT:
-		// TODO Parse SIT
+		if d, err = parseSITSection(i, offsetSectionsEnd); err != nil {
+			err = fmt.Errorf("astits: parsing SIT section failed: %w", err)
+			return
+		}
 	case TableIDST:
-		// TODO Parse ST
+		d = parseSTSection()
 	case TableIDTOT:
 		if d, err = parseTOTSection(i); err != nil {
 			err = fmt.Errorf("astits: parsing TOT section failed: %w", err)

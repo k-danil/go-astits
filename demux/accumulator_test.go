@@ -100,7 +100,7 @@ func TestIsPSIPID(t *testing.T) {
 			pids = append(pids, i)
 		}
 	}
-	assert.Equal(t, []int{0, 1, 16, 17, 18, 19, 20, 30, 31}, pids)
+	assert.Equal(t, []int{0, 1, 2, 16, 17, 18, 19, 20, 30, 31}, pids)
 	pm.Set(uint16(1), uint16(0))
 	assert.True(t, a.isPSIPID(uint16(1)))
 
