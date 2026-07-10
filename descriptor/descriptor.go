@@ -33,6 +33,10 @@ const (
 	TagLinkage                    Tag = 0x4a
 	TagLocalTimeOffset            Tag = 0x58
 	TagMaximumBitrate             Tag = 0xe
+	TagMultilingualBouquetName    Tag = 0x5c
+	TagMultilingualComponent      Tag = 0x5e
+	TagMultilingualNetworkName    Tag = 0x5b
+	TagMultilingualServiceName    Tag = 0x5d
 	TagNVODReference              Tag = 0x4b
 	TagNetworkName                Tag = 0x40
 	TagPDC                        Tag = 0x69
@@ -233,6 +237,14 @@ func (dh Header) parseDescriptor(i *bytesiter.Iterator, offsetEnd int) (d Descri
 		return newDescriptorLocalTimeOffset(i, dh, offsetEnd)
 	case TagMaximumBitrate:
 		return newDescriptorMaximumBitrate(i, dh, offsetEnd)
+	case TagMultilingualBouquetName:
+		return newDescriptorMultilingualBouquetName(i, dh, offsetEnd)
+	case TagMultilingualComponent:
+		return newDescriptorMultilingualComponent(i, dh, offsetEnd)
+	case TagMultilingualNetworkName:
+		return newDescriptorMultilingualNetworkName(i, dh, offsetEnd)
+	case TagMultilingualServiceName:
+		return newDescriptorMultilingualServiceName(i, dh, offsetEnd)
 	case TagNVODReference:
 		return newDescriptorNVODReference(i, dh, offsetEnd)
 	case TagNetworkName:

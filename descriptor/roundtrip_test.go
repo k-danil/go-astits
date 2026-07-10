@@ -333,6 +333,38 @@ var roundtripGenerators = map[string]func(r *rand.Rand) Descriptor{
 			UserDefined: r.UintN(2) == 1, DoNotScramble: r.UintN(2) == 1,
 			ControlRemoteAccessOverInternet: uint8(r.UintN(4)), DoNotApplyRevocation: r.UintN(2) == 1}
 	},
+	"MultilingualNetworkName": func(r *rand.Rand) Descriptor {
+		d := &MultilingualNetworkName{Header: Header{Tag: TagMultilingualNetworkName}}
+		for i := uint(0); i < 1+r.UintN(3); i++ {
+			d.Items = append(d.Items, MultilingualNetworkNameItem{
+				Language: randLang(r), Name: randBytes(r, int(r.UintN(16)))})
+		}
+		return d
+	},
+	"MultilingualBouquetName": func(r *rand.Rand) Descriptor {
+		d := &MultilingualBouquetName{Header: Header{Tag: TagMultilingualBouquetName}}
+		for i := uint(0); i < 1+r.UintN(3); i++ {
+			d.Items = append(d.Items, MultilingualBouquetNameItem{
+				Language: randLang(r), Name: randBytes(r, int(r.UintN(16)))})
+		}
+		return d
+	},
+	"MultilingualComponent": func(r *rand.Rand) Descriptor {
+		d := &MultilingualComponent{Header: Header{Tag: TagMultilingualComponent}, ComponentTag: uint8(r.UintN(256))}
+		for i := uint(0); i < 1+r.UintN(3); i++ {
+			d.Items = append(d.Items, MultilingualComponentItem{
+				Language: randLang(r), Description: randBytes(r, int(r.UintN(16)))})
+		}
+		return d
+	},
+	"MultilingualServiceName": func(r *rand.Rand) Descriptor {
+		d := &MultilingualServiceName{Header: Header{Tag: TagMultilingualServiceName}}
+		for i := uint(0); i < 1+r.UintN(3); i++ {
+			d.Items = append(d.Items, MultilingualServiceNameItem{
+				Language: randLang(r), Provider: randBytes(r, int(r.UintN(12))), Name: randBytes(r, int(r.UintN(12)))})
+		}
+		return d
+	},
 }
 
 func TestRoundtripDescriptors(t *testing.T) {
