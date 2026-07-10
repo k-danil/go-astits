@@ -25,6 +25,7 @@ const (
 	EventSDT
 	EventTOT
 	EventEIT
+	EventTDT
 )
 
 // Demuxer represents a demuxer
@@ -137,7 +138,7 @@ func WithZeroCopyPackets(batchPackets uint) func(*Demuxer) {
 	}
 }
 
-// WithDVBTables enables parsing of the DVB tables (EIT/NIT/SDT/TOT ranges);
+// WithDVBTables enables parsing of the DVB tables (EIT/NIT/SDT/TOT/TDT ranges);
 // without it only PAT and PMT are parsed.
 func WithDVBTables() func(*Demuxer) {
 	return func(d *Demuxer) {

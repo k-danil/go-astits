@@ -69,6 +69,8 @@ func tableEventKind(d psi.SectionSyntaxData) (ev Event, ok bool) {
 		return EventTOT, true
 	case *psi.EIT:
 		return EventEIT, true
+	case *psi.TDT:
+		return EventTDT, true
 	}
 	return 0, false
 }

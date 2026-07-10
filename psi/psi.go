@@ -416,7 +416,10 @@ func parsePSISectionSyntaxData(i *bytesiter.Iterator, h *SectionHeader, sh *Sect
 			return
 		}
 	case TableIDTDT:
-		// TODO Parse TDT
+		if d, err = parseTDTSection(i); err != nil {
+			err = fmt.Errorf("astits: parsing TDT section failed: %w", err)
+			return
+		}
 	}
 
 	if h.TableID >= TableIDEITStart && h.TableID <= TableIDEITEnd {
