@@ -409,6 +409,31 @@ var roundtripGenerators = map[string]func(r *rand.Rand) Descriptor{
 		}
 		return d
 	},
+	"DataBroadcast": func(r *rand.Rand) Descriptor {
+		return &DataBroadcast{Header: Header{Tag: TagDataBroadcast},
+			DataBroadcastID: uint16(r.UintN(1 << 16)), ComponentTag: uint8(r.UintN(256)),
+			Selector: randBytes(r, int(r.UintN(16))), Language: randLang(r), Text: randBytes(r, int(r.UintN(16)))}
+	},
+	"DataBroadcastID": func(r *rand.Rand) Descriptor {
+		return &DataBroadcastID{Header: Header{Tag: TagDataBroadcastID},
+			DataBroadcastID: uint16(r.UintN(1 << 16)), Selector: randBytes(r, int(r.UintN(16)))}
+	},
+	"ShortSmoothingBuffer": func(r *rand.Rand) Descriptor {
+		return &ShortSmoothingBuffer{Header: Header{Tag: TagShortSmoothingBuffer},
+			SBSize: uint8(r.UintN(4)), SBLeakRate: uint8(r.UintN(64)), Reserved: randBytes(r, int(r.UintN(4)))}
+	},
+	"PartialTransportStream": func(r *rand.Rand) Descriptor {
+		return &PartialTransportStream{Header: Header{Tag: TagPartialTransportStream},
+			PeakRate: uint32(r.UintN(1 << 22)), MinimumOverallSmoothingRate: uint32(r.UintN(1 << 22)),
+			MaximumOverallSmoothingBuffer: uint16(r.UintN(1 << 14))}
+	},
+	"Telephone": func(r *rand.Rand) Descriptor {
+		return &Telephone{Header: Header{Tag: TagTelephone},
+			ForeignAvailability: r.UintN(2) == 1, ConnectionType: uint8(r.UintN(32)),
+			CountryPrefix: randBytes(r, int(r.UintN(4))), InternationalAreaCode: randBytes(r, int(r.UintN(8))),
+			OperatorCode: randBytes(r, int(r.UintN(4))), NationalAreaCode: randBytes(r, int(r.UintN(8))),
+			CoreNumber: randBytes(r, int(r.UintN(16)))}
+	},
 }
 
 func TestRoundtripDescriptors(t *testing.T) {

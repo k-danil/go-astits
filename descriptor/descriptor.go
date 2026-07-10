@@ -28,6 +28,8 @@ const (
 	TagContent                    Tag = 0x54
 	TagCountryAvailability        Tag = 0x49
 	TagDSNG                       Tag = 0x68
+	TagDataBroadcast              Tag = 0x64
+	TagDataBroadcastID            Tag = 0x66
 	TagDataStreamAlignment        Tag = 0x6
 	TagEnhancedAC3                Tag = 0x7a
 	TagExtendedEvent              Tag = 0x4e
@@ -46,6 +48,7 @@ const (
 	TagNetworkName                Tag = 0x40
 	TagPDC                        Tag = 0x69
 	TagParentalRating             Tag = 0x55
+	TagPartialTransportStream     Tag = 0x63
 	TagPrivateDataIndicator       Tag = 0xf
 	TagPrivateDataSpecifier       Tag = 0x5f
 	TagRegistration               Tag = 0x5
@@ -57,9 +60,11 @@ const (
 	TagServiceList                Tag = 0x41
 	TagServiceMove                Tag = 0x60
 	TagShortEvent                 Tag = 0x4d
+	TagShortSmoothingBuffer       Tag = 0x61
 	TagStreamIdentifier           Tag = 0x52
 	TagStuffing                   Tag = 0x42
 	TagSubtitling                 Tag = 0x59
+	TagTelephone                  Tag = 0x57
 	TagTeletext                   Tag = 0x56
 	TagTerrestrialDeliverySystem  Tag = 0x5a
 	TagTimeShiftedEvent           Tag = 0x4f
@@ -232,6 +237,10 @@ func (dh Header) parseDescriptor(i *bytesiter.Iterator, offsetEnd int) (d Descri
 		return newDescriptorCountryAvailability(i, dh, offsetEnd)
 	case TagDSNG:
 		return newDescriptorDSNG(i, dh, offsetEnd)
+	case TagDataBroadcast:
+		return newDescriptorDataBroadcast(i, dh, offsetEnd)
+	case TagDataBroadcastID:
+		return newDescriptorDataBroadcastID(i, dh, offsetEnd)
 	case TagDataStreamAlignment:
 		return newDescriptorDataStreamAlignment(i, dh, offsetEnd)
 	case TagEnhancedAC3:
@@ -268,6 +277,8 @@ func (dh Header) parseDescriptor(i *bytesiter.Iterator, offsetEnd int) (d Descri
 		return newDescriptorPDC(i, dh, offsetEnd)
 	case TagParentalRating:
 		return newDescriptorParentalRating(i, dh, offsetEnd)
+	case TagPartialTransportStream:
+		return newDescriptorPartialTransportStream(i, dh, offsetEnd)
 	case TagPrivateDataIndicator:
 		return newDescriptorPrivateDataIndicator(i, dh, offsetEnd)
 	case TagPrivateDataSpecifier:
@@ -290,12 +301,16 @@ func (dh Header) parseDescriptor(i *bytesiter.Iterator, offsetEnd int) (d Descri
 		return newDescriptorServiceMove(i, dh, offsetEnd)
 	case TagShortEvent:
 		return newDescriptorShortEvent(i, dh, offsetEnd)
+	case TagShortSmoothingBuffer:
+		return newDescriptorShortSmoothingBuffer(i, dh, offsetEnd)
 	case TagStreamIdentifier:
 		return newDescriptorStreamIdentifier(i, dh, offsetEnd)
 	case TagStuffing:
 		return newDescriptorStuffing(i, dh, offsetEnd)
 	case TagSubtitling:
 		return newDescriptorSubtitling(i, dh, offsetEnd)
+	case TagTelephone:
+		return newDescriptorTelephone(i, dh, offsetEnd)
 	case TagTeletext, TagVBITeletext:
 		return newDescriptorTeletext(i, dh, offsetEnd)
 	case TagTerrestrialDeliverySystem:
