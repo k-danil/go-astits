@@ -585,6 +585,42 @@ var roundtripGenerators = map[string]func(r *rand.Rand) Descriptor{
 		}
 		return &Extension{Header: Header{Tag: TagExtension}, Tag: TagExtensionVideoDepthRange, VideoDepthRange: vd}
 	},
+	"ExtensionDTSNeural": func(r *rand.Rand) Descriptor {
+		return &Extension{Header: Header{Tag: TagExtension}, Tag: TagExtensionDTSNeural,
+			DTSNeural: &ExtensionDTSNeural{ConfigID: uint8(r.UintN(256)), AdditionalInfo: randBytes(r, int(r.UintN(8)))}}
+	},
+	"ExtensionAC4": func(r *rand.Rand) Descriptor {
+		ac4 := &ExtensionAC4{AC4ConfigFlag: r.UintN(2) == 1, AC4TOCFlag: r.UintN(2) == 1,
+			AdditionalInfo: randBytes(r, int(r.UintN(4)))}
+		if ac4.AC4ConfigFlag {
+			ac4.AC4DialogEnhancementEnabled = r.UintN(2) == 1
+			ac4.AC4ChannelMode = uint8(r.UintN(4))
+		}
+		if ac4.AC4TOCFlag {
+			ac4.TOC = randBytes(r, int(r.UintN(16)))
+		}
+		return &Extension{Header: Header{Tag: TagExtension}, Tag: TagExtensionAC4, AC4: ac4}
+	},
+	"ExtensionDTSHD": func(r *rand.Rand) Descriptor {
+		mkSub := func() *DTSHDSubstream {
+			if r.UintN(2) == 0 {
+				return nil
+			}
+			s := &DTSHDSubstream{ChannelCount: uint8(r.UintN(32)), SamplingFrequency: uint8(r.UintN(16)),
+				LFEFlag: r.UintN(2) == 1, SampleResolution: r.UintN(2) == 1}
+			for i := uint(0); i < 1+r.UintN(4); i++ {
+				a := DTSHDAsset{AssetConstruction: uint8(r.UintN(32)), BitRate: uint16(r.UintN(1 << 13)),
+					VBRFlag: r.UintN(2) == 1, PostEncodeBRScalingFlag: r.UintN(2) == 1,
+					ComponentTypeFlag: r.UintN(2) == 1, LanguageCodeFlag: r.UintN(2) == 1,
+					ComponentType: uint8(r.UintN(256)), Language: randLang(r)}
+				s.Assets = append(s.Assets, a)
+			}
+			return s
+		}
+		return &Extension{Header: Header{Tag: TagExtension}, Tag: TagExtensionDTSHD,
+			DTSHD: &ExtensionDTSHD{CoreSubstream: mkSub(), Substream0: mkSub(), Substream1: mkSub(),
+				Substream2: mkSub(), Substream3: mkSub(), AdditionalInfo: randBytes(r, int(r.UintN(4)))}}
+	},
 	"ExtensionNetworkChangeNotify": func(r *rand.Rand) Descriptor {
 		ncn := &ExtensionNetworkChangeNotify{}
 		for i := uint(0); i < 1+r.UintN(2); i++ {

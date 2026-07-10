@@ -22,10 +22,13 @@ const (
 	TagExtensionTargetRegionName       = 0x0a
 	TagExtensionServiceRelocated       = 0x0b
 	TagExtensionC2DeliverySystem       = 0x0d
+	TagExtensionDTSHD                  = 0x0e
+	TagExtensionDTSNeural              = 0x0f
 	TagExtensionVideoDepthRange        = 0x10
 	TagExtensionT2MI                   = 0x11
 	TagExtensionURILinkage             = 0x13
 	TagExtensionCIAncillaryData        = 0x14
+	TagExtensionAC4                    = 0x15
 	TagExtensionC2BundleDeliverySystem = 0x16
 )
 
@@ -49,6 +52,9 @@ type Extension struct {
 	T2MI                   *ExtensionT2MI
 	URILinkage             *ExtensionURILinkage
 	VideoDepthRange        *ExtensionVideoDepthRange
+	DTSHD                  *ExtensionDTSHD
+	DTSNeural              *ExtensionDTSNeural
+	AC4                    *ExtensionAC4
 	Unknown                []byte
 	Header                 Header
 	Tag                    uint8
@@ -153,6 +159,21 @@ func newDescriptorExtension(i *bytesiter.Iterator, h Header, offsetEnd int) (dd 
 			err = fmt.Errorf("astits: parsing extension video depth range descriptor failed: %w", err)
 			return
 		}
+	case TagExtensionDTSHD:
+		if d.DTSHD, err = newDescriptorExtensionDTSHD(i, offsetEnd); err != nil {
+			err = fmt.Errorf("astits: parsing extension DTS-HD descriptor failed: %w", err)
+			return
+		}
+	case TagExtensionDTSNeural:
+		if d.DTSNeural, err = newDescriptorExtensionDTSNeural(i, offsetEnd); err != nil {
+			err = fmt.Errorf("astits: parsing extension DTS Neural descriptor failed: %w", err)
+			return
+		}
+	case TagExtensionAC4:
+		if d.AC4, err = newDescriptorExtensionAC4(i, offsetEnd); err != nil {
+			err = fmt.Errorf("astits: parsing extension AC-4 descriptor failed: %w", err)
+			return
+		}
 	default:
 		if d.Unknown, err = i.NextBytes(offsetEnd - i.Offset()); err != nil {
 			err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
@@ -200,6 +221,12 @@ func (d *Extension) CalcLength() int {
 		ret += d.URILinkage.CalcLength()
 	case TagExtensionVideoDepthRange:
 		ret += d.VideoDepthRange.CalcLength()
+	case TagExtensionDTSHD:
+		ret += d.DTSHD.CalcLength()
+	case TagExtensionDTSNeural:
+		ret += d.DTSNeural.CalcLength()
+	case TagExtensionAC4:
+		ret += d.AC4.CalcLength()
 	default:
 		ret += len(d.Unknown)
 	}
@@ -246,6 +273,12 @@ func (d *Extension) Append(dst []byte) []byte {
 		dst = d.URILinkage.Append(dst)
 	case TagExtensionVideoDepthRange:
 		dst = d.VideoDepthRange.Append(dst)
+	case TagExtensionDTSHD:
+		dst = d.DTSHD.Append(dst)
+	case TagExtensionDTSNeural:
+		dst = d.DTSNeural.Append(dst)
+	case TagExtensionAC4:
+		dst = d.AC4.Append(dst)
 	default:
 		dst = append(dst, d.Unknown...)
 	}
