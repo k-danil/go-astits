@@ -1,0 +1,50 @@
+package descriptor
+
+import (
+	"encoding/binary"
+	"fmt"
+
+	"github.com/k-danil/go-astits/v2/internal/bytesiter"
+)
+
+// ExtensionC2DeliverySystem represents a C2 delivery system extension
+// descriptor: the DVB-C2 tuning parameters mapping a transport stream to a data
+// PLP.
+// Chapter: 6.4.5.1 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
+type ExtensionC2DeliverySystem struct {
+	C2SystemTuningFrequency     uint32
+	PLPID                       uint8
+	DataSliceID                 uint8
+	C2SystemTuningFrequencyType uint8
+	ActiveOFDMSymbolDuration    uint8
+	GuardInterval               uint8
+}
+
+func newDescriptorExtensionC2DeliverySystem(i *bytesiter.Iterator, _ int) (d *ExtensionC2DeliverySystem, err error) {
+	d = &ExtensionC2DeliverySystem{}
+
+	var bs []byte
+	if bs, err = i.NextBytesNoCopy(7); err != nil || len(bs) < 7 {
+		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
+		return
+	}
+	d.PLPID = bs[0]
+	d.DataSliceID = bs[1]
+	d.C2SystemTuningFrequency = binary.BigEndian.Uint32(bs[2:6])
+	d.C2SystemTuningFrequencyType = bs[6] >> 6 & 0x03
+	d.ActiveOFDMSymbolDuration = bs[6] >> 3 & 0x07
+	d.GuardInterval = bs[6] & 0x07
+	return
+}
+
+func (d *ExtensionC2DeliverySystem) CalcLength() int {
+	return 7
+}
+
+func (d *ExtensionC2DeliverySystem) Append(dst []byte) []byte {
+	dst = append(dst, d.PLPID, d.DataSliceID,
+		byte(d.C2SystemTuningFrequency>>24), byte(d.C2SystemTuningFrequency>>16),
+		byte(d.C2SystemTuningFrequency>>8), byte(d.C2SystemTuningFrequency))
+	return append(dst, d.C2SystemTuningFrequencyType&0x03<<6|
+		d.ActiveOFDMSymbolDuration&0x07<<3|d.GuardInterval&0x07)
+}

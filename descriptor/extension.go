@@ -10,13 +10,21 @@ import (
 // Descriptor extension tags
 // Chapter: 6.3 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 const (
+	TagExtensionCP                 = 0x02
+	TagExtensionCPIdentifier       = 0x03
+	TagExtensionC2DeliverySystem   = 0x0d
 	TagExtensionSupplementaryAudio = 0x6
+	TagExtensionCIAncillaryData    = 0x14
 )
 
 // Extension represents an extension descriptor
 // Chapter: 6.2.16 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type Extension struct {
 	SupplementaryAudio *ExtensionSupplementaryAudio
+	CIAncillaryData    *ExtensionCIAncillaryData
+	CP                 *ExtensionCP
+	CPIdentifier       *ExtensionCPIdentifier
+	C2DeliverySystem   *ExtensionC2DeliverySystem
 	Unknown            []byte
 	Header             Header
 	Tag                uint8
@@ -41,6 +49,26 @@ func newDescriptorExtension(i *bytesiter.Iterator, h Header, offsetEnd int) (dd 
 			err = fmt.Errorf("astits: parsing extension supplementary audio descriptor failed: %w", err)
 			return
 		}
+	case TagExtensionCIAncillaryData:
+		if d.CIAncillaryData, err = newDescriptorExtensionCIAncillaryData(i, offsetEnd); err != nil {
+			err = fmt.Errorf("astits: parsing extension CI ancillary data descriptor failed: %w", err)
+			return
+		}
+	case TagExtensionCP:
+		if d.CP, err = newDescriptorExtensionCP(i, offsetEnd); err != nil {
+			err = fmt.Errorf("astits: parsing extension CP descriptor failed: %w", err)
+			return
+		}
+	case TagExtensionCPIdentifier:
+		if d.CPIdentifier, err = newDescriptorExtensionCPIdentifier(i, offsetEnd); err != nil {
+			err = fmt.Errorf("astits: parsing extension CP identifier descriptor failed: %w", err)
+			return
+		}
+	case TagExtensionC2DeliverySystem:
+		if d.C2DeliverySystem, err = newDescriptorExtensionC2DeliverySystem(i, offsetEnd); err != nil {
+			err = fmt.Errorf("astits: parsing extension C2 delivery system descriptor failed: %w", err)
+			return
+		}
 	default:
 		if d.Unknown, err = i.NextBytes(offsetEnd - i.Offset()); err != nil {
 			err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
@@ -56,6 +84,14 @@ func (d *Extension) CalcLength() int {
 	switch d.Tag {
 	case TagExtensionSupplementaryAudio:
 		ret += d.SupplementaryAudio.CalcLength()
+	case TagExtensionCIAncillaryData:
+		ret += d.CIAncillaryData.CalcLength()
+	case TagExtensionCP:
+		ret += d.CP.CalcLength()
+	case TagExtensionCPIdentifier:
+		ret += d.CPIdentifier.CalcLength()
+	case TagExtensionC2DeliverySystem:
+		ret += d.C2DeliverySystem.CalcLength()
 	default:
 		ret += len(d.Unknown)
 	}
@@ -70,6 +106,14 @@ func (d *Extension) Append(dst []byte) []byte {
 	switch d.Tag {
 	case TagExtensionSupplementaryAudio:
 		dst = d.SupplementaryAudio.Append(dst)
+	case TagExtensionCIAncillaryData:
+		dst = d.CIAncillaryData.Append(dst)
+	case TagExtensionCP:
+		dst = d.CP.Append(dst)
+	case TagExtensionCPIdentifier:
+		dst = d.CPIdentifier.Append(dst)
+	case TagExtensionC2DeliverySystem:
+		dst = d.C2DeliverySystem.Append(dst)
 	default:
 		dst = append(dst, d.Unknown...)
 	}

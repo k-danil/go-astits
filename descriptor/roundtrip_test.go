@@ -434,6 +434,29 @@ var roundtripGenerators = map[string]func(r *rand.Rand) Descriptor{
 			OperatorCode: randBytes(r, int(r.UintN(4))), NationalAreaCode: randBytes(r, int(r.UintN(8))),
 			CoreNumber: randBytes(r, int(r.UintN(16)))}
 	},
+	"ExtensionCIAncillaryData": func(r *rand.Rand) Descriptor {
+		return &Extension{Header: Header{Tag: TagExtension}, Tag: TagExtensionCIAncillaryData,
+			CIAncillaryData: &ExtensionCIAncillaryData{Data: randBytes(r, int(r.UintN(16)))}}
+	},
+	"ExtensionCP": func(r *rand.Rand) Descriptor {
+		return &Extension{Header: Header{Tag: TagExtension}, Tag: TagExtensionCP,
+			CP: &ExtensionCP{CPSystemID: uint16(r.UintN(1 << 16)), CPPID: uint16(r.UintN(1 << 13)),
+				PrivateData: randBytes(r, int(r.UintN(8)))}}
+	},
+	"ExtensionCPIdentifier": func(r *rand.Rand) Descriptor {
+		e := &ExtensionCPIdentifier{}
+		for i := uint(0); i < 1+r.UintN(4); i++ {
+			e.SystemIDs = append(e.SystemIDs, uint16(r.UintN(1<<16)))
+		}
+		return &Extension{Header: Header{Tag: TagExtension}, Tag: TagExtensionCPIdentifier, CPIdentifier: e}
+	},
+	"ExtensionC2DeliverySystem": func(r *rand.Rand) Descriptor {
+		return &Extension{Header: Header{Tag: TagExtension}, Tag: TagExtensionC2DeliverySystem,
+			C2DeliverySystem: &ExtensionC2DeliverySystem{
+				PLPID: uint8(r.UintN(256)), DataSliceID: uint8(r.UintN(256)),
+				C2SystemTuningFrequency: r.Uint32(), C2SystemTuningFrequencyType: uint8(r.UintN(4)),
+				ActiveOFDMSymbolDuration: uint8(r.UintN(8)), GuardInterval: uint8(r.UintN(8))}}
+	},
 	"Mosaic": func(r *rand.Rand) Descriptor {
 		d := &Mosaic{Header: Header{Tag: TagMosaic}, MosaicEntryPoint: r.UintN(2) == 1,
 			NumberOfHorizontalElementaryCells: uint8(r.UintN(8)), NumberOfVerticalElementaryCells: uint8(r.UintN(8))}
