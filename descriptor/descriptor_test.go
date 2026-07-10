@@ -572,7 +572,7 @@ var descriptorTestTable = []descriptorTest{
 		func(w *bitstest.Writer) {
 			_ = w.Write(uint8(TagExtension)) // Tag
 			_ = w.Write(uint8(5))            // Length
-			_ = w.Write(uint8(0))            // Extension tag
+			_ = w.Write(uint8(0x12))         // Extension tag (reserved → Unknown)
 			_ = w.Write([]byte("test"))      // Content
 		},
 		&Extension{
@@ -580,7 +580,7 @@ var descriptorTestTable = []descriptorTest{
 				Tag:    TagExtension,
 				Length: 5,
 			},
-			Tag:     0,
+			Tag:     0x12,
 			Unknown: []byte{'t', 'e', 's', 't'},
 		}},
 }

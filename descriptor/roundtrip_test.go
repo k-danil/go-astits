@@ -492,6 +492,66 @@ var roundtripGenerators = map[string]func(r *rand.Rand) Descriptor{
 			ServiceRelocated: &ExtensionServiceRelocated{OldOriginalNetworkID: uint16(r.UintN(1 << 16)),
 				OldTransportStreamID: uint16(r.UintN(1 << 16)), OldServiceID: uint16(r.UintN(1 << 16))}}
 	},
+	"ExtensionT2DeliverySystem": func(r *rand.Rand) Descriptor {
+		t2 := &ExtensionT2DeliverySystem{PLPID: uint8(r.UintN(256)), T2SystemID: uint16(r.UintN(1 << 16)),
+			HasExtension: r.UintN(2) == 1}
+		if t2.HasExtension {
+			t2.SISOMISO = uint8(r.UintN(4))
+			t2.Bandwidth = uint8(r.UintN(16))
+			t2.GuardInterval = uint8(r.UintN(8))
+			t2.TransmissionMode = uint8(r.UintN(8))
+			t2.OtherFrequencyFlag = r.UintN(2) == 1
+			t2.TFSFlag = r.UintN(2) == 1
+			for i := uint(0); i < 1+r.UintN(3); i++ {
+				cell := T2Cell{CellID: uint16(r.UintN(1 << 16))}
+				freqs := uint(1)
+				if t2.TFSFlag {
+					freqs = 1 + r.UintN(3)
+				}
+				for j := uint(0); j < freqs; j++ {
+					cell.CentreFrequencies = append(cell.CentreFrequencies, r.Uint32())
+				}
+				for j := uint(0); j < r.UintN(3); j++ {
+					cell.Subcells = append(cell.Subcells, T2Subcell{
+						CellIDExtension: uint8(r.UintN(256)), TransposerFrequency: r.Uint32()})
+				}
+				t2.Cells = append(t2.Cells, cell)
+			}
+		}
+		return &Extension{Header: Header{Tag: TagExtension}, Tag: TagExtensionT2DeliverySystem, T2DeliverySystem: t2}
+	},
+	"ExtensionImageIcon": func(r *rand.Rand) Descriptor {
+		ii := &ExtensionImageIcon{LastDescriptorNumber: uint8(r.UintN(16)), IconID: uint8(r.UintN(8))}
+		if r.UintN(2) == 1 {
+			ii.DescriptorNumber = uint8(1 + r.UintN(15))
+			ii.IconData = randBytes(r, int(r.UintN(20)))
+		} else {
+			ii.IconTransportMode = uint8(r.UintN(2))
+			ii.PositionFlag = r.UintN(2) == 1
+			ii.CoordinateSystem = uint8(r.UintN(8))
+			ii.IconHorizontalOrigin = uint16(r.UintN(1 << 12))
+			ii.IconVerticalOrigin = uint16(r.UintN(1 << 12))
+			ii.IconType = randBytes(r, int(r.UintN(8)))
+			ii.IconData = randBytes(r, int(r.UintN(20)))
+		}
+		return &Extension{Header: Header{Tag: TagExtension}, Tag: TagExtensionImageIcon, ImageIcon: ii}
+	},
+	"ExtensionNetworkChangeNotify": func(r *rand.Rand) Descriptor {
+		ncn := &ExtensionNetworkChangeNotify{}
+		for i := uint(0); i < 1+r.UintN(2); i++ {
+			cell := NetworkChangeCell{CellID: uint16(r.UintN(1 << 16))}
+			for j := uint(0); j < 1+r.UintN(2); j++ {
+				cell.Changes = append(cell.Changes, NetworkChange{
+					NetworkChangeID: uint8(r.UintN(256)), NetworkChangeVersion: uint8(r.UintN(256)),
+					StartTimeOfChange: r.Uint64N(1 << 40), ChangeDuration: uint32(r.UintN(1 << 24)),
+					ReceiverCategory: uint8(r.UintN(8)), InvariantTSPresent: r.UintN(2) == 1,
+					ChangeType: uint8(r.UintN(16)), MessageID: uint8(r.UintN(256)),
+					InvariantTSTSID: uint16(r.UintN(1 << 16)), InvariantTSONID: uint16(r.UintN(1 << 16))})
+			}
+			ncn.Cells = append(ncn.Cells, cell)
+		}
+		return &Extension{Header: Header{Tag: TagExtension}, Tag: TagExtensionNetworkChangeNotify, NetworkChangeNotify: ncn}
+	},
 	"Mosaic": func(r *rand.Rand) Descriptor {
 		d := &Mosaic{Header: Header{Tag: TagMosaic}, MosaicEntryPoint: r.UintN(2) == 1,
 			NumberOfHorizontalElementaryCells: uint8(r.UintN(8)), NumberOfVerticalElementaryCells: uint8(r.UintN(8))}
