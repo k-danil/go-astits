@@ -16,7 +16,7 @@ Dependency arrows point strictly downwards, no cycles:
 | `ts`         | packet, header, adaptation field: parse + serialization, clock codecs (PCR/PTS/DTS/ESCR), CRC32, packet reader (copy and zero-copy view modes), `Packet.Raw()` |
 | `pes`        | PES packets: parse + serialization                                                                                                                             |
 | `psi`        | PSI/SI tables — the full MPEG-2 systems + DVB-SI set: parse (all); serialize (PAT/PMT)                                                                          |
-| `descriptor` | DVB/MPEG descriptors, one file per descriptor                                                                                                                  |
+| `descriptor` | DVB descriptors — the full EN 300 468 set (§6.2 main, §6.4 extension, audio annexes); one file per descriptor, unrecognized/MPEG tags degrade to `Unknown`         |
 | `demux`      | demuxer: per-PID byte accumulator, event-based `Next`/`Events`, PSI table state, PSI dedup                                                                     |
 | `mux`        | muxer: PES packetization, table generation and retransmission, raw passthrough                                                                                 |
 
