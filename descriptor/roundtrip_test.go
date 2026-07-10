@@ -365,6 +365,50 @@ var roundtripGenerators = map[string]func(r *rand.Rand) Descriptor{
 		}
 		return d
 	},
+	"AdaptationFieldData": func(r *rand.Rand) Descriptor {
+		return &AdaptationFieldData{Header: Header{Tag: TagAdaptationFieldData}, Identifier: uint8(r.UintN(256))}
+	},
+	"AncillaryData": func(r *rand.Rand) Descriptor {
+		return &AncillaryData{Header: Header{Tag: TagAncillaryData}, Identifier: uint8(r.UintN(256))}
+	},
+	"AnnouncementSupport": func(r *rand.Rand) Descriptor {
+		d := &AnnouncementSupport{Header: Header{Tag: TagAnnouncementSupport}, SupportIndicator: uint16(r.UintN(1 << 16))}
+		for i := uint(0); i < 1+r.UintN(4); i++ {
+			d.Announcements = append(d.Announcements, AnnouncementSupportItem{
+				AnnouncementType: uint8(r.UintN(16)), ReferenceType: uint8(r.UintN(8)),
+				OriginalNetworkID: uint16(r.UintN(1 << 16)), TransportStreamID: uint16(r.UintN(1 << 16)),
+				ServiceID: uint16(r.UintN(1 << 16)), ComponentTag: uint8(r.UintN(256))})
+		}
+		return d
+	},
+	"CellFrequencyLink": func(r *rand.Rand) Descriptor {
+		d := &CellFrequencyLink{Header: Header{Tag: TagCellFrequencyLink}}
+		for i := uint(0); i < 1+r.UintN(3); i++ {
+			cell := CellFrequencyLinkCell{CellID: uint16(r.UintN(1 << 16)), Frequency: r.Uint32()}
+			for j := uint(0); j < r.UintN(3); j++ {
+				cell.Subcells = append(cell.Subcells, CellFrequencyLinkSubcell{
+					CellIDExtension: uint8(r.UintN(256)), TransposerFrequency: r.Uint32()})
+			}
+			d.Cells = append(d.Cells, cell)
+		}
+		return d
+	},
+	"CellList": func(r *rand.Rand) Descriptor {
+		d := &CellList{Header: Header{Tag: TagCellList}}
+		for i := uint(0); i < 1+r.UintN(3); i++ {
+			cell := CellListCell{CellID: uint16(r.UintN(1 << 16)),
+				CellLatitude: uint16(r.UintN(1 << 16)), CellLongitude: uint16(r.UintN(1 << 16)),
+				CellExtentOfLatitude: uint16(r.UintN(1 << 12)), CellExtentOfLongitude: uint16(r.UintN(1 << 12))}
+			for j := uint(0); j < r.UintN(3); j++ {
+				cell.Subcells = append(cell.Subcells, CellListSubcell{
+					CellIDExtension: uint8(r.UintN(256)),
+					SubcellLatitude: uint16(r.UintN(1 << 16)), SubcellLongitude: uint16(r.UintN(1 << 16)),
+					SubcellExtentOfLatitude: uint16(r.UintN(1 << 12)), SubcellExtentOfLongitude: uint16(r.UintN(1 << 12))})
+			}
+			d.Cells = append(d.Cells, cell)
+		}
+		return d
+	},
 }
 
 func TestRoundtripDescriptors(t *testing.T) {

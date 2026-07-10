@@ -15,10 +15,15 @@ type Tag uint8
 const (
 	TagAC3                        Tag = 0x6a
 	TagAVCVideo                   Tag = 0x28
+	TagAdaptationFieldData        Tag = 0x70
+	TagAncillaryData              Tag = 0x6b
+	TagAnnouncementSupport        Tag = 0x6e
 	TagBouquetName                Tag = 0x47
 	TagCA                         Tag = 0x9
 	TagCAIdentifier               Tag = 0x53
 	TagCableDeliverySystem        Tag = 0x44
+	TagCellFrequencyLink          Tag = 0x6d
+	TagCellList                   Tag = 0x6c
 	TagComponent                  Tag = 0x50
 	TagContent                    Tag = 0x54
 	TagCountryAvailability        Tag = 0x49
@@ -201,6 +206,12 @@ func (dh Header) parseDescriptor(i *bytesiter.Iterator, offsetEnd int) (d Descri
 		return newDescriptorAC3(i, dh, offsetEnd)
 	case TagAVCVideo:
 		return newDescriptorAVCVideo(i, dh, offsetEnd)
+	case TagAdaptationFieldData:
+		return newDescriptorAdaptationFieldData(i, dh, offsetEnd)
+	case TagAncillaryData:
+		return newDescriptorAncillaryData(i, dh, offsetEnd)
+	case TagAnnouncementSupport:
+		return newDescriptorAnnouncementSupport(i, dh, offsetEnd)
 	case TagBouquetName:
 		return newDescriptorBouquetName(i, dh, offsetEnd)
 	case TagCA:
@@ -209,6 +220,10 @@ func (dh Header) parseDescriptor(i *bytesiter.Iterator, offsetEnd int) (d Descri
 		return newDescriptorCAIdentifier(i, dh, offsetEnd)
 	case TagCableDeliverySystem:
 		return newDescriptorCableDeliverySystem(i, dh, offsetEnd)
+	case TagCellFrequencyLink:
+		return newDescriptorCellFrequencyLink(i, dh, offsetEnd)
+	case TagCellList:
+		return newDescriptorCellList(i, dh, offsetEnd)
 	case TagComponent:
 		return newDescriptorComponent(i, dh, offsetEnd)
 	case TagContent:
