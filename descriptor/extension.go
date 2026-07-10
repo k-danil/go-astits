@@ -10,24 +10,32 @@ import (
 // Descriptor extension tags
 // Chapter: 6.3 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 const (
-	TagExtensionCP                 = 0x02
-	TagExtensionCPIdentifier       = 0x03
-	TagExtensionC2DeliverySystem   = 0x0d
-	TagExtensionSupplementaryAudio = 0x6
-	TagExtensionCIAncillaryData    = 0x14
+	TagExtensionCP                     = 0x02
+	TagExtensionCPIdentifier           = 0x03
+	TagExtensionSHDeliverySystem       = 0x05
+	TagExtensionSupplementaryAudio     = 0x6
+	TagExtensionMessage                = 0x08
+	TagExtensionServiceRelocated       = 0x0b
+	TagExtensionC2DeliverySystem       = 0x0d
+	TagExtensionCIAncillaryData        = 0x14
+	TagExtensionC2BundleDeliverySystem = 0x16
 )
 
 // Extension represents an extension descriptor
 // Chapter: 6.2.16 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type Extension struct {
-	SupplementaryAudio *ExtensionSupplementaryAudio
-	CIAncillaryData    *ExtensionCIAncillaryData
-	CP                 *ExtensionCP
-	CPIdentifier       *ExtensionCPIdentifier
-	C2DeliverySystem   *ExtensionC2DeliverySystem
-	Unknown            []byte
-	Header             Header
-	Tag                uint8
+	SupplementaryAudio     *ExtensionSupplementaryAudio
+	CIAncillaryData        *ExtensionCIAncillaryData
+	CP                     *ExtensionCP
+	CPIdentifier           *ExtensionCPIdentifier
+	C2DeliverySystem       *ExtensionC2DeliverySystem
+	C2BundleDeliverySystem *ExtensionC2BundleDeliverySystem
+	SHDeliverySystem       *ExtensionSHDeliverySystem
+	Message                *ExtensionMessage
+	ServiceRelocated       *ExtensionServiceRelocated
+	Unknown                []byte
+	Header                 Header
+	Tag                    uint8
 }
 
 func newDescriptorExtension(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
@@ -69,6 +77,26 @@ func newDescriptorExtension(i *bytesiter.Iterator, h Header, offsetEnd int) (dd 
 			err = fmt.Errorf("astits: parsing extension C2 delivery system descriptor failed: %w", err)
 			return
 		}
+	case TagExtensionC2BundleDeliverySystem:
+		if d.C2BundleDeliverySystem, err = newDescriptorExtensionC2BundleDeliverySystem(i, offsetEnd); err != nil {
+			err = fmt.Errorf("astits: parsing extension C2 bundle delivery system descriptor failed: %w", err)
+			return
+		}
+	case TagExtensionSHDeliverySystem:
+		if d.SHDeliverySystem, err = newDescriptorExtensionSHDeliverySystem(i, offsetEnd); err != nil {
+			err = fmt.Errorf("astits: parsing extension SH delivery system descriptor failed: %w", err)
+			return
+		}
+	case TagExtensionMessage:
+		if d.Message, err = newDescriptorExtensionMessage(i, offsetEnd); err != nil {
+			err = fmt.Errorf("astits: parsing extension message descriptor failed: %w", err)
+			return
+		}
+	case TagExtensionServiceRelocated:
+		if d.ServiceRelocated, err = newDescriptorExtensionServiceRelocated(i, offsetEnd); err != nil {
+			err = fmt.Errorf("astits: parsing extension service relocated descriptor failed: %w", err)
+			return
+		}
 	default:
 		if d.Unknown, err = i.NextBytes(offsetEnd - i.Offset()); err != nil {
 			err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
@@ -92,6 +120,14 @@ func (d *Extension) CalcLength() int {
 		ret += d.CPIdentifier.CalcLength()
 	case TagExtensionC2DeliverySystem:
 		ret += d.C2DeliverySystem.CalcLength()
+	case TagExtensionC2BundleDeliverySystem:
+		ret += d.C2BundleDeliverySystem.CalcLength()
+	case TagExtensionSHDeliverySystem:
+		ret += d.SHDeliverySystem.CalcLength()
+	case TagExtensionMessage:
+		ret += d.Message.CalcLength()
+	case TagExtensionServiceRelocated:
+		ret += d.ServiceRelocated.CalcLength()
 	default:
 		ret += len(d.Unknown)
 	}
@@ -114,6 +150,14 @@ func (d *Extension) Append(dst []byte) []byte {
 		dst = d.CPIdentifier.Append(dst)
 	case TagExtensionC2DeliverySystem:
 		dst = d.C2DeliverySystem.Append(dst)
+	case TagExtensionC2BundleDeliverySystem:
+		dst = d.C2BundleDeliverySystem.Append(dst)
+	case TagExtensionSHDeliverySystem:
+		dst = d.SHDeliverySystem.Append(dst)
+	case TagExtensionMessage:
+		dst = d.Message.Append(dst)
+	case TagExtensionServiceRelocated:
+		dst = d.ServiceRelocated.Append(dst)
 	default:
 		dst = append(dst, d.Unknown...)
 	}

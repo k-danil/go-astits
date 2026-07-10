@@ -457,6 +457,41 @@ var roundtripGenerators = map[string]func(r *rand.Rand) Descriptor{
 				C2SystemTuningFrequency: r.Uint32(), C2SystemTuningFrequencyType: uint8(r.UintN(4)),
 				ActiveOFDMSymbolDuration: uint8(r.UintN(8)), GuardInterval: uint8(r.UintN(8))}}
 	},
+	"ExtensionC2BundleDeliverySystem": func(r *rand.Rand) Descriptor {
+		e := &ExtensionC2BundleDeliverySystem{}
+		for i := uint(0); i < 1+r.UintN(3); i++ {
+			e.Entries = append(e.Entries, C2BundleEntry{
+				PLPID: uint8(r.UintN(256)), DataSliceID: uint8(r.UintN(256)),
+				C2SystemTuningFrequency: r.Uint32(), C2SystemTuningFrequencyType: uint8(r.UintN(4)),
+				ActiveOFDMSymbolDuration: uint8(r.UintN(8)), GuardInterval: uint8(r.UintN(8)),
+				MasterChannel: r.UintN(2) == 1})
+		}
+		return &Extension{Header: Header{Tag: TagExtension}, Tag: TagExtensionC2BundleDeliverySystem, C2BundleDeliverySystem: e}
+	},
+	"ExtensionSHDeliverySystem": func(r *rand.Rand) Descriptor {
+		sh := &ExtensionSHDeliverySystem{DiversityMode: uint8(r.UintN(16))}
+		for i := uint(0); i < 1+r.UintN(3); i++ {
+			sh.Modulations = append(sh.Modulations, SHModulation{
+				ModulationType: uint8(r.UintN(2)), InterleaverPresence: r.UintN(2) == 1, InterleaverType: r.UintN(2) == 1,
+				Polarization: uint8(r.UintN(4)), RollOff: uint8(r.UintN(4)), ModulationMode: uint8(r.UintN(4)),
+				SymbolRate: uint8(r.UintN(32)), Bandwidth: uint8(r.UintN(8)), Priority: r.UintN(2) == 1,
+				ConstellationAndHierarchy: uint8(r.UintN(8)), GuardInterval: uint8(r.UintN(4)),
+				TransmissionMode: uint8(r.UintN(4)), CommonFrequency: r.UintN(2) == 1, CodeRate: uint8(r.UintN(16)),
+				CommonMultiplier: uint8(r.UintN(64)), NofLateTaps: uint8(r.UintN(64)), NofSlices: uint8(r.UintN(64)),
+				SliceDistance: uint8(r.UintN(256)), NonLateIncrements: uint8(r.UintN(64))})
+		}
+		return &Extension{Header: Header{Tag: TagExtension}, Tag: TagExtensionSHDeliverySystem, SHDeliverySystem: sh}
+	},
+	"ExtensionMessage": func(r *rand.Rand) Descriptor {
+		return &Extension{Header: Header{Tag: TagExtension}, Tag: TagExtensionMessage,
+			Message: &ExtensionMessage{MessageID: uint8(r.UintN(256)), Language: randLang(r),
+				Text: randBytes(r, int(r.UintN(20)))}}
+	},
+	"ExtensionServiceRelocated": func(r *rand.Rand) Descriptor {
+		return &Extension{Header: Header{Tag: TagExtension}, Tag: TagExtensionServiceRelocated,
+			ServiceRelocated: &ExtensionServiceRelocated{OldOriginalNetworkID: uint16(r.UintN(1 << 16)),
+				OldTransportStreamID: uint16(r.UintN(1 << 16)), OldServiceID: uint16(r.UintN(1 << 16))}}
+	},
 	"Mosaic": func(r *rand.Rand) Descriptor {
 		d := &Mosaic{Header: Header{Tag: TagMosaic}, MosaicEntryPoint: r.UintN(2) == 1,
 			NumberOfHorizontalElementaryCells: uint8(r.UintN(8)), NumberOfVerticalElementaryCells: uint8(r.UintN(8))}
