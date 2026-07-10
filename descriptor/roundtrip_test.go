@@ -312,6 +312,27 @@ var roundtripGenerators = map[string]func(r *rand.Rand) Descriptor{
 	"TransportStream": func(r *rand.Rand) Descriptor {
 		return &TransportStream{Header: Header{Tag: TagTransportStream}, Data: randBytes(r, 1+int(r.UintN(8)))}
 	},
+	"DSNG": func(r *rand.Rand) Descriptor {
+		return &DSNG{Header: Header{Tag: TagDSNG}, Data: randBytes(r, 1+int(r.UintN(16)))}
+	},
+	"Linkage": func(r *rand.Rand) Descriptor {
+		return &Linkage{Header: Header{Tag: TagLinkage},
+			TransportStreamID: uint16(r.UintN(1 << 16)), OriginalNetworkID: uint16(r.UintN(1 << 16)),
+			ServiceID: uint16(r.UintN(1 << 16)), LinkageType: uint8(r.UintN(256)),
+			Data: randBytes(r, int(r.UintN(12)))}
+	},
+	"FrequencyList": func(r *rand.Rand) Descriptor {
+		d := &FrequencyList{Header: Header{Tag: TagFrequencyList}, CodingType: uint8(r.UintN(4))}
+		for i := uint(0); i < 1+r.UintN(4); i++ {
+			d.Frequencies = append(d.Frequencies, r.Uint32())
+		}
+		return d
+	},
+	"FTAContentManagement": func(r *rand.Rand) Descriptor {
+		return &FTAContentManagement{Header: Header{Tag: TagFTAContentManagement},
+			UserDefined: r.UintN(2) == 1, DoNotScramble: r.UintN(2) == 1,
+			ControlRemoteAccessOverInternet: uint8(r.UintN(4)), DoNotApplyRevocation: r.UintN(2) == 1}
+	},
 }
 
 func TestRoundtripDescriptors(t *testing.T) {

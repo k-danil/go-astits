@@ -22,11 +22,15 @@ const (
 	TagComponent                  Tag = 0x50
 	TagContent                    Tag = 0x54
 	TagCountryAvailability        Tag = 0x49
+	TagDSNG                       Tag = 0x68
 	TagDataStreamAlignment        Tag = 0x6
 	TagEnhancedAC3                Tag = 0x7a
 	TagExtendedEvent              Tag = 0x4e
 	TagExtension                  Tag = 0x7f
+	TagFTAContentManagement       Tag = 0x7e
+	TagFrequencyList              Tag = 0x62
 	TagISO639LanguageAndAudioType Tag = 0xa
+	TagLinkage                    Tag = 0x4a
 	TagLocalTimeOffset            Tag = 0x58
 	TagMaximumBitrate             Tag = 0xe
 	TagNVODReference              Tag = 0x4b
@@ -207,6 +211,8 @@ func (dh Header) parseDescriptor(i *bytesiter.Iterator, offsetEnd int) (d Descri
 		return newDescriptorContent(i, dh, offsetEnd)
 	case TagCountryAvailability:
 		return newDescriptorCountryAvailability(i, dh, offsetEnd)
+	case TagDSNG:
+		return newDescriptorDSNG(i, dh, offsetEnd)
 	case TagDataStreamAlignment:
 		return newDescriptorDataStreamAlignment(i, dh, offsetEnd)
 	case TagEnhancedAC3:
@@ -215,8 +221,14 @@ func (dh Header) parseDescriptor(i *bytesiter.Iterator, offsetEnd int) (d Descri
 		return newDescriptorExtendedEvent(i, dh, offsetEnd)
 	case TagExtension:
 		return newDescriptorExtension(i, dh, offsetEnd)
+	case TagFTAContentManagement:
+		return newDescriptorFTAContentManagement(i, dh, offsetEnd)
+	case TagFrequencyList:
+		return newDescriptorFrequencyList(i, dh, offsetEnd)
 	case TagISO639LanguageAndAudioType:
 		return newDescriptorISO639LanguageAndAudioType(i, dh, offsetEnd)
+	case TagLinkage:
+		return newDescriptorLinkage(i, dh, offsetEnd)
 	case TagLocalTimeOffset:
 		return newDescriptorLocalTimeOffset(i, dh, offsetEnd)
 	case TagMaximumBitrate:
