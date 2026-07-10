@@ -44,6 +44,7 @@ func (d *ExtensionT2MI) Append(dst []byte) []byte {
 	if d.PCRISCRCommonClockFlag {
 		pcr = 0x01
 	}
-	dst = append(dst, 0xf8|d.T2MIStreamID&0x07, 0xf8|d.NumT2MIStreamsMinusOne&0x07, 0xfe|pcr)
+	// Table 149 NOTE: the reserved_future_use bits shall all be 0.
+	dst = append(dst, d.T2MIStreamID&0x07, d.NumT2MIStreamsMinusOne&0x07, pcr)
 	return append(dst, d.Reserved...)
 }

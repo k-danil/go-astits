@@ -18,7 +18,8 @@ const (
 
 const (
 	PacketSize     = 188
-	M2TSPacketSize = 192
+	M2TSPacketSize = 192 // 4-byte TP_extra_header prefix + 188
+	RSPacketSize   = 204 // 188 + 16-byte Reed-Solomon parity suffix
 	HeaderSize     = 4
 )
 
@@ -33,13 +34,14 @@ var poolOfPacket = sync.Pool{
 // Packet represents a packet
 // https://en.wikipedia.org/wiki/MPEG_transport_stream
 type Packet struct {
-	bs  [M2TSPacketSize]byte
+	bs  [RSPacketSize]byte
 	raw []byte                // the on-wire bytes: a subslice of bs in copy mode, a batch view in zero-copy mode
 	af  PacketAdaptationField // AdaptationField points here — no per-packet allocation
 
 	Header          PacketHeader
 	AdaptationField *PacketAdaptationField
 	Payload         []byte // This is only the payload content
+	Prefix          []byte // the 192-byte M2TS TP_extra_header (4 bytes); empty otherwise. See ArrivalTimeStamp.
 
 	// Offset is the byte offset of the raw packet start (including any M2TS prefix)
 	// within the demuxed stream, counted from the Demuxer's first packet. Packets
@@ -54,7 +56,7 @@ func (p *Packet) UpdateHeader() {
 	if bs == nil {
 		bs = p.bs[:]
 	}
-	p.Header.Put(bs)
+	p.Header.Put(bs[len(p.Prefix):])
 }
 
 // PacketHeader represents a packet header
@@ -78,7 +80,7 @@ type PacketAdaptationField struct {
 	TransportPrivateDataLength        uint8
 	Length                            uint8
 	StuffingLength                    uint8 // Only used in writePacketAdaptationField to request stuffing
-	SpliceCountdown                   uint8 // Indicates how many TS packets from this one a splicing point occurs (Two's complement signed; may be negative)
+	SpliceCountdown                   int8 // TS packets from this one until the splicing point; negative once it has passed.
 	IsOneByteStuffing                 bool  // Only used for one byte stuffing - if true, adaptation field will be written as one uint8(0). Not part of TS format
 	DiscontinuityIndicator            bool  // Set if current TS packet is in a discontinuity state with respect to either the continuity counter or the program clock reference
 	RandomAccessIndicator             bool  // Set when the stream may be decoded without errors from this point
@@ -128,12 +130,14 @@ func (af *PacketAdaptationField) CopyFrom(src *PacketAdaptationField) {
 // PacketAdaptationExtensionField represents a packet adaptation extension field
 type PacketAdaptationExtensionField struct {
 	DTSNextAccessUnit      ClockReference // The PES DTS of the splice point. Split up as 3 bits, 1 marker bit (0x1), 15 bits, 1 marker bit, 15 bits, and 1 marker bit, for 33 data bits total.
+	AFDescriptors          []byte         // Raw af_descriptor() payload (H.222.0 Annex U), kept verbatim; present when HasAFDescriptors.
 	PiecewiseRate          uint32         // The rate of the stream, measured in 188-byte packets, to define the end-time of the LTW.
 	LegalTimeWindowOffset  uint16         // Extra information for rebroadcasters to determine the state of buffers when packets may be missing.
 	LegalTimeWindowIsValid bool
 	HasLegalTimeWindow     bool
 	HasPiecewiseRate       bool
 	HasSeamlessSplice      bool
+	HasAFDescriptors       bool // af_descriptor_not_present_flag == 0
 	Length                 uint8
 	SpliceType             uint8 // Indicates the parameters of the H.262 splice.
 }
@@ -150,6 +154,17 @@ func NewPacket() (p *Packet) {
 // nil for hand-built packets, whose bytes exist only once serialized via Put.
 func (p *Packet) Raw() []byte {
 	return p.raw
+}
+
+// ArrivalTimeStamp decodes the 192-byte M2TS TP_extra_header carried in Prefix:
+// a 2-bit copy_permission_indicator and a 30-bit 27 MHz arrival_time_stamp. ok
+// is false when the packet has no such prefix.
+func (p *Packet) ArrivalTimeStamp() (copyPermission uint8, ats uint32, ok bool) {
+	if len(p.Prefix) < 4 {
+		return
+	}
+	v := binary.BigEndian.Uint32(p.Prefix)
+	return uint8(v >> 30), v & 0x3fffffff, true
 }
 
 // SetAdaptationField stores an owned copy in the packet's embedded field,
@@ -174,6 +189,7 @@ func (p *Packet) Reset() {
 	p.Header = PacketHeader{}
 	p.AdaptationField = nil
 	p.Payload = nil
+	p.Prefix = nil
 	p.Offset = 0
 }
 
@@ -184,7 +200,18 @@ func (p *Packet) parse(bs []byte, s PacketSkipper) (skip bool, err error) {
 		return false, ErrShortPacket
 	}
 
-	if bs[0] != syncByte {
+	// Only the 192-byte M2TS format carries a leading prefix (the 4-byte
+	// TP_extra_header); the sync byte begins the 188-byte TS packet after it.
+	// Any other extra bytes (e.g. the 204-byte Reed-Solomon parity) are a
+	// trailing suffix and the TS packet starts at bs[0].
+	prefixLen := 0
+	p.Prefix = nil
+	if len(bs) == M2TSPacketSize {
+		prefixLen = M2TSPacketSize - PacketSize
+		p.Prefix = bs[:prefixLen]
+	}
+
+	if bs[prefixLen] != syncByte {
 		err = ErrPacketMustStartWithASyncByte
 		// Zero-stuffed packet is skippable; check the actual bytes, not p.bs —
 		// in zero-copy mode the packet is a view and p.bs is stale.
@@ -192,8 +219,8 @@ func (p *Packet) parse(bs []byte, s PacketSkipper) (skip bool, err error) {
 		return
 	}
 
-	// In case packet size is bigger than 188 bytes, we don't care for the first bytes
-	hdr := len(bs) - PacketSize + 1
+	hdr := prefixLen + 1
+	end := prefixLen + PacketSize // TS content ends here; a trailing RS suffix is excluded
 	p.Header.parseBytes(bs[hdr : hdr+3 : hdr+3])
 
 	if s(p) {
@@ -208,7 +235,7 @@ func (p *Packet) parse(bs []byte, s PacketSkipper) (skip bool, err error) {
 	if p.Header.HasAdaptationField {
 		p.af.Reset()
 		p.AdaptationField = &p.af
-		if _, err = p.af.Parse(bs[hdr+3:]); err != nil {
+		if _, err = p.af.Parse(bs[hdr+3 : end]); err != nil {
 			return
 		}
 	}
@@ -218,10 +245,10 @@ func (p *Packet) parse(bs []byte, s PacketSkipper) (skip bool, err error) {
 		if p.Header.HasAdaptationField {
 			payloadAt += 1 + int(p.af.Length)
 		}
-		if payloadAt > len(bs) {
+		if payloadAt > end {
 			return false, ErrShortPacket
 		}
-		p.Payload = bs[payloadAt:]
+		p.Payload = bs[payloadAt:end]
 	}
 	return
 }
@@ -292,7 +319,7 @@ func (af *PacketAdaptationField) Parse(bs []byte) (n int, err error) {
 			if o >= len(bs) {
 				return o, ErrShortPacket
 			}
-			af.SpliceCountdown = bs[o]
+			af.SpliceCountdown = int8(bs[o])
 			o++
 		}
 
@@ -354,6 +381,7 @@ func (afe *PacketAdaptationExtensionField) Parse(bs []byte) (n int, err error) {
 		afe.HasLegalTimeWindow = b&0x80 > 0
 		afe.HasPiecewiseRate = b&0x40 > 0
 		afe.HasSeamlessSplice = b&0x20 > 0
+		afe.HasAFDescriptors = b&0x10 == 0
 
 		if afe.HasLegalTimeWindow {
 			if o+2 > len(bs) {
@@ -385,6 +413,15 @@ func (afe *PacketAdaptationExtensionField) Parse(bs []byte) (n int, err error) {
 				return
 			}
 			o += pn
+		}
+
+		if afe.HasAFDescriptors {
+			bodyEnd := 1 + int(afe.Length)
+			if bodyEnd > len(bs) || bodyEnd < o {
+				return o, ErrShortPacket
+			}
+			afe.AFDescriptors = bs[o:bodyEnd]
+			o = bodyEnd
 		}
 	}
 	return o, nil
@@ -490,7 +527,7 @@ func (af *PacketAdaptationField) Put(bs []byte) (n int, err error) {
 	}
 
 	if af.HasSplicingCountdown {
-		bs[n] = af.SpliceCountdown
+		bs[n] = uint8(af.SpliceCountdown)
 		n++
 	}
 
@@ -520,12 +557,15 @@ func (afe *PacketAdaptationExtensionField) calcLength() (length uint8) {
 	length += 2 * util.B2U(afe.HasLegalTimeWindow)
 	length += 3 * util.B2U(afe.HasPiecewiseRate)
 	length += PTSDTSSize * util.B2U(afe.HasSeamlessSplice)
+	if afe.HasAFDescriptors {
+		length += uint8(len(afe.AFDescriptors))
+	}
 	return length
 }
 
 func (afe *PacketAdaptationExtensionField) putBytes(bs []byte) (n int) {
 	bs[0] = afe.calcLength()
-	bs[1] = util.B2U(afe.HasLegalTimeWindow)<<7 | util.B2U(afe.HasPiecewiseRate)<<6 | util.B2U(afe.HasSeamlessSplice)<<5 | 0x1f
+	bs[1] = util.B2U(afe.HasLegalTimeWindow)<<7 | util.B2U(afe.HasPiecewiseRate)<<6 | util.B2U(afe.HasSeamlessSplice)<<5 | util.B2U(!afe.HasAFDescriptors)<<4 | 0x0f
 	n = 2
 
 	if afe.HasLegalTimeWindow {
@@ -543,6 +583,10 @@ func (afe *PacketAdaptationExtensionField) putBytes(bs []byte) (n int) {
 
 	if afe.HasSeamlessSplice {
 		n += afe.DTSNextAccessUnit.PutPTSDTS(bs[n:], afe.SpliceType)
+	}
+
+	if afe.HasAFDescriptors {
+		n += copy(bs[n:], afe.AFDescriptors)
 	}
 
 	return

@@ -25,9 +25,15 @@ const (
 
 // Stream IDs
 const (
-	StreamIDPrivateStream1 = 189
-	StreamIDPaddingStream  = 190
-	StreamIDPrivateStream2 = 191
+	StreamIDProgramStreamMap       = 0xbc
+	StreamIDPrivateStream1         = 0xbd
+	StreamIDPaddingStream          = 0xbe
+	StreamIDPrivateStream2         = 0xbf
+	StreamIDECM                    = 0xf0
+	StreamIDEMM                    = 0xf1
+	StreamIDDSMCC                  = 0xf2
+	StreamIDH2221TypeE             = 0xf8
+	StreamIDProgramStreamDirectory = 0xff
 )
 
 // Trick mode controls
@@ -90,20 +96,27 @@ type OptionalHeader struct {
 
 type OptionalHeaderExtension struct {
 	PrivateData                     []byte
-	Extension2Data                  []byte
+	Extension2Reserved              []byte
+	TREF                            ts.ClockReference
 	HasPrivateData                  bool
 	HasPackHeaderField              bool
 	HasProgramPacketSequenceCounter bool
 	HasPSTDBuffer                   bool
 	HasExtension2                   bool
+	HasStreamIDExtension            bool
+	HasTREF                         bool
 	PackField                       uint8
 	PacketSequenceCounter           uint8
 	MPEG1OrMPEG2ID                  uint8
 	OriginalStuffingLength          uint8
 	PSTDBufferScale                 uint8
 	PSTDBufferSize                  uint16
-	Extension2Length                uint8
+	StreamIDExtension               uint8
 }
+
+// TREF shares the PTS/DTS wire layout; its top nibble is reserved, not a prefix.
+// H.222.0 §2.4.3.7
+const trefReservedPrefix = 0b1111
 
 // DSMTrickMode represents a DSM trick mode
 // https://books.google.fr/books?id=vwUrAwAAQBAJ&pg=PT501&lpg=PT501&dq=dsm+trick+mode+control&source=bl&ots=fI-9IHXMRL&sig=PWnhxrsoMWNQcl1rMCPmJGNO9Ds&hl=fr&sa=X&ved=0ahUKEwjogafD8bjXAhVQ3KQKHeHKD5oQ6AEINDAB#v=onepage&q=dsm%20trick%20mode%20control&f=false
@@ -142,9 +155,15 @@ func (d *Data) Parse(bs []byte) (err error) {
 	return
 }
 
-// hasPESOptionalHeader checks whether the data has a PES optional header
+// hasPESOptionalHeader reports whether the PES packet carries the optional
+// header. Per H.222.0 Table 2-21 it is absent for these stream_ids only.
 func hasPESOptionalHeader(streamID uint8) bool {
-	return streamID>>1 != 0b1011111
+	switch streamID {
+	case StreamIDProgramStreamMap, StreamIDPaddingStream, StreamIDPrivateStream2,
+		StreamIDECM, StreamIDEMM, StreamIDDSMCC, StreamIDH2221TypeE, StreamIDProgramStreamDirectory:
+		return false
+	}
+	return true
 }
 
 // parseBytes parses a PES header starting at bs[o]
@@ -219,7 +238,7 @@ func (h *OptionalHeader) parseBytes(bs []byte, o int) (dataStart int, err error)
 		}
 		o += n
 		if n, err = h.DTS.ParsePTSDTS(bs[o:]); err != nil {
-			err = fmt.Errorf("astits: parsing PTS failed: %w", err)
+			err = fmt.Errorf("astits: parsing DTS failed: %w", err)
 			return
 		}
 		o += n
@@ -332,13 +351,28 @@ func (h *OptionalHeaderExtension) parseBytes(bs []byte, o int) (err error) {
 		if o >= len(bs) {
 			return ts.ErrShortPacket
 		}
-		h.Extension2Length = bs[o] & 0x7f
+		fieldLen := int(bs[o] & 0x7f)
 		o++
-
-		if o+int(h.Extension2Length) > len(bs) {
+		if o+fieldLen > len(bs) {
 			return ts.ErrShortPacket
 		}
-		h.Extension2Data = bs[o : o+int(h.Extension2Length)]
+		fieldEnd := o + fieldLen
+
+		if fieldLen > 0 {
+			b = bs[o]
+			o++
+			if h.HasStreamIDExtension = b&0x80 == 0; h.HasStreamIDExtension {
+				h.StreamIDExtension = b & 0x7f
+			} else if h.HasTREF = b&0x01 == 0; h.HasTREF {
+				var n int
+				if n, err = h.TREF.ParsePTSDTS(bs[o:fieldEnd]); err != nil {
+					err = fmt.Errorf("astits: parsing TREF failed: %w", err)
+					return
+				}
+				o += n
+			}
+			h.Extension2Reserved = bs[o:fieldEnd]
+		}
 	}
 	return
 }
@@ -478,7 +512,12 @@ func (h *OptionalHeaderExtension) calcDataLength() (length uint8) {
 
 	length += 2 * util.B2U(h.HasProgramPacketSequenceCounter)
 	length += 2 * util.B2U(h.HasPSTDBuffer)
-	length += (1 + uint8(len(h.Extension2Data))) * util.B2U(h.HasExtension2)
+	if h.HasExtension2 {
+		length += 2 + uint8(len(h.Extension2Reserved))
+		if !h.HasStreamIDExtension && h.HasTREF {
+			length += ts.PTSDTSSize
+		}
+	}
 	return
 }
 
@@ -583,9 +622,23 @@ func (h *OptionalHeaderExtension) putBytes(bs []byte) (n int) {
 	}
 
 	if h.HasExtension2 {
-		bs[n] = 0x80 | uint8(len(h.Extension2Data))
+		fieldLen := 1 + len(h.Extension2Reserved)
+		if !h.HasStreamIDExtension && h.HasTREF {
+			fieldLen += ts.PTSDTSSize
+		}
+		bs[n] = 0x80 | uint8(fieldLen)
 		n++
-		n += copy(bs[n:], h.Extension2Data)
+		if h.HasStreamIDExtension {
+			bs[n] = h.StreamIDExtension & 0x7f
+			n++
+		} else {
+			bs[n] = 0xfe | util.B2U(!h.HasTREF)
+			n++
+			if h.HasTREF {
+				n += h.TREF.PutPTSDTS(bs[n:], trefReservedPrefix)
+			}
+		}
+		n += copy(bs[n:], h.Extension2Reserved)
 	}
 	return
 }

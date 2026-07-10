@@ -211,13 +211,13 @@ var descriptorTestTable = []descriptorTest{
 				{
 					Language: [3]byte{0x6c, 0x67, 0x31}, // lg1
 					Magazine: uint8(2),
-					Page:     uint8(12),
+					Page:     uint8(0x12),
 					Type:     uint8(1),
 				},
 				{
 					Language: [3]byte{0x6c, 0x67, 0x32}, // lg2
 					Magazine: uint8(4),
-					Page:     uint8(23),
+					Page:     uint8(0x23),
 					Type:     uint8(3),
 				},
 			}}},
@@ -450,7 +450,7 @@ var descriptorTestTable = []descriptorTest{
 			Items: []TeletextItem{{
 				Language: [3]byte{0x6c, 0x61, 0x6e}, // lan
 				Magazine: uint8(2),
-				Page:     uint8(12),
+				Page:     uint8(0x12),
 				Type:     uint8(1),
 			}}}},
 	{
@@ -461,26 +461,33 @@ var descriptorTestTable = []descriptorTest{
 			_ = w.Write(uint8(1))           // Profile idc
 			_ = w.Write("1")                // Constraint set0 flag
 			_ = w.Write("1")                // Constraint set1 flag
-			_ = w.Write("1")                // Constraint set1 flag
-			_ = w.Write("10101")            // Compatible flags
+			_ = w.Write("1")                // Constraint set2 flag
+			_ = w.Write("1")                // Constraint set3 flag
+			_ = w.Write("0")                // Constraint set4 flag
+			_ = w.Write("1")                // Constraint set5 flag
+			_ = w.Write("01")               // Compatible flags (2 bits)
 			_ = w.Write(uint8(2))           // Level idc
 			_ = w.Write("1")                // AVC still present
 			_ = w.Write("1")                // AVC 24 hour picture flag
-			_ = w.Write("111111")           // Reserved
+			_ = w.Write("1")                // Frame packing SEI not present flag
+			_ = w.Write("11111")            // Reserved (5 bits)
 		},
 		&AVCVideo{
 			Header: Header{
 				Tag:    TagAVCVideo,
 				Length: 4,
 			},
-			AVC24HourPictureFlag: true,
-			AVCStillPresent:      true,
-			CompatibleFlags:      21,
-			ConstraintSet0Flag:   true,
-			ConstraintSet1Flag:   true,
-			ConstraintSet2Flag:   true,
-			LevelIDC:             2,
-			ProfileIDC:           1,
+			AVC24HourPictureFlag:          true,
+			AVCStillPresent:               true,
+			FramePackingSEINotPresentFlag: true,
+			CompatibleFlags:               1,
+			ConstraintSet0Flag:            true,
+			ConstraintSet1Flag:            true,
+			ConstraintSet2Flag:            true,
+			ConstraintSet3Flag:            true,
+			ConstraintSet5Flag:            true,
+			LevelIDC:                      2,
+			ProfileIDC:                    1,
 		}},
 	{
 		"PrivateDataSpecifier",

@@ -82,66 +82,113 @@ func NewPacketBuffer(r io.Reader, packetSize, skipErrLimit uint, s PacketSkipper
 	return
 }
 
-// autoDetectPacketSize updates the packet size based on the first bytes
-// Minimum packet size is 188 and is bounded by 2 sync bytes
-// Assumption is made that the first byte of the reader is a sync byte
+// autoDetectSyncs is how many sync bytes at a candidate period must line up to
+// accept its packet size. Three (two recurrences) drops a coincidental 0x47
+// lock from ~1/256 to ~1/2^16 and stops a 204 stream's parity byte at offset
+// 188 from masquerading as an aligned 188 stream.
+const autoDetectSyncs = 3
+
+// autoDetectWindow holds autoDetectSyncs syncs for the widest candidate (204).
+const autoDetectWindow = (autoDetectSyncs-1)*RSPacketSize + 1
+
+// autoDetectPacketSize infers the packet size by locking onto a periodic sync
+// byte: 188 (TS), 192 (M2TS, a 4-byte TP_extra_header before each sync) or 204
+// (TS plus a 16-byte Reed-Solomon suffix). The unit begins at byte 0 in every
+// format; the stream must be aligned to a unit boundary (arbitrary-offset sync
+// search is a separate concern).
 func autoDetectPacketSize(r io.Reader) (packetSize uint, err error) {
-	const l = 193
-	var bs = make([]byte, l)
-	shouldRewind, rerr := peek(r, bs)
+	bs := make([]byte, autoDetectWindow)
+	n, shouldRewind, rerr := peek(r, bs)
 	if rerr != nil {
-		err = fmt.Errorf("astits: reading first %d bytes failed: %w", l, rerr)
+		err = fmt.Errorf("astits: reading first %d bytes failed: %w", autoDetectWindow, rerr)
 		return
 	}
+	bs = bs[:n]
 
-	if bs[0] != syncByte {
-		err = ErrPacketMustStartWithASyncByte
-		return
-	}
-
-	for idx, b := range bs {
-		if b == syncByte && idx >= PacketSize {
-			packetSize = uint(idx)
-
-			if !shouldRewind {
-				return
-			}
-
-			var n int64
-			if n, err = Rewind(r); err != nil {
-				err = fmt.Errorf("astits: rewinding failed: %w", err)
-				return
-			} else if n == -1 {
-				var ls = packetSize - (l - packetSize)
-				if _, err = r.Read(make([]byte, ls)); err != nil {
-					err = fmt.Errorf("astits: reading %d bytes to sync reader failed: %w", ls, err)
-					return
-				}
-			}
-			return
+	for _, c := range [...]struct{ start, size int }{
+		{0, PacketSize},
+		{0, RSPacketSize},
+		{M2TSPacketSize - PacketSize, M2TSPacketSize},
+	} {
+		if syncLocked(bs, c.start, c.size) {
+			packetSize = uint(c.size)
+			break
 		}
 	}
-	err = fmt.Errorf("astits: only one sync byte detected in first %d bytes: %w", l, ErrInvalidData)
+	if packetSize == 0 {
+		if !hasLeadingSync(bs) {
+			err = ErrPacketMustStartWithASyncByte
+		} else {
+			err = fmt.Errorf("astits: could not detect packet size in first %d bytes: %w", n, ErrInvalidData)
+		}
+		return
+	}
+
+	if !shouldRewind {
+		return
+	}
+	var rn int64
+	if rn, err = Rewind(r); err != nil {
+		err = fmt.Errorf("astits: rewinding failed: %w", err)
+		return
+	} else if rn == -1 {
+		// Non-seekable: peek consumed n bytes; drop the rest of the partial unit
+		// so the first packet read lands on a boundary.
+		if skip := (int(packetSize) - n%int(packetSize)) % int(packetSize); skip > 0 {
+			if _, err = io.ReadFull(r, make([]byte, skip)); err != nil {
+				err = fmt.Errorf("astits: reading %d bytes to sync reader failed: %w", skip, err)
+				return
+			}
+		}
+	}
 	return
 }
 
-// bufio.Reader can't be rewinded, which leads to packet loss on packet size autodetection
-// but it has handy Peek() method
-// so what we do here is peeking bytes for bufio.Reader and falling back to rewinding/syncing for all other readers
-func peek(r io.Reader, b []byte) (shouldRewind bool, err error) {
+// syncLocked reports whether every sync position at start, start+size, … that
+// fits in bs (up to autoDetectSyncs of them) holds a sync byte, with at least
+// one recurrence. Checking all in-buffer periods keeps a 204 stream's parity
+// 0x47 at offset 188 from locking as 188 on a full window, while a short
+// two-packet stream still locks on its single recurrence.
+func syncLocked(bs []byte, start, size int) bool {
+	seen := 0
+	for i, off := 0, start; i < autoDetectSyncs && off < len(bs); i, off = i+1, off+size {
+		if bs[off] != syncByte {
+			return false
+		}
+		seen++
+	}
+	return seen >= 2
+}
+
+// hasLeadingSync separates "no sync at a unit boundary" from "sync present but
+// no periodic lock", so the two failures report distinct errors.
+func hasLeadingSync(bs []byte) bool {
+	m := M2TSPacketSize - PacketSize
+	return (len(bs) > 0 && bs[0] == syncByte) || (len(bs) > m && bs[m] == syncByte)
+}
+
+// peek fills b from r and reports how many bytes it got. A *bufio.Reader is
+// peeked (not consumed, so shouldRewind is false); any other reader is read and
+// must be rewound or synced past the consumed bytes afterwards. A short stream
+// is not an error here — the caller decides whether it held enough to detect.
+func peek(r io.Reader, b []byte) (n int, shouldRewind bool, err error) {
 	if br, ok := r.(*bufio.Reader); ok {
 		var bs []byte
 		bs, err = br.Peek(len(b))
+		if err == io.EOF || err == bufio.ErrBufferFull {
+			err = nil
+		}
 		if err != nil {
 			return
 		}
-		copy(b, bs)
-		return false, nil
+		return copy(b, bs), false, nil
 	}
 
-	_, err = r.Read(b)
-	shouldRewind = true
-	return
+	n, err = io.ReadFull(r, b)
+	if err == io.EOF || err == io.ErrUnexpectedEOF {
+		err = nil
+	}
+	return n, true, err
 }
 
 // Rewind rewinds the reader if possible, otherwise n = -1

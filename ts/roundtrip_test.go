@@ -66,7 +66,7 @@ func randAdaptationField(r *rand.Rand) *PacketAdaptationField {
 		af.OPCR = NewClockReference(uint64(r.Uint64N(1<<33)), uint64(r.UintN(300)))
 	}
 	if af.HasSplicingCountdown {
-		af.SpliceCountdown = uint8(r.UintN(256))
+		af.SpliceCountdown = int8(r.UintN(256))
 	}
 	if af.HasTransportPrivateData {
 		af.TransportPrivateDataLength = uint8(r.UintN(32))
@@ -88,6 +88,9 @@ func randAdaptationField(r *rand.Rand) *PacketAdaptationField {
 		if afe.HasSeamlessSplice {
 			afe.SpliceType = uint8(r.UintN(16))
 			afe.DTSNextAccessUnit = NewClockReference(uint64(r.Uint64N(1<<33)), 0)
+		}
+		if afe.HasAFDescriptors = r.UintN(2) == 1; afe.HasAFDescriptors {
+			afe.AFDescriptors = randBytes(r, int(r.UintN(8)))
 		}
 		af.AdaptationExtensionField = afe
 	}

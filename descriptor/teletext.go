@@ -62,7 +62,7 @@ func newDescriptorTeletext(i *bytesiter.Iterator, h Header, offsetEnd int) (dd D
 			return
 		}
 
-		d.Items[idx].Page = b>>4*10 + b&0xf
+		d.Items[idx].Page = b
 	}
 	return
 }
@@ -76,7 +76,7 @@ func (d *Teletext) Append(dst []byte) []byte {
 	for _, item := range d.Items {
 		dst = append(dst, item.Language[:]...)
 		dst = append(dst, item.Type&0x1f<<3|item.Magazine&0x7)
-		dst = append(dst, item.Page/10<<4|item.Page%10&0xf)
+		dst = append(dst, item.Page)
 	}
 	return dst
 }

@@ -203,7 +203,9 @@ func parseCRC32(i *bytesiter.Iterator) (c uint32, err error) {
 }
 
 // StopsParsing reports whether sections from this table id on are stuffing:
-// parsing must stop there.
+// parsing must stop there. Besides 0xFF stuffing, an unrecognized table_id is
+// treated as end-of-known-data: this demuxer only surfaces known tables, and
+// stopping conservatively avoids mis-reading padding/torn tails as a section.
 func (t TableID) StopsParsing() bool {
 	return t == TableIDNull || t.IsUnknown()
 }

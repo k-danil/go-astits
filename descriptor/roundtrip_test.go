@@ -84,8 +84,10 @@ var roundtripGenerators = map[string]func(r *rand.Rand) Descriptor{
 		return &AVCVideo{Header: Header{Tag: TagAVCVideo},
 			ProfileIDC: uint8(r.UintN(256)), LevelIDC: uint8(r.UintN(256)),
 			ConstraintSet0Flag: r.UintN(2) == 1, ConstraintSet1Flag: r.UintN(2) == 1,
-			ConstraintSet2Flag: r.UintN(2) == 1, CompatibleFlags: uint8(r.UintN(32)),
-			AVCStillPresent: r.UintN(2) == 1, AVC24HourPictureFlag: r.UintN(2) == 1}
+			ConstraintSet2Flag: r.UintN(2) == 1, ConstraintSet3Flag: r.UintN(2) == 1,
+			ConstraintSet4Flag: r.UintN(2) == 1, ConstraintSet5Flag: r.UintN(2) == 1,
+			CompatibleFlags: uint8(r.UintN(4)), AVCStillPresent: r.UintN(2) == 1,
+			AVC24HourPictureFlag: r.UintN(2) == 1, FramePackingSEINotPresentFlag: r.UintN(2) == 1}
 	},
 	"Component": func(r *rand.Rand) Descriptor {
 		return &Component{Header: Header{Tag: TagComponent},
@@ -195,7 +197,7 @@ var roundtripGenerators = map[string]func(r *rand.Rand) Descriptor{
 		d := &Teletext{Header: Header{Tag: TagTeletext}}
 		for i := uint(0); i < 1+r.UintN(4); i++ {
 			d.Items = append(d.Items, TeletextItem{Language: randLang(r), Type: uint8(r.UintN(32)),
-				Magazine: uint8(r.UintN(8)), Page: uint8(r.UintN(100))})
+				Magazine: uint8(r.UintN(8)), Page: uint8(r.UintN(256))})
 		}
 		return d
 	},
@@ -208,6 +210,11 @@ var roundtripGenerators = map[string]func(r *rand.Rand) Descriptor{
 	"VBIData": func(r *rand.Rand) Descriptor {
 		d := &VBIData{Header: Header{Tag: TagVBIData}}
 		for i := uint(0); i < 1+r.UintN(3); i++ {
+			if r.UintN(2) == 0 { // reserved service: opaque payload
+				d.Services = append(d.Services, VBIDataService{
+					DataServiceID: uint8(0x08 + r.UintN(0xf8)), Reserved: randBytes(r, int(r.UintN(8)))})
+				continue
+			}
 			svc := VBIDataService{DataServiceID: VBIDataServiceIDEBUTeletext}
 			for j := uint(0); j < 1+r.UintN(3); j++ {
 				svc.Descriptors = append(svc.Descriptors, VBIDataDescriptor{

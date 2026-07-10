@@ -6,6 +6,12 @@ import (
 	"github.com/k-danil/go-astits/v2/internal/bytesiter"
 )
 
+// range_type values (EN 300 468 Table 153)
+const (
+	VideoDepthRangeProductionDisparityHint = 0x00
+	VideoDepthRangeMultiRegionSEI          = 0x01
+)
+
 // ExtensionVideoDepthRange represents a video depth range extension descriptor:
 // the intended depth range of plano-stereoscopic 3D video, so receivers can
 // place graphics. For RangeType 0 the two disparity hints apply; for types >= 2
@@ -37,15 +43,15 @@ func newDescriptorExtensionVideoDepthRange(i *bytesiter.Iterator, offsetEnd int)
 		rng.RangeType = bs[0]
 		rangeLength := int(bs[1])
 
-		switch {
-		case rng.RangeType == 0x00:
+		switch rng.RangeType {
+		case VideoDepthRangeProductionDisparityHint:
 			if bs, err = i.NextBytesNoCopy(3); err != nil || len(bs) < 3 {
 				err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 				return
 			}
 			rng.VideoMaxDisparityHint = uint16(bs[0])<<4 | uint16(bs[1])>>4
 			rng.VideoMinDisparityHint = uint16(bs[1]&0x0f)<<8 | uint16(bs[2])
-		case rng.RangeType == 0x01:
+		case VideoDepthRangeMultiRegionSEI:
 		default:
 			if rng.RangeSelector, err = i.NextBytes(rangeLength); err != nil {
 				err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
@@ -58,10 +64,10 @@ func newDescriptorExtensionVideoDepthRange(i *bytesiter.Iterator, offsetEnd int)
 }
 
 func (rng *VideoDepthRange) rangeLength() int {
-	switch {
-	case rng.RangeType == 0x00:
+	switch rng.RangeType {
+	case VideoDepthRangeProductionDisparityHint:
 		return 3
-	case rng.RangeType == 0x01:
+	case VideoDepthRangeMultiRegionSEI:
 		return 0
 	default:
 		return len(rng.RangeSelector)
@@ -79,13 +85,13 @@ func (d *ExtensionVideoDepthRange) Append(dst []byte) []byte {
 	for idx := range d.Ranges {
 		rng := &d.Ranges[idx]
 		dst = append(dst, rng.RangeType, uint8(rng.rangeLength()))
-		switch {
-		case rng.RangeType == 0x00:
+		switch rng.RangeType {
+		case VideoDepthRangeProductionDisparityHint:
 			dst = append(dst,
 				byte(rng.VideoMaxDisparityHint>>4),
 				byte(rng.VideoMaxDisparityHint&0x0f)<<4|byte(rng.VideoMinDisparityHint>>8&0x0f),
 				byte(rng.VideoMinDisparityHint))
-		case rng.RangeType == 0x01:
+		case VideoDepthRangeMultiRegionSEI:
 		default:
 			dst = append(dst, rng.RangeSelector...)
 		}

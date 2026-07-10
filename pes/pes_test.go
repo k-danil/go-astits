@@ -18,7 +18,10 @@ func TestHasPESOptionalHeader(t *testing.T) {
 			a = append(a, i)
 		}
 	}
-	assert.Equal(t, []int{StreamIDPaddingStream, StreamIDPrivateStream2}, a)
+	assert.Equal(t, []int{
+		StreamIDProgramStreamMap, StreamIDPaddingStream, StreamIDPrivateStream2,
+		StreamIDECM, StreamIDEMM, StreamIDDSMCC, StreamIDH2221TypeE, StreamIDProgramStreamDirectory,
+	}, a)
 }
 
 var dsmTrickModeSlow = &DSMTrickMode{
@@ -336,8 +339,9 @@ var pesTestCases = []pesTestCase{
 						HasPrivateData:                  true,
 						HasProgramPacketSequenceCounter: true,
 						HasPSTDBuffer:                   true,
-						Extension2Data:                  []byte("extension2"),
-						Extension2Length:                10,
+						HasStreamIDExtension:            true,
+						StreamIDExtension:               0x65,
+						Extension2Reserved:              []byte("xtension2"),
 					},
 				},
 				PacketLength: 67,

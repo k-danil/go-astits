@@ -22,8 +22,8 @@ type ParentalRatingItem struct {
 
 // MinimumAge returns the minimum age for the parental rating
 func (d ParentalRatingItem) MinimumAge() int {
-	// Undefined or user defined ratings
-	if d.Rating == 0 || d.Rating > 0x10 {
+	// Undefined (0x00) or broadcaster-defined (0x10-0xFF) ratings
+	if d.Rating == 0 || d.Rating > 0x0f {
 		return 0
 	}
 	return int(d.Rating) + 3

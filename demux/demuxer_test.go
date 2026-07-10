@@ -137,7 +137,7 @@ func TestDemuxerNextUnknownDataPackets(t *testing.T) {
 		PID:                       256,
 		PayloadUnitStartIndicator: true,
 		HasPayload:                true,
-	}, &ts.PacketAdaptationField{}, []byte{0x01, 0x02, 0x03, 0x04}, true)
+	}, &ts.PacketAdaptationField{}, []byte{0x01, 0x02, 0x03, 0x04}, false)
 	_ = bufWriter.Write(b1)
 
 	dmx := New(context.Background(), bytes.NewReader(buf.Bytes()),

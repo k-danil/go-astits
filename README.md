@@ -13,7 +13,7 @@ Dependency arrows point strictly downwards, no cycles:
 
 | Package      | Contents                                                                                                                                                       |
 |--------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `ts`         | packet, header, adaptation field: parse + serialization, clock codecs (PCR/PTS/DTS/ESCR), CRC32, packet reader (copy and zero-copy view modes), `Packet.Raw()` |
+| `ts`         | packet, header, adaptation field: parse + serialization, clock codecs (PCR/PTS/DTS/ESCR), CRC32, packet reader (copy and zero-copy view modes, 188/192/204 autodetect), `Packet.Raw()` |
 | `pes`        | PES packets: parse + serialization                                                                                                                             |
 | `psi`        | PSI/SI tables — the full MPEG-2 systems + DVB-SI set: parse (all); serialize (PAT/PMT)                                                                          |
 | `descriptor` | DVB descriptors — the full EN 300 468 set (§6.2 main, §6.4 extension, audio annexes); one file per descriptor, unrecognized/MPEG tags degrade to `Unknown`         |
@@ -72,6 +72,11 @@ How:
   into the batch buffer; the accumulator copies payloads out before the refill, so the event
   API works unchanged in this mode. `Packet.Raw()` returns the view as well, so packet-level
   passthrough and PID rewrite over `Raw()` run without leaving zero-copy.
+- **Multi-format packet reader**: plain TS (188), M2TS (192, with the 4-byte
+  TP_extra_header exposed as `Packet.Prefix` / decoded by `ArrivalTimeStamp()`) and
+  Reed-Solomon (204) are read transparently. The size is autodetected by locking onto the
+  recurring sync byte — a stray `0x47` in payload or parity doesn't mislead it — or pinned
+  with `WithPacketSize`.
 - **`ts.PacketSkipper`** — header-level filtering before any payload work.
 - **`Packet.Offset`** — a byte map of the stream, correct even with a skipper installed.
 - **`demux.WithPacketHook`** — a callback run on every raw packet as it is read (after the

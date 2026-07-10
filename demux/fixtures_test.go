@@ -13,10 +13,12 @@ const syncByte byte = '\x47'
 func packet(h ts.PacketHeader, a *ts.PacketAdaptationField, i []byte, packet192bytes bool) ([]byte, *ts.Packet) {
 	buf := &bytes.Buffer{}
 	w := bitstest.NewWriter(buf)
-	_ = w.Write(syncByte) // Sync byte
+	var prefix []byte
 	if packet192bytes {
-		_ = w.Write([]byte("test")) // Sometimes packets are 192 bytes
+		prefix = []byte("test") // M2TS TP_extra_header prefix (4 bytes) before the sync byte
+		_ = w.Write(prefix)
 	}
+	_ = w.Write(syncByte)                                           // Sync byte
 	_ = w.Write(packetHeaderBytes(h, "11"))                         // Header
 	_ = w.Write(packetAdaptationFieldBytes(a))                      // Adaptation field
 	var payload = append(i, bytes.Repeat([]byte{0}, 147-len(i))...) // Payload
@@ -24,6 +26,7 @@ func packet(h ts.PacketHeader, a *ts.PacketAdaptationField, i []byte, packet192b
 	pk := &ts.Packet{
 		Header:  packetHeader,
 		Payload: payload,
+		Prefix:  prefix,
 	}
 	pk.SetAdaptationField(packetAdaptationField)
 	return buf.Bytes(), pk

@@ -72,12 +72,17 @@ func randOptionalHeader(r *rand.Rand) *OptionalHeader {
 			e.PSTDBufferSize = uint16(r.UintN(1 << 13))
 		}
 		if e.HasExtension2 {
-			n := int(r.UintN(16))
-			e.Extension2Data = make([]byte, n)
-			for i := range e.Extension2Data {
-				e.Extension2Data[i] = uint8(r.UintN(256))
+			e.HasStreamIDExtension = r.UintN(2) == 1
+			if e.HasStreamIDExtension {
+				e.StreamIDExtension = uint8(r.UintN(128))
+			} else if e.HasTREF = r.UintN(2) == 1; e.HasTREF {
+				e.TREF = ts.NewClockReference(uint64(r.Uint64N(1<<33)), 0)
 			}
-			e.Extension2Length = uint8(n)
+			n := int(r.UintN(8))
+			e.Extension2Reserved = make([]byte, n)
+			for i := range e.Extension2Reserved {
+				e.Extension2Reserved[i] = uint8(r.UintN(256))
+			}
 		}
 		h.Extension = e
 	}

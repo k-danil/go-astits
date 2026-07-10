@@ -13,10 +13,12 @@ import (
 func packet(h PacketHeader, a *PacketAdaptationField, i []byte, packet192bytes bool) ([]byte, *Packet) {
 	buf := &bytes.Buffer{}
 	w := bitstest.NewWriter(buf)
-	_ = w.Write(syncByte) // Sync byte
+	var prefix []byte
 	if packet192bytes {
-		_ = w.Write([]byte("test")) // Sometimes packets are 192 bytes
+		prefix = []byte("test") // M2TS TP_extra_header prefix (4 bytes) before the sync byte
+		_ = w.Write(prefix)
 	}
+	_ = w.Write(syncByte)                                           // Sync byte
 	_ = w.Write(packetHeaderBytes(h, "11"))                         // Header
 	_ = w.Write(packetAdaptationFieldBytes(a))                      // Adaptation field
 	var payload = append(i, bytes.Repeat([]byte{0}, 147-len(i))...) // Payload
@@ -24,10 +26,28 @@ func packet(h PacketHeader, a *PacketAdaptationField, i []byte, packet192bytes b
 	pk := &Packet{
 		Header:  packetHeader,
 		Payload: payload,
+		Prefix:  prefix,
 	}
 	pk.af = *packetAdaptationField
 	pk.AdaptationField = &pk.af
 	return buf.Bytes(), pk
+}
+
+func TestParsePacket204(t *testing.T) {
+	// A 188-byte TS packet (payload only) plus a 16-byte Reed-Solomon suffix.
+	ts := make([]byte, PacketSize)
+	ts[0] = syncByte
+	ts[1] = 0x40 // payload_unit_start_indicator, PID hi 0
+	ts[3] = 0x10 // payload only, CC 0
+	copy(ts[4:], []byte("payload"))
+	b204 := append(ts, bytes.Repeat([]byte{0xaa}, RSPacketSize-PacketSize)...)
+
+	p := new(Packet)
+	_, err := p.parse(b204, EmptySkipper)
+	assert.NoError(t, err)
+	assert.True(t, p.Header.PayloadUnitStartIndicator)
+	assert.Nil(t, p.Prefix)
+	assert.Len(t, p.Payload, PacketSize-HeaderSize) // 184; the 16 RS parity bytes are excluded
 }
 
 func packetShort(h PacketHeader, payload []byte) ([]byte, *Packet) {

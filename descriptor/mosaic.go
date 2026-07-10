@@ -7,6 +7,14 @@ import (
 	"github.com/k-danil/go-astits/v2/internal/bytesiter"
 )
 
+// cell_linkage_info values (EN 300 468 Table 73)
+const (
+	MosaicCellLinkageBouquet     = 0x01
+	MosaicCellLinkageService     = 0x02
+	MosaicCellLinkageOtherMosaic = 0x03
+	MosaicCellLinkageEvent       = 0x04
+)
+
 // Mosaic represents a mosaic descriptor: how a mosaic video component is
 // partitioned into cells and what each logical cell links to (bouquet, service,
 // event, …) keyed by CellLinkageInfo.
@@ -94,13 +102,13 @@ func readMosaicLinkage(i *bytesiter.Iterator, cell *MosaicCell) (err error) {
 		return
 	}
 	switch cell.CellLinkageInfo {
-	case 0x01:
+	case MosaicCellLinkageBouquet:
 		cell.BouquetID = binary.BigEndian.Uint16(bs[0:2])
-	case 0x02, 0x03:
+	case MosaicCellLinkageService, MosaicCellLinkageOtherMosaic:
 		cell.OriginalNetworkID = binary.BigEndian.Uint16(bs[0:2])
 		cell.TransportStreamID = binary.BigEndian.Uint16(bs[2:4])
 		cell.ServiceID = binary.BigEndian.Uint16(bs[4:6])
-	case 0x04:
+	case MosaicCellLinkageEvent:
 		cell.OriginalNetworkID = binary.BigEndian.Uint16(bs[0:2])
 		cell.TransportStreamID = binary.BigEndian.Uint16(bs[2:4])
 		cell.ServiceID = binary.BigEndian.Uint16(bs[4:6])
@@ -111,11 +119,11 @@ func readMosaicLinkage(i *bytesiter.Iterator, cell *MosaicCell) (err error) {
 
 func mosaicLinkageLength(cellLinkageInfo uint8) int {
 	switch cellLinkageInfo {
-	case 0x01:
+	case MosaicCellLinkageBouquet:
 		return 2
-	case 0x02, 0x03:
+	case MosaicCellLinkageService, MosaicCellLinkageOtherMosaic:
 		return 6
-	case 0x04:
+	case MosaicCellLinkageEvent:
 		return 8
 	}
 	return 0
@@ -145,13 +153,13 @@ func (d *Mosaic) Append(dst []byte) []byte {
 		}
 		dst = append(dst, cell.CellLinkageInfo)
 		switch cell.CellLinkageInfo {
-		case 0x01:
+		case MosaicCellLinkageBouquet:
 			dst = append(dst, byte(cell.BouquetID>>8), byte(cell.BouquetID))
-		case 0x02, 0x03:
+		case MosaicCellLinkageService, MosaicCellLinkageOtherMosaic:
 			dst = append(dst, byte(cell.OriginalNetworkID>>8), byte(cell.OriginalNetworkID),
 				byte(cell.TransportStreamID>>8), byte(cell.TransportStreamID),
 				byte(cell.ServiceID>>8), byte(cell.ServiceID))
-		case 0x04:
+		case MosaicCellLinkageEvent:
 			dst = append(dst, byte(cell.OriginalNetworkID>>8), byte(cell.OriginalNetworkID),
 				byte(cell.TransportStreamID>>8), byte(cell.TransportStreamID),
 				byte(cell.ServiceID>>8), byte(cell.ServiceID),

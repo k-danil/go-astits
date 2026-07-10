@@ -28,8 +28,16 @@ type AnnouncementSupportItem struct {
 	ComponentTag      uint8
 }
 
+// reference_type values (EN 300 468 Table 20)
+const (
+	AnnouncementReferenceUsualAudio       = 0x00
+	AnnouncementReferenceSeparateAudio    = 0x01
+	AnnouncementReferenceDifferentService = 0x02
+	AnnouncementReferenceDifferentTS      = 0x03
+)
+
 func announcementHasReference(referenceType uint8) bool {
-	return referenceType >= 0x01 && referenceType <= 0x03
+	return referenceType >= AnnouncementReferenceSeparateAudio && referenceType <= AnnouncementReferenceDifferentTS
 }
 
 func newDescriptorAnnouncementSupport(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {

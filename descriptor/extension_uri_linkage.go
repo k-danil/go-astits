@@ -7,6 +7,13 @@ import (
 	"github.com/k-danil/go-astits/v2/internal/bytesiter"
 )
 
+// uri_linkage_type values (EN 300 468 Table 151)
+const (
+	URILinkageTypeOnlineSDT = 0x00
+	URILinkageTypeIPTVSDS   = 0x01
+	URILinkageTypeMRS       = 0x02
+)
+
 // ExtensionURILinkage represents a URI linkage extension descriptor: a resource
 // reachable over IP. MinPollingInterval is present for URILinkageType 0 and 1.
 // Chapter: 6.4.14 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
@@ -18,7 +25,7 @@ type ExtensionURILinkage struct {
 }
 
 func uriLinkageHasPollingInterval(uriLinkageType uint8) bool {
-	return uriLinkageType == 0x00 || uriLinkageType == 0x01
+	return uriLinkageType == URILinkageTypeOnlineSDT || uriLinkageType == URILinkageTypeIPTVSDS
 }
 
 func newDescriptorExtensionURILinkage(i *bytesiter.Iterator, offsetEnd int) (d *ExtensionURILinkage, err error) {

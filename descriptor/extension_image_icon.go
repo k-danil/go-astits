@@ -6,6 +6,12 @@ import (
 	"github.com/k-danil/go-astits/v2/internal/bytesiter"
 )
 
+// icon_transport_mode values (EN 300 468 Table 137)
+const (
+	ImageIconTransportModeInline = 0x00
+	ImageIconTransportModeURL    = 0x01
+)
+
 // ExtensionImageIcon represents an image icon extension descriptor: inline icon
 // data or a URL to an icon. The header/position/type fields are carried only in
 // the first descriptor of a set (DescriptorNumber == 0); later ones carry a
@@ -67,7 +73,7 @@ func newDescriptorExtensionImageIcon(i *bytesiter.Iterator, _ int) (d *Extension
 	if err = readLengthPrefixed(i, &d.IconType); err != nil {
 		return
 	}
-	if d.IconTransportMode == 0x00 || d.IconTransportMode == 0x01 {
+	if d.IconTransportMode == ImageIconTransportModeInline || d.IconTransportMode == ImageIconTransportModeURL {
 		if err = readLengthPrefixed(i, &d.IconData); err != nil {
 			return
 		}
@@ -98,7 +104,7 @@ func (d *ExtensionImageIcon) CalcLength() (n int) {
 		n += 3
 	}
 	n += 1 + len(d.IconType)
-	if d.IconTransportMode == 0x00 || d.IconTransportMode == 0x01 {
+	if d.IconTransportMode == ImageIconTransportModeInline || d.IconTransportMode == ImageIconTransportModeURL {
 		n += 1 + len(d.IconData)
 	}
 	return
@@ -126,7 +132,7 @@ func (d *ExtensionImageIcon) Append(dst []byte) []byte {
 
 	dst = append(dst, uint8(len(d.IconType)))
 	dst = append(dst, d.IconType...)
-	if d.IconTransportMode == 0x00 || d.IconTransportMode == 0x01 {
+	if d.IconTransportMode == ImageIconTransportModeInline || d.IconTransportMode == ImageIconTransportModeURL {
 		dst = append(dst, uint8(len(d.IconData)))
 		dst = append(dst, d.IconData...)
 	}
