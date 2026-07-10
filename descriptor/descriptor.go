@@ -15,9 +15,12 @@ type Tag uint8
 const (
 	TagAC3                        Tag = 0x6a
 	TagAVCVideo                   Tag = 0x28
+	TagBouquetName                Tag = 0x47
 	TagCA                         Tag = 0x9
+	TagCAIdentifier               Tag = 0x53
 	TagComponent                  Tag = 0x50
 	TagContent                    Tag = 0x54
+	TagCountryAvailability        Tag = 0x49
 	TagDataStreamAlignment        Tag = 0x6
 	TagEnhancedAC3                Tag = 0x7a
 	TagExtendedEvent              Tag = 0x4e
@@ -31,8 +34,12 @@ const (
 	TagPrivateDataSpecifier       Tag = 0x5f
 	TagRegistration               Tag = 0x5
 	TagService                    Tag = 0x48
+	TagServiceAvailability        Tag = 0x72
+	TagServiceList                Tag = 0x41
+	TagServiceMove                Tag = 0x60
 	TagShortEvent                 Tag = 0x4d
 	TagStreamIdentifier           Tag = 0x52
+	TagStuffing                   Tag = 0x42
 	TagSubtitling                 Tag = 0x59
 	TagTeletext                   Tag = 0x56
 	TagVBIData                    Tag = 0x45
@@ -176,12 +183,18 @@ func (dh Header) parseDescriptor(i *bytesiter.Iterator, offsetEnd int) (d Descri
 		return newDescriptorAC3(i, dh, offsetEnd)
 	case TagAVCVideo:
 		return newDescriptorAVCVideo(i, dh, offsetEnd)
+	case TagBouquetName:
+		return newDescriptorBouquetName(i, dh, offsetEnd)
 	case TagCA:
 		return newDescriptorCA(i, dh, offsetEnd)
+	case TagCAIdentifier:
+		return newDescriptorCAIdentifier(i, dh, offsetEnd)
 	case TagComponent:
 		return newDescriptorComponent(i, dh, offsetEnd)
 	case TagContent:
 		return newDescriptorContent(i, dh, offsetEnd)
+	case TagCountryAvailability:
+		return newDescriptorCountryAvailability(i, dh, offsetEnd)
 	case TagDataStreamAlignment:
 		return newDescriptorDataStreamAlignment(i, dh, offsetEnd)
 	case TagEnhancedAC3:
@@ -208,10 +221,18 @@ func (dh Header) parseDescriptor(i *bytesiter.Iterator, offsetEnd int) (d Descri
 		return newDescriptorRegistration(i, dh, offsetEnd)
 	case TagService:
 		return newDescriptorService(i, dh, offsetEnd)
+	case TagServiceAvailability:
+		return newDescriptorServiceAvailability(i, dh, offsetEnd)
+	case TagServiceList:
+		return newDescriptorServiceList(i, dh, offsetEnd)
+	case TagServiceMove:
+		return newDescriptorServiceMove(i, dh, offsetEnd)
 	case TagShortEvent:
 		return newDescriptorShortEvent(i, dh, offsetEnd)
 	case TagStreamIdentifier:
 		return newDescriptorStreamIdentifier(i, dh, offsetEnd)
+	case TagStuffing:
+		return newDescriptorStuffing(i, dh, offsetEnd)
 	case TagSubtitling:
 		return newDescriptorSubtitling(i, dh, offsetEnd)
 	case TagTeletext, TagVBITeletext:

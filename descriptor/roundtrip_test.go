@@ -217,6 +217,47 @@ var roundtripGenerators = map[string]func(r *rand.Rand) Descriptor{
 		}
 		return d
 	},
+	"BouquetName": func(r *rand.Rand) Descriptor {
+		return &BouquetName{Header: Header{Tag: TagBouquetName}, Name: randBytes(r, int(r.UintN(20)))}
+	},
+	"CAIdentifier": func(r *rand.Rand) Descriptor {
+		d := &CAIdentifier{Header: Header{Tag: TagCAIdentifier}}
+		for i := uint(0); i < 1+r.UintN(4); i++ {
+			d.SystemIDs = append(d.SystemIDs, uint16(r.UintN(1<<16)))
+		}
+		return d
+	},
+	"CountryAvailability": func(r *rand.Rand) Descriptor {
+		d := &CountryAvailability{Header: Header{Tag: TagCountryAvailability}, AvailabilityFlag: r.UintN(2) == 1}
+		for i := uint(0); i < 1+r.UintN(4); i++ {
+			d.Countries = append(d.Countries, randLang(r))
+		}
+		return d
+	},
+	"ServiceList": func(r *rand.Rand) Descriptor {
+		d := &ServiceList{Header: Header{Tag: TagServiceList}}
+		for i := uint(0); i < 1+r.UintN(5); i++ {
+			d.Items = append(d.Items, ServiceListItem{
+				ServiceID: uint16(r.UintN(1 << 16)), ServiceType: uint8(r.UintN(256))})
+		}
+		return d
+	},
+	"ServiceMove": func(r *rand.Rand) Descriptor {
+		return &ServiceMove{Header: Header{Tag: TagServiceMove},
+			NewOriginalNetworkID: uint16(r.UintN(1 << 16)),
+			NewTransportStreamID: uint16(r.UintN(1 << 16)),
+			NewServiceID:         uint16(r.UintN(1 << 16))}
+	},
+	"ServiceAvailability": func(r *rand.Rand) Descriptor {
+		d := &ServiceAvailability{Header: Header{Tag: TagServiceAvailability}, AvailabilityFlag: r.UintN(2) == 1}
+		for i := uint(0); i < 1+r.UintN(4); i++ {
+			d.CellIDs = append(d.CellIDs, uint16(r.UintN(1<<16)))
+		}
+		return d
+	},
+	"Stuffing": func(r *rand.Rand) Descriptor {
+		return &Stuffing{Header: Header{Tag: TagStuffing}, Data: randBytes(r, 1+int(r.UintN(20)))}
+	},
 }
 
 func TestRoundtripDescriptors(t *testing.T) {
