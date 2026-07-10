@@ -40,6 +40,7 @@ const (
 	TagLinkage                    Tag = 0x4a
 	TagLocalTimeOffset            Tag = 0x58
 	TagMaximumBitrate             Tag = 0xe
+	TagMosaic                     Tag = 0x51
 	TagMultilingualBouquetName    Tag = 0x5c
 	TagMultilingualComponent      Tag = 0x5e
 	TagMultilingualNetworkName    Tag = 0x5b
@@ -261,6 +262,8 @@ func (dh Header) parseDescriptor(i *bytesiter.Iterator, offsetEnd int) (d Descri
 		return newDescriptorLocalTimeOffset(i, dh, offsetEnd)
 	case TagMaximumBitrate:
 		return newDescriptorMaximumBitrate(i, dh, offsetEnd)
+	case TagMosaic:
+		return newDescriptorMosaic(i, dh, offsetEnd)
 	case TagMultilingualBouquetName:
 		return newDescriptorMultilingualBouquetName(i, dh, offsetEnd)
 	case TagMultilingualComponent:

@@ -434,6 +434,23 @@ var roundtripGenerators = map[string]func(r *rand.Rand) Descriptor{
 			OperatorCode: randBytes(r, int(r.UintN(4))), NationalAreaCode: randBytes(r, int(r.UintN(8))),
 			CoreNumber: randBytes(r, int(r.UintN(16)))}
 	},
+	"Mosaic": func(r *rand.Rand) Descriptor {
+		d := &Mosaic{Header: Header{Tag: TagMosaic}, MosaicEntryPoint: r.UintN(2) == 1,
+			NumberOfHorizontalElementaryCells: uint8(r.UintN(8)), NumberOfVerticalElementaryCells: uint8(r.UintN(8))}
+		for i := uint(0); i < 1+r.UintN(3); i++ {
+			cell := MosaicCell{
+				LogicalCellID: uint8(r.UintN(64)), LogicalCellPresentationInfo: uint8(r.UintN(8)),
+				CellLinkageInfo: uint8(r.UintN(5)),
+				BouquetID:       uint16(r.UintN(1 << 16)), OriginalNetworkID: uint16(r.UintN(1 << 16)),
+				TransportStreamID: uint16(r.UintN(1 << 16)), ServiceID: uint16(r.UintN(1 << 16)),
+				EventID: uint16(r.UintN(1 << 16))}
+			for j := uint(0); j < 1+r.UintN(3); j++ {
+				cell.ElementaryCellIDs = append(cell.ElementaryCellIDs, uint8(r.UintN(64)))
+			}
+			d.Cells = append(d.Cells, cell)
+		}
+		return d
+	},
 }
 
 func TestRoundtripDescriptors(t *testing.T) {
