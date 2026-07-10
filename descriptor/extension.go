@@ -18,8 +18,13 @@ const (
 	TagExtensionSupplementaryAudio     = 0x6
 	TagExtensionNetworkChangeNotify    = 0x07
 	TagExtensionMessage                = 0x08
+	TagExtensionTargetRegion           = 0x09
+	TagExtensionTargetRegionName       = 0x0a
 	TagExtensionServiceRelocated       = 0x0b
 	TagExtensionC2DeliverySystem       = 0x0d
+	TagExtensionVideoDepthRange        = 0x10
+	TagExtensionT2MI                   = 0x11
+	TagExtensionURILinkage             = 0x13
 	TagExtensionCIAncillaryData        = 0x14
 	TagExtensionC2BundleDeliverySystem = 0x16
 )
@@ -39,6 +44,11 @@ type Extension struct {
 	ServiceRelocated       *ExtensionServiceRelocated
 	ImageIcon              *ExtensionImageIcon
 	NetworkChangeNotify    *ExtensionNetworkChangeNotify
+	TargetRegion           *ExtensionTargetRegion
+	TargetRegionName       *ExtensionTargetRegionName
+	T2MI                   *ExtensionT2MI
+	URILinkage             *ExtensionURILinkage
+	VideoDepthRange        *ExtensionVideoDepthRange
 	Unknown                []byte
 	Header                 Header
 	Tag                    uint8
@@ -118,6 +128,31 @@ func newDescriptorExtension(i *bytesiter.Iterator, h Header, offsetEnd int) (dd 
 			err = fmt.Errorf("astits: parsing extension network change notify descriptor failed: %w", err)
 			return
 		}
+	case TagExtensionTargetRegion:
+		if d.TargetRegion, err = newDescriptorExtensionTargetRegion(i, offsetEnd); err != nil {
+			err = fmt.Errorf("astits: parsing extension target region descriptor failed: %w", err)
+			return
+		}
+	case TagExtensionTargetRegionName:
+		if d.TargetRegionName, err = newDescriptorExtensionTargetRegionName(i, offsetEnd); err != nil {
+			err = fmt.Errorf("astits: parsing extension target region name descriptor failed: %w", err)
+			return
+		}
+	case TagExtensionT2MI:
+		if d.T2MI, err = newDescriptorExtensionT2MI(i, offsetEnd); err != nil {
+			err = fmt.Errorf("astits: parsing extension T2-MI descriptor failed: %w", err)
+			return
+		}
+	case TagExtensionURILinkage:
+		if d.URILinkage, err = newDescriptorExtensionURILinkage(i, offsetEnd); err != nil {
+			err = fmt.Errorf("astits: parsing extension URI linkage descriptor failed: %w", err)
+			return
+		}
+	case TagExtensionVideoDepthRange:
+		if d.VideoDepthRange, err = newDescriptorExtensionVideoDepthRange(i, offsetEnd); err != nil {
+			err = fmt.Errorf("astits: parsing extension video depth range descriptor failed: %w", err)
+			return
+		}
 	default:
 		if d.Unknown, err = i.NextBytes(offsetEnd - i.Offset()); err != nil {
 			err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
@@ -155,6 +190,16 @@ func (d *Extension) CalcLength() int {
 		ret += d.ImageIcon.CalcLength()
 	case TagExtensionNetworkChangeNotify:
 		ret += d.NetworkChangeNotify.CalcLength()
+	case TagExtensionTargetRegion:
+		ret += d.TargetRegion.CalcLength()
+	case TagExtensionTargetRegionName:
+		ret += d.TargetRegionName.CalcLength()
+	case TagExtensionT2MI:
+		ret += d.T2MI.CalcLength()
+	case TagExtensionURILinkage:
+		ret += d.URILinkage.CalcLength()
+	case TagExtensionVideoDepthRange:
+		ret += d.VideoDepthRange.CalcLength()
 	default:
 		ret += len(d.Unknown)
 	}
@@ -191,6 +236,16 @@ func (d *Extension) Append(dst []byte) []byte {
 		dst = d.ImageIcon.Append(dst)
 	case TagExtensionNetworkChangeNotify:
 		dst = d.NetworkChangeNotify.Append(dst)
+	case TagExtensionTargetRegion:
+		dst = d.TargetRegion.Append(dst)
+	case TagExtensionTargetRegionName:
+		dst = d.TargetRegionName.Append(dst)
+	case TagExtensionT2MI:
+		dst = d.T2MI.Append(dst)
+	case TagExtensionURILinkage:
+		dst = d.URILinkage.Append(dst)
+	case TagExtensionVideoDepthRange:
+		dst = d.VideoDepthRange.Append(dst)
 	default:
 		dst = append(dst, d.Unknown...)
 	}

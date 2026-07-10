@@ -536,6 +536,55 @@ var roundtripGenerators = map[string]func(r *rand.Rand) Descriptor{
 		}
 		return &Extension{Header: Header{Tag: TagExtension}, Tag: TagExtensionImageIcon, ImageIcon: ii}
 	},
+	"ExtensionTargetRegion": func(r *rand.Rand) Descriptor {
+		tr := &ExtensionTargetRegion{CountryCode: randLang(r)}
+		for i := uint(0); i < 1+r.UintN(3); i++ {
+			tr.Regions = append(tr.Regions, TargetRegion{
+				CountryCodeFlag: r.UintN(2) == 1, CountryCode: randLang(r), RegionDepth: uint8(r.UintN(4)),
+				PrimaryRegionCode: uint8(r.UintN(256)), SecondaryRegionCode: uint8(r.UintN(256)),
+				TertiaryRegionCode: uint16(r.UintN(1 << 16))})
+		}
+		return &Extension{Header: Header{Tag: TagExtension}, Tag: TagExtensionTargetRegion, TargetRegion: tr}
+	},
+	"ExtensionTargetRegionName": func(r *rand.Rand) Descriptor {
+		tr := &ExtensionTargetRegionName{CountryCode: randLang(r), Language: randLang(r)}
+		for i := uint(0); i < 1+r.UintN(3); i++ {
+			tr.Regions = append(tr.Regions, TargetRegionName{
+				RegionDepth: uint8(1 + r.UintN(3)), RegionName: randBytes(r, int(r.UintN(16))),
+				PrimaryRegionCode: uint8(r.UintN(256)), SecondaryRegionCode: uint8(r.UintN(256)),
+				TertiaryRegionCode: uint16(r.UintN(1 << 16))})
+		}
+		return &Extension{Header: Header{Tag: TagExtension}, Tag: TagExtensionTargetRegionName, TargetRegionName: tr}
+	},
+	"ExtensionT2MI": func(r *rand.Rand) Descriptor {
+		return &Extension{Header: Header{Tag: TagExtension}, Tag: TagExtensionT2MI,
+			T2MI: &ExtensionT2MI{T2MIStreamID: uint8(r.UintN(8)), NumT2MIStreamsMinusOne: uint8(r.UintN(8)),
+				PCRISCRCommonClockFlag: r.UintN(2) == 1, Reserved: randBytes(r, int(r.UintN(4)))}}
+	},
+	"ExtensionURILinkage": func(r *rand.Rand) Descriptor {
+		ul := &ExtensionURILinkage{URILinkageType: uint8(r.UintN(4)), URI: randBytes(r, int(r.UintN(16))),
+			PrivateData: randBytes(r, int(r.UintN(8)))}
+		if ul.URILinkageType == 0 || ul.URILinkageType == 1 {
+			ul.MinPollingInterval = uint16(r.UintN(1 << 16))
+		}
+		return &Extension{Header: Header{Tag: TagExtension}, Tag: TagExtensionURILinkage, URILinkage: ul}
+	},
+	"ExtensionVideoDepthRange": func(r *rand.Rand) Descriptor {
+		vd := &ExtensionVideoDepthRange{}
+		for i := uint(0); i < 1+r.UintN(3); i++ {
+			rng := VideoDepthRange{RangeType: uint8(r.UintN(4))}
+			switch rng.RangeType {
+			case 0:
+				rng.VideoMaxDisparityHint = uint16(r.UintN(1 << 12))
+				rng.VideoMinDisparityHint = uint16(r.UintN(1 << 12))
+			case 1:
+			default:
+				rng.RangeSelector = randBytes(r, 1+int(r.UintN(8)))
+			}
+			vd.Ranges = append(vd.Ranges, rng)
+		}
+		return &Extension{Header: Header{Tag: TagExtension}, Tag: TagExtensionVideoDepthRange, VideoDepthRange: vd}
+	},
 	"ExtensionNetworkChangeNotify": func(r *rand.Rand) Descriptor {
 		ncn := &ExtensionNetworkChangeNotify{}
 		for i := uint(0); i < 1+r.UintN(2); i++ {
