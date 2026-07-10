@@ -14,6 +14,7 @@ import (
 // PSI table IDs
 const (
 	TableTypeBAT     = "BAT"
+	TableTypeCAT     = "CAT"
 	TableTypeDIT     = "DIT"
 	TableTypeEIT     = "EIT"
 	TableTypeNIT     = "NIT"
@@ -47,6 +48,7 @@ type TableID uint8
 
 const (
 	TableIDPAT TableID = 0x00
+	TableIDCAT TableID = 0x01
 	TableIDPMT TableID = 0x02
 
 	TableIDNITVariant1 TableID = 0x40
@@ -257,6 +259,8 @@ func (t TableID) Type() string {
 	switch {
 	case t == TableIDBAT:
 		return TableTypeBAT
+	case t == TableIDCAT:
+		return TableTypeCAT
 	case t >= TableIDEITStart && t <= TableIDEITEnd:
 		return TableTypeEIT
 	case t == TableIDDIT:
@@ -289,6 +293,7 @@ func (t TableID) Type() string {
 // hasPSISyntaxHeader checks whether the section has a syntax header
 func (t TableID) hasPSISyntaxHeader() bool {
 	return t == TableIDPAT ||
+		t == TableIDCAT ||
 		t == TableIDPMT ||
 		t == TableIDNITVariant1 || t == TableIDNITVariant2 ||
 		t == TableIDSDTVariant1 || t == TableIDSDTVariant2 ||
@@ -303,6 +308,7 @@ func (t TableID) hasCRC32() bool {
 func (t TableID) IsUnknown() bool {
 	switch t {
 	case TableIDBAT,
+		TableIDCAT,
 		TableIDDIT,
 		TableIDNITVariant1, TableIDNITVariant2,
 		TableIDNull,
@@ -392,6 +398,11 @@ func parsePSISectionSyntaxData(i *bytesiter.Iterator, h *SectionHeader, sh *Sect
 	case TableIDPAT:
 		if d, err = parsePATSection(i, offsetSectionsEnd, sh.TableIDExtension); err != nil {
 			err = fmt.Errorf("astits: parsing PAT section failed: %w", err)
+			return
+		}
+	case TableIDCAT:
+		if d, err = parseCATSection(i, offsetSectionsEnd); err != nil {
+			err = fmt.Errorf("astits: parsing CAT section failed: %w", err)
 			return
 		}
 	case TableIDPMT:

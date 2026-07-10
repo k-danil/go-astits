@@ -15,6 +15,7 @@ type Tag uint8
 const (
 	TagAC3                        Tag = 0x6a
 	TagAVCVideo                   Tag = 0x28
+	TagCA                         Tag = 0x9
 	TagComponent                  Tag = 0x50
 	TagContent                    Tag = 0x54
 	TagDataStreamAlignment        Tag = 0x6
@@ -48,6 +49,17 @@ func Parse(bs []byte) (ds []Descriptor, n int, err error) {
 	return ds, i.Offset(), nil
 }
 
+// ParseN parses a descriptor loop of exactly length bytes at the start of bs,
+// without a leading 2-byte length prefix — the form a CAT uses, where the loop
+// is bounded by the section length instead.
+func ParseN(bs []byte, length int) (ds []Descriptor, n int, err error) {
+	i := bytesiter.New(bs)
+	if ds, err = parseDescriptorsN(i, length); err != nil {
+		return
+	}
+	return ds, i.Offset(), nil
+}
+
 func parseDescriptors(i *bytesiter.Iterator) (o []Descriptor, err error) {
 	var bs []byte
 	if bs, err = i.NextBytesNoCopy(2); err != nil || len(bs) < 2 {
@@ -56,11 +68,15 @@ func parseDescriptors(i *bytesiter.Iterator) (o []Descriptor, err error) {
 	}
 
 	length := int(binary.BigEndian.Uint16(bs) & 0xfff)
+	return parseDescriptorsN(i, length)
+}
 
+func parseDescriptorsN(i *bytesiter.Iterator, length int) (o []Descriptor, err error) {
 	if length > 0 {
 		curOffset := i.Offset()
 		offsetEnd := i.Offset() + length
 
+		var bs []byte
 		var descrCount int
 		for i.Offset() < offsetEnd {
 			i.Skip(1)
@@ -160,6 +176,8 @@ func (dh Header) parseDescriptor(i *bytesiter.Iterator, offsetEnd int) (d Descri
 		return newDescriptorAC3(i, dh, offsetEnd)
 	case TagAVCVideo:
 		return newDescriptorAVCVideo(i, dh, offsetEnd)
+	case TagCA:
+		return newDescriptorCA(i, dh, offsetEnd)
 	case TagComponent:
 		return newDescriptorComponent(i, dh, offsetEnd)
 	case TagContent:

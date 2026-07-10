@@ -61,6 +61,8 @@ func tableEventKind(d psi.SectionSyntaxData) (ev Event, ok bool) {
 		return EventPAT, true
 	case *psi.PMT:
 		return EventPMT, true
+	case *psi.CAT:
+		return EventCAT, true
 	case *psi.NIT:
 		return EventNIT, true
 	case *psi.SDT:
@@ -81,8 +83,6 @@ func tableEventKind(d psi.SectionSyntaxData) (ev Event, ok bool) {
 // emitted unit.
 func (dmx *Demuxer) processUnit(u unit) (emitted *PES, err error) {
 	switch {
-	case u.pid == ts.PIDCAT:
-		poolOfPayload.put(u.buf)
 	case u.isPSI:
 		dmx.processPSI(u)
 	case isPESPayload(u.buf.bs):

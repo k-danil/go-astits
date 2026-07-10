@@ -15,7 +15,7 @@ Dependency arrows point strictly downwards, no cycles:
 |--------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `ts`         | packet, header, adaptation field: parse + serialization, clock codecs (PCR/PTS/DTS/ESCR), CRC32, packet reader (copy and zero-copy view modes), `Packet.Raw()` |
 | `pes`        | PES packets: parse + serialization                                                                                                                             |
-| `psi`        | PSI tables (PAT/PMT/EIT/NIT/SDT/TOT/TDT): parse + serialization                                                                                                |
+| `psi`        | PSI tables (PAT/PMT/CAT/EIT/NIT/SDT/TOT/TDT): parse + serialization                                                                                            |
 | `descriptor` | DVB/MPEG descriptors, one file per descriptor                                                                                                                  |
 | `demux`      | demuxer: per-PID byte accumulator, event-based `Next`/`Events`, PSI table state, PSI dedup                                                                     |
 | `mux`        | muxer: PES packetization, table generation and retransmission, raw passthrough                                                                                 |
@@ -51,10 +51,11 @@ How:
 - **Event-based demux** (`Next() (Event, error)` and the `Events()` iterator): one call
   advances to the next `EventPES` or a typed table event (`EventPAT`/`EventPMT`/`EventEIT`/…).
   A completed unit is claimed via `PES()` (pool-owned, `Close()` when done retaining it);
-  table state is read through `Section()`/`PAT()`/`PMT()`. DVB tables — EIT/NIT/SDT/TOT and
-  the descriptor-less TDT (`EventTDT`, current UTC only, no CRC) — are off by default
-  (`WithDVBTables`); `WithPSIRepeats` also emits byte-identical repeats (`TableChanged`
-  distinguishes them) for stream-composition analysis.
+  table state is read through `Section()`/`PAT()`/`PMT()`. The optional tables — EIT/NIT/SDT/TOT,
+  the descriptor-less TDT (`EventTDT`, current UTC only, no CRC) and the CAT (`EventCAT`, CA
+  descriptors naming the transport-wide EMM PIDs) — are off by default (`WithDVBTables`);
+  `WithPSIRepeats` also emits byte-identical repeats (`TableChanged` distinguishes them) for
+  stream-composition analysis.
 - **Per-PID byte accumulator**: each PID assembles its unit into one contiguous pooled
   buffer sized from the unit's own length hint (PSI section length, PES packet length) with
   a sticky-max fallback — packets are one-shot scratch, so both copy and view modes reach the
