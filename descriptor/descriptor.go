@@ -29,13 +29,16 @@ const (
 	TagISO639LanguageAndAudioType Tag = 0xa
 	TagLocalTimeOffset            Tag = 0x58
 	TagMaximumBitrate             Tag = 0xe
+	TagNVODReference              Tag = 0x4b
 	TagNetworkName                Tag = 0x40
+	TagPDC                        Tag = 0x69
 	TagParentalRating             Tag = 0x55
 	TagPrivateDataIndicator       Tag = 0xf
 	TagPrivateDataSpecifier       Tag = 0x5f
 	TagRegistration               Tag = 0x5
 	TagS2SatelliteDeliverySystem  Tag = 0x79
 	TagSatelliteDeliverySystem    Tag = 0x43
+	TagScrambling                 Tag = 0x65
 	TagService                    Tag = 0x48
 	TagServiceAvailability        Tag = 0x72
 	TagServiceList                Tag = 0x41
@@ -46,6 +49,9 @@ const (
 	TagSubtitling                 Tag = 0x59
 	TagTeletext                   Tag = 0x56
 	TagTerrestrialDeliverySystem  Tag = 0x5a
+	TagTimeShiftedEvent           Tag = 0x4f
+	TagTimeShiftedService         Tag = 0x4c
+	TagTransportStream            Tag = 0x67
 	TagVBIData                    Tag = 0x45
 	TagVBITeletext                Tag = 0x46
 )
@@ -215,8 +221,12 @@ func (dh Header) parseDescriptor(i *bytesiter.Iterator, offsetEnd int) (d Descri
 		return newDescriptorLocalTimeOffset(i, dh, offsetEnd)
 	case TagMaximumBitrate:
 		return newDescriptorMaximumBitrate(i, dh, offsetEnd)
+	case TagNVODReference:
+		return newDescriptorNVODReference(i, dh, offsetEnd)
 	case TagNetworkName:
 		return newDescriptorNetworkName(i, dh, offsetEnd)
+	case TagPDC:
+		return newDescriptorPDC(i, dh, offsetEnd)
 	case TagParentalRating:
 		return newDescriptorParentalRating(i, dh, offsetEnd)
 	case TagPrivateDataIndicator:
@@ -229,6 +239,8 @@ func (dh Header) parseDescriptor(i *bytesiter.Iterator, offsetEnd int) (d Descri
 		return newDescriptorS2SatelliteDeliverySystem(i, dh, offsetEnd)
 	case TagSatelliteDeliverySystem:
 		return newDescriptorSatelliteDeliverySystem(i, dh, offsetEnd)
+	case TagScrambling:
+		return newDescriptorScrambling(i, dh, offsetEnd)
 	case TagService:
 		return newDescriptorService(i, dh, offsetEnd)
 	case TagServiceAvailability:
@@ -249,6 +261,12 @@ func (dh Header) parseDescriptor(i *bytesiter.Iterator, offsetEnd int) (d Descri
 		return newDescriptorTeletext(i, dh, offsetEnd)
 	case TagTerrestrialDeliverySystem:
 		return newDescriptorTerrestrialDeliverySystem(i, dh, offsetEnd)
+	case TagTimeShiftedEvent:
+		return newDescriptorTimeShiftedEvent(i, dh, offsetEnd)
+	case TagTimeShiftedService:
+		return newDescriptorTimeShiftedService(i, dh, offsetEnd)
+	case TagTransportStream:
+		return newDescriptorTransportStream(i, dh, offsetEnd)
 	case TagVBIData:
 		return newDescriptorVBIData(i, dh, offsetEnd)
 	default:

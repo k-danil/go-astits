@@ -285,6 +285,33 @@ var roundtripGenerators = map[string]func(r *rand.Rand) Descriptor{
 			GuardInterval: uint8(r.UintN(4)), TransmissionMode: uint8(r.UintN(4)),
 			OtherFrequencyFlag: r.UintN(2) == 1}
 	},
+	"NVODReference": func(r *rand.Rand) Descriptor {
+		d := &NVODReference{Header: Header{Tag: TagNVODReference}}
+		for i := uint(0); i < 1+r.UintN(4); i++ {
+			d.Items = append(d.Items, NVODReferenceItem{
+				TransportStreamID: uint16(r.UintN(1 << 16)),
+				OriginalNetworkID: uint16(r.UintN(1 << 16)),
+				ServiceID:         uint16(r.UintN(1 << 16))})
+		}
+		return d
+	},
+	"PDC": func(r *rand.Rand) Descriptor {
+		return &PDC{Header: Header{Tag: TagPDC}, ProgrammeIdentificationLabel: uint32(r.UintN(1 << 20))}
+	},
+	"Scrambling": func(r *rand.Rand) Descriptor {
+		return &Scrambling{Header: Header{Tag: TagScrambling}, Mode: uint8(r.UintN(256))}
+	},
+	"TimeShiftedEvent": func(r *rand.Rand) Descriptor {
+		return &TimeShiftedEvent{Header: Header{Tag: TagTimeShiftedEvent},
+			ReferenceServiceID: uint16(r.UintN(1 << 16)), ReferenceEventID: uint16(r.UintN(1 << 16))}
+	},
+	"TimeShiftedService": func(r *rand.Rand) Descriptor {
+		return &TimeShiftedService{Header: Header{Tag: TagTimeShiftedService},
+			ReferenceServiceID: uint16(r.UintN(1 << 16))}
+	},
+	"TransportStream": func(r *rand.Rand) Descriptor {
+		return &TransportStream{Header: Header{Tag: TagTransportStream}, Data: randBytes(r, 1+int(r.UintN(8)))}
+	},
 }
 
 func TestRoundtripDescriptors(t *testing.T) {
