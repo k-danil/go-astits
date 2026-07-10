@@ -18,6 +18,7 @@ const (
 	TagBouquetName                Tag = 0x47
 	TagCA                         Tag = 0x9
 	TagCAIdentifier               Tag = 0x53
+	TagCableDeliverySystem        Tag = 0x44
 	TagComponent                  Tag = 0x50
 	TagContent                    Tag = 0x54
 	TagCountryAvailability        Tag = 0x49
@@ -33,6 +34,8 @@ const (
 	TagPrivateDataIndicator       Tag = 0xf
 	TagPrivateDataSpecifier       Tag = 0x5f
 	TagRegistration               Tag = 0x5
+	TagS2SatelliteDeliverySystem  Tag = 0x79
+	TagSatelliteDeliverySystem    Tag = 0x43
 	TagService                    Tag = 0x48
 	TagServiceAvailability        Tag = 0x72
 	TagServiceList                Tag = 0x41
@@ -42,6 +45,7 @@ const (
 	TagStuffing                   Tag = 0x42
 	TagSubtitling                 Tag = 0x59
 	TagTeletext                   Tag = 0x56
+	TagTerrestrialDeliverySystem  Tag = 0x5a
 	TagVBIData                    Tag = 0x45
 	TagVBITeletext                Tag = 0x46
 )
@@ -189,6 +193,8 @@ func (dh Header) parseDescriptor(i *bytesiter.Iterator, offsetEnd int) (d Descri
 		return newDescriptorCA(i, dh, offsetEnd)
 	case TagCAIdentifier:
 		return newDescriptorCAIdentifier(i, dh, offsetEnd)
+	case TagCableDeliverySystem:
+		return newDescriptorCableDeliverySystem(i, dh, offsetEnd)
 	case TagComponent:
 		return newDescriptorComponent(i, dh, offsetEnd)
 	case TagContent:
@@ -219,6 +225,10 @@ func (dh Header) parseDescriptor(i *bytesiter.Iterator, offsetEnd int) (d Descri
 		return newDescriptorPrivateDataSpecifier(i, dh, offsetEnd)
 	case TagRegistration:
 		return newDescriptorRegistration(i, dh, offsetEnd)
+	case TagS2SatelliteDeliverySystem:
+		return newDescriptorS2SatelliteDeliverySystem(i, dh, offsetEnd)
+	case TagSatelliteDeliverySystem:
+		return newDescriptorSatelliteDeliverySystem(i, dh, offsetEnd)
 	case TagService:
 		return newDescriptorService(i, dh, offsetEnd)
 	case TagServiceAvailability:
@@ -237,6 +247,8 @@ func (dh Header) parseDescriptor(i *bytesiter.Iterator, offsetEnd int) (d Descri
 		return newDescriptorSubtitling(i, dh, offsetEnd)
 	case TagTeletext, TagVBITeletext:
 		return newDescriptorTeletext(i, dh, offsetEnd)
+	case TagTerrestrialDeliverySystem:
+		return newDescriptorTerrestrialDeliverySystem(i, dh, offsetEnd)
 	case TagVBIData:
 		return newDescriptorVBIData(i, dh, offsetEnd)
 	default:

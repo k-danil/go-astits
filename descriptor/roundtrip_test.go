@@ -258,6 +258,33 @@ var roundtripGenerators = map[string]func(r *rand.Rand) Descriptor{
 	"Stuffing": func(r *rand.Rand) Descriptor {
 		return &Stuffing{Header: Header{Tag: TagStuffing}, Data: randBytes(r, 1+int(r.UintN(20)))}
 	},
+	"CableDeliverySystem": func(r *rand.Rand) Descriptor {
+		return &CableDeliverySystem{Header: Header{Tag: TagCableDeliverySystem},
+			Frequency: r.Uint32(), SymbolRate: uint32(r.UintN(1 << 28)),
+			FECOuter: uint8(r.UintN(16)), Modulation: uint8(r.UintN(256)), FECInner: uint8(r.UintN(16))}
+	},
+	"SatelliteDeliverySystem": func(r *rand.Rand) Descriptor {
+		return &SatelliteDeliverySystem{Header: Header{Tag: TagSatelliteDeliverySystem},
+			Frequency: r.Uint32(), OrbitalPosition: uint16(r.UintN(1 << 16)),
+			WestEastFlag: r.UintN(2) == 1, Polarization: uint8(r.UintN(4)), RollOff: uint8(r.UintN(4)),
+			ModulationSystem: r.UintN(2) == 1, ModulationType: uint8(r.UintN(4)),
+			SymbolRate: uint32(r.UintN(1 << 28)), FECInner: uint8(r.UintN(16))}
+	},
+	"S2SatelliteDeliverySystem": func(r *rand.Rand) Descriptor {
+		return &S2SatelliteDeliverySystem{Header: Header{Tag: TagS2SatelliteDeliverySystem},
+			ScramblingSequenceSelector: r.UintN(2) == 1, MultipleInputStreamFlag: r.UintN(2) == 1,
+			BackwardsCompatibilityIndicator: r.UintN(2) == 1,
+			ScramblingSequenceIndex:         uint32(r.UintN(1 << 18)), InputStreamIdentifier: uint8(r.UintN(256))}
+	},
+	"TerrestrialDeliverySystem": func(r *rand.Rand) Descriptor {
+		return &TerrestrialDeliverySystem{Header: Header{Tag: TagTerrestrialDeliverySystem},
+			CentreFrequency: r.Uint32(), Bandwidth: uint8(r.UintN(8)),
+			Priority: r.UintN(2) == 1, TimeSlicingIndicator: r.UintN(2) == 1, MPEFECIndicator: r.UintN(2) == 1,
+			Constellation: uint8(r.UintN(4)), HierarchyInformation: uint8(r.UintN(8)),
+			CodeRateHPStream: uint8(r.UintN(8)), CodeRateLPStream: uint8(r.UintN(8)),
+			GuardInterval: uint8(r.UintN(4)), TransmissionMode: uint8(r.UintN(4)),
+			OtherFrequencyFlag: r.UintN(2) == 1}
+	},
 }
 
 func TestRoundtripDescriptors(t *testing.T) {
