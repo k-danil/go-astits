@@ -13,6 +13,7 @@ type Tag uint8
 // Descriptor tags
 // Chapter: 6.1 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 const (
+	TagAAC                        Tag = 0x7c
 	TagAC3                        Tag = 0x6a
 	TagAVCVideo                   Tag = 0x28
 	TagAdaptationFieldData        Tag = 0x70
@@ -28,6 +29,7 @@ const (
 	TagContent                    Tag = 0x54
 	TagCountryAvailability        Tag = 0x49
 	TagDSNG                       Tag = 0x68
+	TagDTS                        Tag = 0x7b
 	TagDataBroadcast              Tag = 0x64
 	TagDataBroadcastID            Tag = 0x66
 	TagDataStreamAlignment        Tag = 0x6
@@ -208,6 +210,8 @@ const userDefinedTagsStart = 0x80
 // a parser LUT defeats escape analysis and forces the iterator to the heap.
 func (dh Header) parseDescriptor(i *bytesiter.Iterator, offsetEnd int) (d Descriptor, err error) {
 	switch dh.Tag {
+	case TagAAC:
+		return newDescriptorAAC(i, dh, offsetEnd)
 	case TagAC3:
 		return newDescriptorAC3(i, dh, offsetEnd)
 	case TagAVCVideo:
@@ -238,6 +242,8 @@ func (dh Header) parseDescriptor(i *bytesiter.Iterator, offsetEnd int) (d Descri
 		return newDescriptorCountryAvailability(i, dh, offsetEnd)
 	case TagDSNG:
 		return newDescriptorDSNG(i, dh, offsetEnd)
+	case TagDTS:
+		return newDescriptorDTS(i, dh, offsetEnd)
 	case TagDataBroadcast:
 		return newDescriptorDataBroadcast(i, dh, offsetEnd)
 	case TagDataBroadcastID:

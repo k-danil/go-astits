@@ -601,6 +601,23 @@ var roundtripGenerators = map[string]func(r *rand.Rand) Descriptor{
 		}
 		return &Extension{Header: Header{Tag: TagExtension}, Tag: TagExtensionNetworkChangeNotify, NetworkChangeNotify: ncn}
 	},
+	"DTS": func(r *rand.Rand) Descriptor {
+		return &DTS{Header: Header{Tag: TagDTS},
+			SampleRateCode: uint8(r.UintN(16)), BitRateCode: uint8(r.UintN(64)), NBLKS: uint8(r.UintN(128)),
+			FSize: uint16(r.UintN(1 << 14)), SurroundMode: uint8(r.UintN(64)), LFEFlag: r.UintN(2) == 1,
+			ExtendedSurroundFlag: uint8(r.UintN(4)), AdditionalInfo: randBytes(r, int(r.UintN(8)))}
+	},
+	"AAC": func(r *rand.Rand) Descriptor {
+		d := &AAC{Header: Header{Tag: TagAAC}, ProfileAndLevel: uint8(r.UintN(256))}
+		if r.UintN(2) == 1 {
+			d.HasFlags = true
+			d.AACTypeFlag = r.UintN(2) == 1
+			d.SAOCDEFlag = r.UintN(2) == 1
+			d.AACType = uint8(r.UintN(256))
+			d.AdditionalInfo = randBytes(r, int(r.UintN(8)))
+		}
+		return d
+	},
 	"Mosaic": func(r *rand.Rand) Descriptor {
 		d := &Mosaic{Header: Header{Tag: TagMosaic}, MosaicEntryPoint: r.UintN(2) == 1,
 			NumberOfHorizontalElementaryCells: uint8(r.UintN(8)), NumberOfVerticalElementaryCells: uint8(r.UintN(8))}
