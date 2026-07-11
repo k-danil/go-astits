@@ -6,3 +6,6 @@ test
 *.test
 doc/
 AGENTS.md
+
+# golden-dependent benches/tests (need GOLDEN_TS_DIR) — kept local, not for the public repo
+demux/bench_view_test.go
