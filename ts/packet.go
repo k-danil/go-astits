@@ -97,21 +97,7 @@ type PacketAdaptationField struct {
 // HasPCR used to produce phantom PCRs. PCR/OPCR values behind cleared Has-flags are
 // garbage: reading them without checking the flag is forbidden anyway.
 func (af *PacketAdaptationField) Reset() {
-	af.AdaptationExtensionField = nil
-	af.TransportPrivateData = nil
-	af.TransportPrivateDataLength = 0
-	af.Length = 0
-	af.StuffingLength = 0
-	af.SpliceCountdown = 0
-	af.IsOneByteStuffing = false
-	af.DiscontinuityIndicator = false
-	af.RandomAccessIndicator = false
-	af.ElementaryStreamPriorityIndicator = false
-	af.HasPCR = false
-	af.HasOPCR = false
-	af.HasSplicingCountdown = false
-	af.HasTransportPrivateData = false
-	af.HasAdaptationExtensionField = false
+	*af = PacketAdaptationField{}
 }
 
 // CopyFrom stores an owned copy of src, so the receiver survives reuse of the
