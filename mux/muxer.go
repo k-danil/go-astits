@@ -16,6 +16,10 @@ const (
 	pmtStartPID        uint16 = 0x1000
 	programNumberStart uint16 = 1
 	packetMaxPayload          = 184
+	// Widest PES header: 6-byte prefix + optional header (2 flag bytes + a 1-byte
+	// length + up to 255 data bytes). It can exceed a packet, so it is serialized
+	// once and spanned across packets.
+	maxPESHeader = pes.HeaderSize + 3 + 0xff
 )
 
 var (
@@ -45,9 +49,11 @@ type Muxer struct {
 	patBytes bytes.Buffer
 	pmtBytes bytes.Buffer
 
-	pkt     []byte
-	stuffAF ts.PacketAdaptationField
-	pktArr  [ts.PacketSize]byte
+	pkt       []byte
+	pesHdr    []byte // serialized PES header, spanned across packets
+	stuffAF   ts.PacketAdaptationField
+	pktArr    [ts.PacketSize]byte
+	pesHdrArr [maxPESHeader]byte
 
 	patData []byte
 	pmtData []byte
@@ -104,6 +110,7 @@ func New(ctx context.Context, w io.Writer, opts ...func(*Muxer)) (m *Muxer) {
 	}
 
 	m.pkt = m.pktArr[:]
+	m.pesHdr = m.pesHdrArr[:]
 	m.pm = pidmap.Map[uint16]{Keys: m.pmKeysArr[:0], Vals: m.pmValsArr[:0]}
 	m.esContexts = pidmap.Map[esContext]{Keys: m.esKeysArr[:0], Vals: m.esValsArr[:0]}
 	m.patData = m.patArr[:0]
@@ -206,137 +213,167 @@ func (m *Muxer) WriteData(d *Data) (bytesWritten int, err error) {
 
 	bytesWritten += n
 
-	payloadStart := true
-	writeAf := d.AdaptationField != nil
-	payloadBytesWritten := 0
-	// A full mid-unit packet is just the fixed header (only CC advancing) plus a
-	// packet-sized payload chunk — no PES header, no adaptation field. Handle it
-	// directly; the generic branchy path below covers the first/last/stuffed ones.
-	bulkChunk := m.packetSize - ts.HeaderSize
-	fastHeader := ts.PacketHeader{PID: d.PID, HasPayload: true}
-	fastLocked := false
-	for payloadBytesWritten < len(d.PES.Data) {
-		if !payloadStart && len(d.PES.Data)-payloadBytesWritten >= bulkChunk {
-			cc := uint8(ctx.cc.inc())
-			if fastLocked {
-				// Between full mid-unit packets only CC changes — patch it in
-				// place instead of re-encoding the whole header.
-				ts.SetContinuityCounter(m.pkt, cc)
-			} else {
-				fastHeader.ContinuityCounter = cc
-				fastHeader.Put(m.pkt)
-				fastLocked = true
-			}
-			var wn int
-			if wn, err = m.w.Write(m.pkt[:ts.HeaderSize]); err != nil {
-				return
-			}
-			bytesWritten += wn
-			if wn, err = m.w.Write(d.PES.Data[payloadBytesWritten : payloadBytesWritten+bulkChunk]); err != nil {
-				return
-			}
-			bytesWritten += wn
-			payloadBytesWritten += bulkChunk
-			continue
-		}
+	if d.PES.Header.StreamID == 0 {
+		d.PES.Header.StreamID = ctx.es.StreamType.ToPESStreamID()
+	}
 
-		pktLen := ts.HeaderSize
-		// A ts.Packet value here would zero its embedded read buffer per output
-		// packet; the mux only needs the header and adaptation field.
+	// Serialize the PES header once. Header and payload form one byte stream that
+	// is split across packets; a header wider than a packet spans several of them.
+	var hdrLen int
+	if hdrLen, err = d.PES.Header.PutHeader(m.pesHdr, len(d.PES.Data)); err != nil {
+		return
+	}
+	pesHdr := m.pesHdr[:hdrLen]
+
+	bulkChunk := m.packetSize - ts.HeaderSize
+	firstPktLen := ts.HeaderSize
+	if d.AdaptationField != nil {
+		firstPktLen += 1 + d.AdaptationField.CalcLength()
+	}
+
+	// Emit the PES header, then drain the payload. It usually fits the first
+	// packet; one too wide (a fat AF ate the room) spans several. Either way this
+	// ends on a packet boundary, so the shared bulk and tail phases below finish it.
+	payloadWritten := 0
+	if firstAvail := m.packetSize - firstPktLen; hdrLen <= firstAvail {
+		firstPayload := min(len(d.PES.Data), firstAvail-hdrLen)
+		content := hdrLen + firstPayload
 		header := ts.PacketHeader{
 			ContinuityCounter:         uint8(ctx.cc.inc()),
-			HasAdaptationField:        writeAf,
-			HasPayload:                false,
-			PayloadUnitStartIndicator: false,
 			PID:                       d.PID,
+			HasPayload:                true,
+			PayloadUnitStartIndicator: true,
 		}
 		var af *ts.PacketAdaptationField
-
-		if writeAf {
+		if stuffing := firstAvail - content; d.AdaptationField != nil {
+			header.HasAdaptationField = true
 			af = d.AdaptationField
-			// one byte for adaptation field length field
-			pktLen += 1 + d.AdaptationField.CalcLength()
-			writeAf = false
+			af.StuffingLength = uint8(stuffing)
+		} else if stuffing > 0 {
+			header.HasAdaptationField = true
+			af = m.stuffingAdaptationField(stuffing)
 		}
-
-		bytesAvailable := m.packetSize - pktLen
-		if payloadStart {
-			pesHeaderLengthCurrent := pes.HeaderSize + d.PES.Header.OptionalHeader.CalcLength()
-			// d.AdaptationField with pes header are too big, we don't have space to write pes header
-			if bytesAvailable < pesHeaderLengthCurrent {
+		if n, err = m.emitPacket(header, af, m.packetSize-content, pesHdr, d.PES.Data[:firstPayload]); err != nil {
+			return
+		}
+		bytesWritten += n
+		payloadWritten = firstPayload
+	} else {
+		writeAf := d.AdaptationField != nil
+		for hdrWritten := 0; hdrWritten < hdrLen; {
+			header := ts.PacketHeader{ContinuityCounter: uint8(ctx.cc.inc()), PID: d.PID}
+			var af *ts.PacketAdaptationField
+			pktLen := ts.HeaderSize
+			if writeAf {
 				header.HasAdaptationField = true
-				if af == nil {
-					af = m.stuffingAdaptationField(bytesAvailable)
-				} else {
-					af.StuffingLength = uint8(bytesAvailable)
-				}
-			} else {
+				af = d.AdaptationField
+				// one byte for the adaptation field length field
+				pktLen += 1 + d.AdaptationField.CalcLength()
+				writeAf = false
+			}
+			bytesAvailable := m.packetSize - pktLen
+			hdrChunk := min(hdrLen-hdrWritten, bytesAvailable)
+			payloadChunk := min(len(d.PES.Data)-payloadWritten, bytesAvailable-hdrChunk)
+			content := hdrChunk + payloadChunk
+			if content > 0 {
 				header.HasPayload = true
-				header.PayloadUnitStartIndicator = true
+				if hdrWritten == 0 {
+					header.PayloadUnitStartIndicator = true
+				}
 			}
-		} else {
-			header.HasPayload = true
-		}
-
-		if header.HasPayload {
-			if d.PES.Header.StreamID == 0 {
-				d.PES.Header.StreamID = ctx.es.StreamType.ToPESStreamID()
-			}
-
-			// Size the chunk analytically so the AF stuffing is finalized
-			// before serialization; the PES then lands in the packet tail
-			// (payloadOffset = packetSize - ntot) with no scratch copy.
-			ntot, npayload := d.PES.Header.CalcDataLength(
-				d.PES.Data[payloadBytesWritten:],
-				payloadStart,
-				bytesAvailable,
-			)
-
-			bytesAvailable -= ntot
-			// if we still have some space in packet, we should stuff it with adaptation field stuffing
-			// we can't stuff packets with 0xff at the end of a packet since it's not uncommon for PES payloads to have length unspecified
-			if bytesAvailable > 0 {
+			// Stuff the leftover through the adaptation field: a PES of unspecified
+			// length would read trailing 0xff padding as payload.
+			if stuffing := bytesAvailable - content; stuffing > 0 {
 				header.HasAdaptationField = true
 				if af == nil {
-					af = m.stuffingAdaptationField(bytesAvailable)
+					af = m.stuffingAdaptationField(stuffing)
 				} else {
-					af.StuffingLength = uint8(bytesAvailable)
+					af.StuffingLength = uint8(stuffing)
 				}
 			}
-
-			payloadOffset := m.packetSize - ntot
-			if _, _, err = d.PES.Header.Put(
-				m.pkt[payloadOffset:m.packetSize],
-				d.PES.Data[payloadBytesWritten:],
-				payloadStart,
-			); err != nil {
+			if n, err = m.emitPacket(header, af, m.packetSize-content,
+				pesHdr[hdrWritten:hdrWritten+hdrChunk],
+				d.PES.Data[payloadWritten:payloadWritten+payloadChunk]); err != nil {
 				return
 			}
-			payloadBytesWritten += npayload
-
-			// Assemble header + AF ahead of the payload directly in m.pkt;
-			// a full Packet.Put would copy the already-placed payload a second time.
-			header.Put(m.pkt)
-			if header.HasAdaptationField {
-				if _, err = af.Put(m.pkt[ts.HeaderSize:]); err != nil {
-					return
-				}
-			}
-
-			if n, err = m.w.Write(m.pkt); err != nil {
-				return
-			}
-
 			bytesWritten += n
-
-			payloadStart = false
+			hdrWritten += hdrChunk
+			payloadWritten += payloadChunk
 		}
+	}
+
+	// Bulk phase: full mid-unit packets — a fixed 4-byte header (only CC
+	// advancing) and a packet-sized payload chunk, no PES header or AF. Between
+	// them only CC changes, so it is patched in place instead of re-encoded.
+	fastHeader := ts.PacketHeader{PID: d.PID, HasPayload: true}
+	fastLocked := false
+	for len(d.PES.Data)-payloadWritten >= bulkChunk {
+		cc := uint8(ctx.cc.inc())
+		if fastLocked {
+			ts.SetContinuityCounter(m.pkt, cc)
+		} else {
+			fastHeader.ContinuityCounter = cc
+			fastHeader.Put(m.pkt)
+			fastLocked = true
+		}
+		if n, err = m.w.Write(m.pkt[:ts.HeaderSize]); err != nil {
+			return
+		}
+		bytesWritten += n
+		if n, err = m.w.Write(d.PES.Data[payloadWritten : payloadWritten+bulkChunk]); err != nil {
+			return
+		}
+		bytesWritten += n
+		payloadWritten += bulkChunk
+	}
+
+	if rem := len(d.PES.Data) - payloadWritten; rem > 0 {
+		header := ts.PacketHeader{
+			ContinuityCounter:  uint8(ctx.cc.inc()),
+			PID:                d.PID,
+			HasPayload:         true,
+			HasAdaptationField: true,
+		}
+		if n, err = m.emitPacket(header, m.stuffingAdaptationField(bulkChunk-rem),
+			m.packetSize-rem, nil, d.PES.Data[payloadWritten:]); err != nil {
+			return
+		}
+		bytesWritten += n
 	}
 
 	if d.AdaptationField != nil {
 		d.AdaptationField.StuffingLength = 0
 	}
+	return
+}
 
+// emitPacket serializes header and af into the front of m.pkt, writes that front,
+// then hdr and payload straight from their own buffers — like the bulk path, so
+// neither is copied into m.pkt first.
+func (m *Muxer) emitPacket(header ts.PacketHeader, af *ts.PacketAdaptationField, front int, hdr, payload []byte) (n int, err error) {
+	header.Put(m.pkt)
+	if header.HasAdaptationField {
+		if _, err = af.Put(m.pkt[ts.HeaderSize:]); err != nil {
+			return
+		}
+	}
+	var w int
+	if w, err = m.w.Write(m.pkt[:front]); err != nil {
+		return
+	}
+	n = w
+	if len(hdr) > 0 {
+		if w, err = m.w.Write(hdr); err != nil {
+			return
+		}
+		n += w
+	}
+	if len(payload) > 0 {
+		if w, err = m.w.Write(payload); err != nil {
+			return
+		}
+		n += w
+	}
 	return
 }
 

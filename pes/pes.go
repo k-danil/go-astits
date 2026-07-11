@@ -438,6 +438,15 @@ func (h *Header) Put(bs []byte, payloadLeft []byte, isPayloadStart bool) (totalB
 	return
 }
 
+// PutHeader serializes just the PES header (start code, stream_id, PES packet
+// length and, when present, the optional header) into bs, sizing PES_packet_length
+// for payloadLen total payload bytes. It returns the number of header bytes
+// written; a muxer that spans the header across TS packets serializes it once
+// here and then chunks header+payload together.
+func (h *Header) PutHeader(bs []byte, payloadLen int) (n int, err error) {
+	return h.putBytes(bs, payloadLen)
+}
+
 // ErrUnsupportedHeaderWrite rejects serialization of optional header features
 // whose write path is not implemented: silently dropping them would produce a
 // header whose flags disagree with its content.

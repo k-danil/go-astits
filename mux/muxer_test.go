@@ -304,6 +304,56 @@ func TestMuxer_WriteDataMultiPacket(t *testing.T) {
 	}
 }
 
+func TestMuxer_WriteDataFatAdaptationField(t *testing.T) {
+	// A large adaptation field (transport private data) leaves no room for the
+	// PES header in the first packet, so the header spans into the next. Demuxing
+	// must recover the adaptation field (PCR/RAI/private data) and the payload.
+	buf := &bytes.Buffer{}
+	m := New(context.Background(), buf)
+	const pid = 0x100
+	require.NoError(t, m.AddElementaryStream(psi.ElementaryStream{ElementaryPID: pid, StreamType: psi.StreamTypeH264Video}))
+	m.SetPCRPID(pid)
+
+	priv := make([]byte, 170)
+	for i := range priv {
+		priv[i] = byte(i)
+	}
+	payload := make([]byte, 500)
+	for i := range payload {
+		payload[i] = byte(i * 3)
+	}
+	pts := ts.NewClockReference(90000, 0)
+	writeUnit := func() {
+		_, err := m.WriteData(&Data{
+			PID: pid,
+			AdaptationField: &ts.PacketAdaptationField{
+				HasPCR: true, PCR: pts, RandomAccessIndicator: true,
+				HasTransportPrivateData: true, TransportPrivateData: priv, TransportPrivateDataLength: uint8(len(priv)),
+			},
+			PES: &pes.Data{Data: payload, Header: pes.Header{OptionalHeader: &pes.OptionalHeader{PTS: pts, PTSDTSIndicator: pes.PTSDTSIndicatorOnlyPTS}}},
+		})
+		require.NoError(t, err)
+	}
+	writeUnit()
+	writeUnit() // the second unit's PUSI flushes the first on demux
+
+	dmx := demux.New(context.Background(), bytes.NewReader(buf.Bytes()), demux.WithPacketSize(ts.PacketSize))
+	for {
+		ev, derr := dmx.Next()
+		require.NoError(t, derr, "PES unit not emitted before EOF")
+		if ev != demux.EventPES {
+			continue
+		}
+		got := dmx.PES()
+		require.NotNil(t, got.AdaptationField, "adaptation field survived the span")
+		assert.True(t, got.AdaptationField.RandomAccessIndicator)
+		assert.Equal(t, pts, got.AdaptationField.PCR)
+		assert.Equal(t, priv, got.AdaptationField.TransportPrivateData)
+		assert.Equal(t, payload, got.Data.Data)
+		return
+	}
+}
+
 func BenchmarkMuxWriteDataToBuffer(b *testing.B) {
 	payload := make([]byte, 64<<10) // ~350 packets, mostly full mid-unit
 	for i := range payload {
