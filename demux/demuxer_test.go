@@ -85,6 +85,40 @@ func TestDemuxerNextPacket(t *testing.T) {
 	assert.EqualError(t, err, ts.ErrNoMorePackets.Error())
 }
 
+func TestDemuxerSyncLock(t *testing.T) {
+	pkt := func() []byte {
+		p := make([]byte, ts.PacketSize)
+		p[0] = '\x47'
+		p[3] = 0x10 // payload present, no adaptation field
+		return p
+	}
+	packets := func(n int) (b []byte) {
+		for range n {
+			b = append(b, pkt()...)
+		}
+		return
+	}
+
+	// Junk prefix, then a torn gap mid-stream — neither aligned to a boundary.
+	var stream []byte
+	stream = append(stream, make([]byte, 12)...)
+	stream = append(stream, packets(3)...)
+	stream = append(stream, make([]byte, 100)...)
+	stream = append(stream, packets(3)...)
+
+	dmx := New(context.Background(), bytes.NewReader(stream), WithSyncLock())
+	var n int
+	for {
+		_, err := dmx.NextPacket()
+		if errors.Is(err, ts.ErrNoMorePackets) {
+			break
+		}
+		require.NoError(t, err)
+		n++
+	}
+	assert.Equal(t, 6, n, "WithSyncLock reads past the prefix and the torn gap")
+}
+
 func TestDemuxerNextTables(t *testing.T) {
 	buf := &bytes.Buffer{}
 	w := bitstest.NewWriter(buf)

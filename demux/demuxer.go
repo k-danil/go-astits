@@ -45,8 +45,10 @@ type Demuxer struct {
 
 	optPacketSize    uint
 	optSkipErrLimit  uint
+	optResyncLimit   uint
 	optPacketSkipper ts.PacketSkipper
 	optZeroCopyBatch uint
+	optSyncLock      bool
 	optDVBTables     bool
 	optPSIRepeats    bool
 	optPacketHook    func(*ts.Packet)
@@ -136,6 +138,29 @@ func WithSkipErrLimit(count int) func(*Demuxer) {
 	}
 }
 
+// WithSyncLock aligns to the first sync byte within the first packet (a leading
+// header or a mid-stream join, not just a unit boundary) and, after a lost or
+// corrupt packet, scans forward to re-lock or drops the packet instead of
+// failing — for UDP/RTP or otherwise torn feeds. Recovery is bounded by
+// WithResyncLimit. It peeks ahead, so a reader that is not already a ts.Peeker
+// (e.g. *bufio.Reader) is wrapped in bufio internally; keep it off for aligned
+// files to stay on the zero-wrap fast path.
+func WithSyncLock() func(*Demuxer) {
+	return func(d *Demuxer) {
+		d.optSyncLock = true
+	}
+}
+
+// WithResyncLimit caps consecutive damage events under sync lock — dropped
+// corrupt packets and fruitless scan windows — before giving up; a cleanly
+// parsed packet resets the count. 0 (the default) recovers indefinitely. Has no
+// effect without WithSyncLock.
+func WithResyncLimit(windows int) func(*Demuxer) {
+	return func(d *Demuxer) {
+		d.optResyncLimit = uint(windows)
+	}
+}
+
 // WithZeroCopyPackets makes packet reads batched: packets are views into the
 // internal buffer, valid until the refill triggered by a later read. The
 // accumulator copies payloads out immediately, so Next works in this mode.
@@ -174,7 +199,14 @@ func WithPacketHook(fn func(*ts.Packet)) func(*Demuxer) {
 
 func (dmx *Demuxer) nextPacket(p *ts.Packet) (err error) {
 	if dmx.packetBuffer == nil {
-		if dmx.packetBuffer, err = ts.NewPacketBuffer(dmx.r, dmx.optPacketSize, dmx.optSkipErrLimit, dmx.optPacketSkipper, dmx.optZeroCopyBatch); err != nil {
+		if dmx.packetBuffer, err = ts.NewPacketBuffer(dmx.r, ts.PacketBufferConfig{
+			PacketSize:    dmx.optPacketSize,
+			SkipErrLimit:  dmx.optSkipErrLimit,
+			Skipper:       dmx.optPacketSkipper,
+			ZeroCopyBatch: dmx.optZeroCopyBatch,
+			SyncLock:      dmx.optSyncLock,
+			ResyncLimit:   dmx.optResyncLimit,
+		}); err != nil {
 			err = fmt.Errorf("astits: creating packet buffer failed: %w", err)
 			return
 		}
