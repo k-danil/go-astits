@@ -165,15 +165,21 @@ func parseDescriptorsN(i *bytesiter.Iterator, length int) (o []Descriptor, err e
 	return
 }
 
+// Append appends the serialized descriptors with no length prefix; the caller
+// bounds them by the section length, as CAT and TSDT do.
+func Append(dst []byte, ds []Descriptor) []byte {
+	for _, d := range ds {
+		dst = d.Append(dst)
+	}
+	return dst
+}
+
 // AppendWithLength appends the 2-byte descriptors length prefix followed by
 // the serialized descriptors.
 func AppendWithLength(dst []byte, ds []Descriptor) []byte {
 	length := uint16(CalcLength(ds))
 	dst = append(dst, byte(length>>8)|0xf0, byte(length))
-	for _, d := range ds {
-		dst = d.Append(dst)
-	}
-	return dst
+	return Append(dst, ds)
 }
 
 // CalcLength returns the total serialized size of a descriptor list,

@@ -11,3 +11,9 @@ type ST struct{}
 func parseSTSection() (d *ST) {
 	return &ST{}
 }
+
+func (d *ST) CalcSectionLength() int { return 0 }
+
+// appendSection appends the ST body: the stuffing bytes are meaningless (§5.2.8),
+// so a serialized ST is an empty section.
+func (d *ST) appendSection(dst []byte) []byte { return dst }

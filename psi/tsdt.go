@@ -30,3 +30,11 @@ func parseTSDTSection(i *bytesiter.Iterator, offsetSectionsEnd int) (d *TSDT, er
 	i.Skip(n)
 	return
 }
+
+func (d *TSDT) CalcSectionLength() int { return descriptor.CalcLength(d.Descriptors) }
+
+// appendSection appends the TSDT body: descriptors bounded by the section length,
+// no length prefix. The syntax header and CRC are added by the section framing.
+func (d *TSDT) appendSection(dst []byte) []byte {
+	return descriptor.Append(dst, d.Descriptors)
+}

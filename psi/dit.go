@@ -26,3 +26,15 @@ func parseDITSection(i *bytesiter.Iterator) (d *DIT, err error) {
 	d.TransitionFlag = b&0x80 > 0
 	return
 }
+
+func (d *DIT) CalcSectionLength() int { return 1 }
+
+// appendSection appends the DIT body: transition_flag then reserved_future_use
+// (7 bits, set to 1). §5.2.9, section_length is fixed at 0x001.
+func (d *DIT) appendSection(dst []byte) []byte {
+	b := byte(0x7f)
+	if d.TransitionFlag {
+		b |= 0x80
+	}
+	return append(dst, b)
+}

@@ -487,31 +487,40 @@ func (d *Data) Append(dst []byte) ([]byte, error) {
 	return dst, nil
 }
 
-func (s *Section) calcPSISectionLength() (ret uint16) {
+// sectionBody is a PSI table that serializes its section body — the bytes between
+// the syntax header and the CRC. Every serializable table implements it; a table
+// whose Data does not is reported as ErrTableNotImplemented.
+type sectionBody interface {
+	CalcSectionLength() int
+	appendSection(dst []byte) []byte
+}
+
+func (s *Section) calcPSISectionLength(body sectionBody) (ret uint16) {
 	if s.Header.TableID.hasPSISyntaxHeader() {
 		ret += 5 // PSI syntax header length
 	}
-
-	switch data := s.Syntax.Data.(type) {
-	case *PAT:
-		ret += uint16(data.CalcSectionLength())
-	case *PMT:
-		ret += uint16(data.CalcSectionLength())
-	}
-
+	ret += uint16(body.CalcSectionLength())
 	if s.Header.TableID.hasCRC32() {
 		ret += 4
 	}
-
 	return ret
 }
 
 func (s *Section) appendSection(dst []byte) ([]byte, error) {
-	if s.Header.TableID != TableIDPAT && s.Header.TableID != TableIDPMT {
-		return dst, fmt.Errorf("astits: appending table %s: %w", s.Header.TableID.Type(), ErrTableNotImplemented)
+	// A zero-length section (a parsed stuffing table) carries no syntax; anything
+	// with a body, syntax header or CRC has a non-nil Syntax.
+	var body sectionBody
+	if s.Syntax != nil {
+		var ok bool
+		if body, ok = s.Syntax.Data.(sectionBody); !ok {
+			return dst, fmt.Errorf("astits: appending table %s: %w", s.Header.TableID.Type(), ErrTableNotImplemented)
+		}
 	}
 
-	sectionLength := s.calcPSISectionLength()
+	var sectionLength uint16
+	if body != nil {
+		sectionLength = s.calcPSISectionLength(body)
+	}
 	if sectionLength > maxSectionLength {
 		return dst, fmt.Errorf("astits: section length %d exceeds %d: %w", sectionLength, maxSectionLength, ErrSectionOverflow)
 	}
@@ -522,8 +531,13 @@ func (s *Section) appendSection(dst []byte) ([]byte, error) {
 		util.B2U(s.Header.SectionSyntaxIndicator)<<7|util.B2U(s.Header.PrivateBit)<<6|0x30|byte(sectionLength>>8)&0xf,
 		byte(sectionLength))
 
-	if s.Header.SectionLength > 0 {
-		dst = s.appendSectionSyntax(dst)
+	// A zero-length section has no syntax header, body or CRC to follow; anything
+	// with a syntax header or CRC (long form) is non-zero even with an empty body.
+	if sectionLength > 0 {
+		if s.Header.TableID.hasPSISyntaxHeader() {
+			dst = s.Syntax.Header.appendSectionSyntaxHeader(dst)
+		}
+		dst = body.appendSection(dst)
 
 		if s.Header.TableID.hasCRC32() {
 			crc := ts.UpdateCRC32(ts.CRC32Seed, dst[crcStart:])
@@ -532,22 +546,6 @@ func (s *Section) appendSection(dst []byte) ([]byte, error) {
 	}
 
 	return dst, nil
-}
-
-func (s *Section) appendSectionSyntax(dst []byte) []byte {
-	if s.Header.TableID.hasPSISyntaxHeader() {
-		dst = s.Syntax.Header.appendSectionSyntaxHeader(dst)
-	}
-
-	switch data := s.Syntax.Data.(type) {
-	// TODO append other table types
-	case *PAT:
-		dst = data.appendSection(dst)
-	case *PMT:
-		dst = data.appendSection(dst)
-	}
-
-	return dst
 }
 
 func (h *SectionSyntaxHeader) appendSectionSyntaxHeader(dst []byte) []byte {
