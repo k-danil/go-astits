@@ -15,6 +15,9 @@ type TDT struct {
 	UTCTime time.Time
 }
 
+// dvbTimeBytesSize is the UTC_time field: 16-bit MJD + 24-bit BCD (§annex C).
+const dvbTimeBytesSize = 5
+
 // parseTDTSection parses a TDT section
 func parseTDTSection(i *bytesiter.Iterator) (d *TDT, err error) {
 	d = &TDT{}
@@ -24,3 +27,7 @@ func parseTDTSection(i *bytesiter.Iterator) (d *TDT, err error) {
 	}
 	return
 }
+
+func (d *TDT) CalcSectionLength() int { return dvbTimeBytesSize }
+
+func (d *TDT) appendSection(dst []byte) []byte { return dvb.AppendTime(dst, d.UTCTime) }

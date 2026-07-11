@@ -34,3 +34,13 @@ func parseTOTSection(i *bytesiter.Iterator) (d *TOT, err error) {
 	i.Skip(dn)
 	return
 }
+
+func (d *TOT) CalcSectionLength() int {
+	// UTC_time + reserved/descriptors_loop_length prefix + descriptors
+	return dvbTimeBytesSize + 2 + descriptor.CalcLength(d.Descriptors)
+}
+
+func (d *TOT) appendSection(dst []byte) []byte {
+	dst = dvb.AppendTime(dst, d.UTCTime)
+	return descriptor.AppendWithLength(dst, d.Descriptors)
+}

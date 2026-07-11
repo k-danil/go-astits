@@ -3,12 +3,20 @@ package psi
 import (
 	"math/rand/v2"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/k-danil/go-astits/v2/descriptor"
 )
+
+// randDVBTime returns a UTC time at DVB resolution (whole seconds) in a range
+// whose 16-bit MJD does not wrap, so it round-trips exactly.
+func randDVBTime(r *rand.Rand) time.Time {
+	return time.Date(2000+int(r.UintN(30)), time.Month(1+r.UintN(12)), 1+int(r.UintN(28)),
+		int(r.UintN(24)), int(r.UintN(60)), int(r.UintN(60)), 0, time.UTC)
+}
 
 func randDescriptors(r *rand.Rand) (ds []descriptor.Descriptor) {
 	for i := uint(0); i < r.UintN(3); i++ {
@@ -113,6 +121,8 @@ func TestRoundtripPSITrivial(t *testing.T) {
 			{TableIDDIT, &DIT{TransitionFlag: r.UintN(2) == 1}},
 			{TableIDRST, randRST(r)},
 			{TableIDTSDT, &TSDT{Descriptors: randDescriptors(r)}},
+			{TableIDTDT, &TDT{UTCTime: randDVBTime(r)}},
+			{TableIDTOT, &TOT{UTCTime: randDVBTime(r), Descriptors: randDescriptors(r)}},
 		}
 		for _, tc := range cases {
 			d := &Data{
