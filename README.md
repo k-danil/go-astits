@@ -77,6 +77,10 @@ How:
   Reed-Solomon (204) are read transparently. The size is autodetected by locking onto the
   recurring sync byte — a stray `0x47` in payload or parity doesn't mislead it — or pinned
   with `WithPacketSize`.
+- **Sync lock** (`demux.WithSyncLock`) — for UDP/RTP or otherwise torn feeds: aligns to the
+  first sync byte at any offset within a packet and re-locks after a lost or corrupt packet,
+  peeking ahead through a `ts.Peeker` (a raw reader is wrapped in bufio). Off by default so
+  aligned files stay on the zero-wrap fast path; `WithResyncLimit` bounds recovery.
 - **`ts.PacketSkipper`** — header-level filtering before any payload work.
 - **`Packet.Offset`** — a byte map of the stream, correct even with a skipper installed.
 - **`demux.WithPacketHook`** — a callback run on every raw packet as it is read (after the
