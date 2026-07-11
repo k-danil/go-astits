@@ -209,18 +209,19 @@ func (m *Muxer) WriteData(d *Data) (bytesWritten int, err error) {
 	payloadBytesWritten := 0
 	for payloadBytesWritten < len(d.PES.Data) {
 		pktLen := ts.HeaderSize
-		pkt := ts.Packet{
-			Header: ts.PacketHeader{
-				ContinuityCounter:         uint8(ctx.cc.inc()),
-				HasAdaptationField:        writeAf,
-				HasPayload:                false,
-				PayloadUnitStartIndicator: false,
-				PID:                       d.PID,
-			},
+		// A ts.Packet value here would zero its embedded read buffer per output
+		// packet; the mux only needs the header and adaptation field.
+		header := ts.PacketHeader{
+			ContinuityCounter:         uint8(ctx.cc.inc()),
+			HasAdaptationField:        writeAf,
+			HasPayload:                false,
+			PayloadUnitStartIndicator: false,
+			PID:                       d.PID,
 		}
+		var af *ts.PacketAdaptationField
 
 		if writeAf {
-			pkt.AdaptationField = d.AdaptationField
+			af = d.AdaptationField
 			// one byte for adaptation field length field
 			pktLen += 1 + d.AdaptationField.CalcLength()
 			writeAf = false
@@ -231,21 +232,21 @@ func (m *Muxer) WriteData(d *Data) (bytesWritten int, err error) {
 			pesHeaderLengthCurrent := pes.HeaderSize + d.PES.Header.OptionalHeader.CalcLength()
 			// d.AdaptationField with pes header are too big, we don't have space to write pes header
 			if bytesAvailable < pesHeaderLengthCurrent {
-				pkt.Header.HasAdaptationField = true
-				if pkt.AdaptationField == nil {
-					pkt.AdaptationField = m.stuffingAdaptationField(bytesAvailable)
+				header.HasAdaptationField = true
+				if af == nil {
+					af = m.stuffingAdaptationField(bytesAvailable)
 				} else {
-					pkt.AdaptationField.StuffingLength = uint8(bytesAvailable)
+					af.StuffingLength = uint8(bytesAvailable)
 				}
 			} else {
-				pkt.Header.HasPayload = true
-				pkt.Header.PayloadUnitStartIndicator = true
+				header.HasPayload = true
+				header.PayloadUnitStartIndicator = true
 			}
 		} else {
-			pkt.Header.HasPayload = true
+			header.HasPayload = true
 		}
 
-		if pkt.Header.HasPayload {
+		if header.HasPayload {
 			if d.PES.Header.StreamID == 0 {
 				d.PES.Header.StreamID = ctx.es.StreamType.ToPESStreamID()
 			}
@@ -263,11 +264,11 @@ func (m *Muxer) WriteData(d *Data) (bytesWritten int, err error) {
 			// if we still have some space in packet, we should stuff it with adaptation field stuffing
 			// we can't stuff packets with 0xff at the end of a packet since it's not uncommon for PES payloads to have length unspecified
 			if bytesAvailable > 0 {
-				pkt.Header.HasAdaptationField = true
-				if pkt.AdaptationField == nil {
-					pkt.AdaptationField = m.stuffingAdaptationField(bytesAvailable)
+				header.HasAdaptationField = true
+				if af == nil {
+					af = m.stuffingAdaptationField(bytesAvailable)
 				} else {
-					pkt.AdaptationField.StuffingLength = uint8(bytesAvailable)
+					af.StuffingLength = uint8(bytesAvailable)
 				}
 			}
 
@@ -282,11 +283,10 @@ func (m *Muxer) WriteData(d *Data) (bytesWritten int, err error) {
 			payloadBytesWritten += npayload
 
 			// Assemble header + AF ahead of the payload directly in m.pkt;
-			// bypassing pkt.Put keeps the already-placed payload from being
-			// copied a second time.
-			pkt.Header.Put(m.pkt)
-			if pkt.Header.HasAdaptationField {
-				if _, err = pkt.AdaptationField.Put(m.pkt[ts.HeaderSize:]); err != nil {
+			// a full Packet.Put would copy the already-placed payload a second time.
+			header.Put(m.pkt)
+			if header.HasAdaptationField {
+				if _, err = af.Put(m.pkt[ts.HeaderSize:]); err != nil {
 					return
 				}
 			}
