@@ -157,7 +157,8 @@ func packetHeaderBytes(h PacketHeader, afControl string) []byte {
 
 func TestParsePacketHeader(t *testing.T) {
 	v := PacketHeader{}
-	v.parseBytes(packetHeaderBytes(packetHeader, "11"))
+	b := packetHeaderBytes(packetHeader, "11")
+	v.parseBytes(uint32(b[0])<<16 | uint32(b[1])<<8 | uint32(b[2]))
 	assert.Equal(t, packetHeader, v)
 }
 

@@ -211,7 +211,9 @@ func (p *Packet) parse(bs []byte, s PacketSkipper) (skip bool, err error) {
 		p.Prefix = bs[:prefixLen]
 	}
 
-	if bs[prefixLen] != syncByte {
+	// One big-endian 32-bit load covers the sync byte (top) and the 3 header bytes.
+	h := binary.BigEndian.Uint32(bs[prefixLen:])
+	if byte(h>>24) != syncByte {
 		err = ErrPacketMustStartWithASyncByte
 		// Zero-stuffed packet is skippable; check the actual bytes, not p.bs —
 		// in zero-copy mode the packet is a view and p.bs is stale.
@@ -221,9 +223,9 @@ func (p *Packet) parse(bs []byte, s PacketSkipper) (skip bool, err error) {
 
 	hdr := prefixLen + 1
 	end := prefixLen + PacketSize // TS content ends here; a trailing RS suffix is excluded
-	p.Header.parseBytes(bs[hdr : hdr+3 : hdr+3])
+	p.Header.parseBytes(h)
 
-	if s(p) {
+	if s != nil && s(p) {
 		return true, nil
 	}
 
@@ -258,20 +260,22 @@ func (ph *PacketHeader) Parse(bs []byte) (n int, err error) {
 	if len(bs) < HeaderSize {
 		return 0, ErrShortPacket
 	}
-	ph.parseBytes(bs[1:4])
+	ph.parseBytes(binary.BigEndian.Uint32(bs))
 	return HeaderSize, nil
 }
 
-func (ph *PacketHeader) parseBytes(b []byte) {
-	_ = b[2]
-	ph.TransportErrorIndicator = b[0]&0x80 > 0
-	ph.PayloadUnitStartIndicator = b[0]&0x40 > 0
-	ph.TransportPriority = b[0]&0x20 > 0
-	ph.PID = binary.BigEndian.Uint16(b[:2]) & 0x1fff
-	ph.TransportScramblingControl = b[2] >> 6 & 0x3
-	ph.HasAdaptationField = b[2]&0x20 > 0
-	ph.HasPayload = b[2]&0x10 > 0
-	ph.ContinuityCounter = b[2] & 0xf
+// h is the big-endian 4-byte TS header: [sync|b0|b1|b2]. It is loaded once and
+// the fields are sliced out of the register, no per-field memory reads.
+func (ph *PacketHeader) parseBytes(h uint32) {
+	b0, b2 := uint8(h>>16), uint8(h)
+	ph.TransportErrorIndicator = b0&0x80 > 0
+	ph.PayloadUnitStartIndicator = b0&0x40 > 0
+	ph.TransportPriority = b0&0x20 > 0
+	ph.PID = uint16(h>>8) & 0x1fff
+	ph.TransportScramblingControl = b2 >> 6 & 0x3
+	ph.HasAdaptationField = b2&0x20 > 0
+	ph.HasPayload = b2&0x10 > 0
+	ph.ContinuityCounter = b2 & 0xf
 }
 
 // Parse parses an adaptation field starting at its length byte.

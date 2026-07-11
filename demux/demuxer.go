@@ -41,7 +41,10 @@ const (
 // http://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.13.01_40/en_300468v011301o.pdf
 type Demuxer struct {
 	ctx context.Context
-	r   io.Reader
+	// done is ctx.Done() cached: nil for a non-cancellable context lets the
+	// per-packet cancel check skip the select entirely.
+	done <-chan struct{}
+	r    io.Reader
 
 	optPacketSize    uint
 	optSkipErrLimit  uint
@@ -81,9 +84,9 @@ type Demuxer struct {
 // New creates a new transport stream demuxer based on a reader
 func New(ctx context.Context, r io.Reader, opts ...func(*Demuxer)) (d *Demuxer) {
 	d = &Demuxer{
-		ctx:              ctx,
-		optPacketSkipper: ts.EmptySkipper,
-		r:                r,
+		ctx:  ctx,
+		done: ctx.Done(),
+		r:    r,
 	}
 	d.programMap = pidmap.Map[uint16]{Keys: d.pmKeysArr[:0], Vals: d.pmValsArr[:0]}
 	d.psiPrev = pidmap.Map[psiCache]{Keys: d.psiKeysArr[:0], Vals: d.psiValsArr[:0]}
@@ -228,14 +231,16 @@ func (dmx *Demuxer) nextPacket(p *ts.Packet) (err error) {
 func (dmx *Demuxer) NextPacket() (p *ts.Packet, err error) {
 	p = ts.NewPacket()
 
-	select {
-	case <-dmx.ctx.Done():
-		err = dmx.ctx.Err()
-	default:
-		err = dmx.nextPacket(p)
+	if dmx.done != nil {
+		select {
+		case <-dmx.done:
+			p.Close()
+			return nil, dmx.ctx.Err()
+		default:
+		}
 	}
 
-	if err != nil {
+	if err = dmx.nextPacket(p); err != nil {
 		p.Close()
 		return nil, err
 	}
@@ -245,14 +250,14 @@ func (dmx *Demuxer) NextPacket() (p *ts.Packet, err error) {
 
 // NextPacketTo unpack packet to provided p.
 func (dmx *Demuxer) NextPacketTo(p *ts.Packet) (err error) {
-	select {
-	case <-dmx.ctx.Done():
-		err = dmx.ctx.Err()
-	default:
-		err = dmx.nextPacket(p)
+	if dmx.done != nil {
+		select {
+		case <-dmx.done:
+			return dmx.ctx.Err()
+		default:
+		}
 	}
-
-	return
+	return dmx.nextPacket(p)
 }
 
 // Next advances the demuxer to the next event. On EventPES claim the unit via
@@ -260,10 +265,12 @@ func (dmx *Demuxer) NextPacketTo(p *ts.Packet) (err error) {
 // see Section() and the PAT()/PMT() state. EOF is ts.ErrNoMorePackets; the
 // unfinished unit tails are emitted before it in ascending PID order.
 func (dmx *Demuxer) Next() (ev Event, err error) {
-	select {
-	case <-dmx.ctx.Done():
-		return 0, dmx.ctx.Err()
-	default:
+	if dmx.done != nil {
+		select {
+		case <-dmx.done:
+			return 0, dmx.ctx.Err()
+		default:
+		}
 	}
 
 	// Release an unclaimed unit of the previous event

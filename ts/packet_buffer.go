@@ -102,10 +102,6 @@ func NewPacketBuffer(r io.Reader, cfg PacketBufferConfig) (pb *PacketBuffer, err
 		skipErrLimit: cfg.SkipErrLimit,
 		resyncLimit:  cfg.ResyncLimit,
 	}
-	if pb.s == nil {
-		pb.s = EmptySkipper
-	}
-
 	if cfg.SyncLock {
 		if err = pb.initSyncLock(cfg); err != nil {
 			return nil, err
