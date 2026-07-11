@@ -80,7 +80,7 @@ type PacketAdaptationField struct {
 	TransportPrivateDataLength        uint8
 	Length                            uint8
 	StuffingLength                    uint8 // Only used in writePacketAdaptationField to request stuffing
-	SpliceCountdown                   int8 // TS packets from this one until the splicing point; negative once it has passed.
+	SpliceCountdown                   int8  // TS packets from this one until the splicing point; negative once it has passed.
 	IsOneByteStuffing                 bool  // Only used for one byte stuffing - if true, adaptation field will be written as one uint8(0). Not part of TS format
 	DiscontinuityIndicator            bool  // Set if current TS packet is in a discontinuity state with respect to either the continuity counter or the program clock reference
 	RandomAccessIndicator             bool  // Set when the stream may be decoded without errors from this point
@@ -464,6 +464,13 @@ func (p *Packet) Put(bs []byte) (n int, err error) {
 func (ph *PacketHeader) Put(bs []byte) (n int) {
 	ph.putBytes(bs)
 	return HeaderSize
+}
+
+// SetContinuityCounter patches the 4-bit continuity counter of a header already
+// written by Put, leaving the other fields untouched — for serializers emitting
+// a run of packets that differ only in CC.
+func SetContinuityCounter(header []byte, cc uint8) {
+	header[HeaderSize-1] = header[HeaderSize-1]&0xf0 | cc&0xf
 }
 
 func (ph *PacketHeader) putBytes(bb []byte) {

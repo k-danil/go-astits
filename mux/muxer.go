@@ -187,6 +187,8 @@ func (m *Muxer) SetCC(pid uint16, cc uint8) error {
 // WriteData writes Data to TS stream
 // Currently only PES packets are supported
 // Be aware that after successful call WriteData will set d.AdaptationField.StuffingLength value to zero
+// It issues several writes per unit (header and payload separately for full mid-unit
+// packets), so wrap an unbuffered destination such as a raw file or socket in bufio.
 func (m *Muxer) WriteData(d *Data) (bytesWritten int, err error) {
 	ctx := m.esContexts.Get(d.PID)
 	if ctx == nil {
@@ -207,7 +209,37 @@ func (m *Muxer) WriteData(d *Data) (bytesWritten int, err error) {
 	payloadStart := true
 	writeAf := d.AdaptationField != nil
 	payloadBytesWritten := 0
+	// A full mid-unit packet is just the fixed header (only CC advancing) plus a
+	// packet-sized payload chunk — no PES header, no adaptation field. Handle it
+	// directly; the generic branchy path below covers the first/last/stuffed ones.
+	bulkChunk := m.packetSize - ts.HeaderSize
+	fastHeader := ts.PacketHeader{PID: d.PID, HasPayload: true}
+	fastLocked := false
 	for payloadBytesWritten < len(d.PES.Data) {
+		if !payloadStart && len(d.PES.Data)-payloadBytesWritten >= bulkChunk {
+			cc := uint8(ctx.cc.inc())
+			if fastLocked {
+				// Between full mid-unit packets only CC changes — patch it in
+				// place instead of re-encoding the whole header.
+				ts.SetContinuityCounter(m.pkt, cc)
+			} else {
+				fastHeader.ContinuityCounter = cc
+				fastHeader.Put(m.pkt)
+				fastLocked = true
+			}
+			var wn int
+			if wn, err = m.w.Write(m.pkt[:ts.HeaderSize]); err != nil {
+				return
+			}
+			bytesWritten += wn
+			if wn, err = m.w.Write(d.PES.Data[payloadBytesWritten : payloadBytesWritten+bulkChunk]); err != nil {
+				return
+			}
+			bytesWritten += wn
+			payloadBytesWritten += bulkChunk
+			continue
+		}
+
 		pktLen := ts.HeaderSize
 		// A ts.Packet value here would zero its embedded read buffer per output
 		// packet; the mux only needs the header and adaptation field.

@@ -261,6 +261,73 @@ func TestMuxer_RemoveElementaryStream(t *testing.T) {
 	assert.Equal(t, ErrPIDNotFound, err)
 }
 
+func TestMuxer_WriteDataMultiPacket(t *testing.T) {
+	// A payload spanning many packets exercises the fast mid-unit path (fixed
+	// header + full payload chunk, no PES header, no adaptation field). Demuxing
+	// the output back must reproduce the payload byte for byte.
+	buf := &bytes.Buffer{}
+	m := New(context.Background(), buf)
+	const pid = 0x100
+	require.NoError(t, m.AddElementaryStream(psi.ElementaryStream{ElementaryPID: pid, StreamType: psi.StreamTypeH264Video}))
+	m.SetPCRPID(pid)
+
+	payload := make([]byte, 2000) // ~11 packets → several full mid-unit ones
+	for i := range payload {
+		payload[i] = byte(i * 7)
+	}
+	pts := ts.NewClockReference(90000, 0)
+	writeUnit := func() {
+		_, err := m.WriteData(&Data{
+			PID:             pid,
+			AdaptationField: &ts.PacketAdaptationField{HasPCR: true, PCR: pts, RandomAccessIndicator: true},
+			PES: &pes.Data{
+				Data:   payload,
+				Header: pes.Header{OptionalHeader: &pes.OptionalHeader{PTS: pts, PTSDTSIndicator: pes.PTSDTSIndicatorOnlyPTS}},
+			},
+		})
+		require.NoError(t, err)
+	}
+	writeUnit()
+	writeUnit() // the second unit's PUSI flushes the first on demux
+
+	dmx := demux.New(context.Background(), bytes.NewReader(buf.Bytes()), demux.WithPacketSize(ts.PacketSize))
+	for {
+		ev, derr := dmx.Next()
+		require.NoError(t, derr, "PES unit not emitted before EOF")
+		if ev != demux.EventPES {
+			continue
+		}
+		got := dmx.PES()
+		assert.Equal(t, uint16(pid), got.PID)
+		assert.Equal(t, payload, got.Data.Data)
+		return
+	}
+}
+
+func BenchmarkMuxWriteDataToBuffer(b *testing.B) {
+	payload := make([]byte, 64<<10) // ~350 packets, mostly full mid-unit
+	for i := range payload {
+		payload[i] = byte(i)
+	}
+	pts := ts.NewClockReference(90000, 0)
+	out := &bytes.Buffer{}
+	m := New(context.Background(), out)
+	_ = m.AddElementaryStream(psi.ElementaryStream{ElementaryPID: 0x100, StreamType: psi.StreamTypeH264Video})
+	m.SetPCRPID(0x100)
+	d := &Data{
+		PID:             0x100,
+		AdaptationField: &ts.PacketAdaptationField{HasPCR: true, PCR: pts, RandomAccessIndicator: true},
+		PES:             &pes.Data{Data: payload, Header: pes.Header{OptionalHeader: &pes.OptionalHeader{PTS: pts, PTSDTSIndicator: pes.PTSDTSIndicatorOnlyPTS}}},
+	}
+	b.SetBytes(int64(len(payload)))
+	for b.Loop() {
+		out.Reset()
+		if _, err := m.WriteData(d); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
 func testPayload() []byte {
 	ret := make([]byte, 0xff+1)
 	for i := 0; i <= 0xff; i++ {
