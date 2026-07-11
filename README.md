@@ -38,14 +38,15 @@ is GC-bound at this scale (10–33M allocs/pass), so its throughput varies run t
 
 | Path                                                             | This fork                                  | Upstream v1.15.0                | Delta                        |
 |------------------------------------------------------------------|--------------------------------------------|---------------------------------|------------------------------|
-| Packet walk (`NextPacketTo`)                                     | **9.1 GB/s**, 3 allocs, 6 KB               | 2.6 GB/s, 10.5M allocs, 1.2 GB  | ×3.5 / ×3,500,000 / ×200,000 |
-| Same, view mode + skipper (most packets skipped at header level) | **16 GB/s**, 5 allocs, 0.8 MB batch buffer | — (no equivalent)               | —                            |
+| Packet walk (`NextPacketTo`)                                     | **11 GB/s**, 3 allocs, 2.8 KB              | 2.6 GB/s, 10.5M allocs, 1.2 GB  | ×4.2 / ×3,500,000 / ×420,000 |
+| Same, view mode + skipper (most packets skipped at header level) | **17 GB/s**, 5 allocs, 0.8 MB batch buffer | — (no equivalent)               | —                            |
 | PES + tables via events (`Next`)                                 | **6.4 GB/s**, ~22 allocs, 90 KB garbage    | 0.33 GB/s, 32.9M allocs, 3.9 GB | ×19 / ×1,500,000 / ×43,000   |
 
 How:
 
 - **Direct parsing and serialization**: no bit-writer/byte-iterator abstractions on hot
-  paths — slice cursors for reads, packet assembly in a scratch buffer with a single
+  paths — slice cursors for reads (the 4-byte TS header lands in one big-endian `uint32`,
+  its fields sliced out in registers), packet assembly in a scratch buffer with a single
   `Write` per packet; tables and descriptors serialize append-style with CRC computed over
   the produced slice.
 - **Event-based demux** (`Next() (Event, error)` and the `Events()` iterator): one call
@@ -71,7 +72,9 @@ How:
 - **Zero-copy view mode** (`demux.WithZeroCopyPackets`): batched reads, packets are views
   into the batch buffer; the accumulator copies payloads out before the refill, so the event
   API works unchanged in this mode. `Packet.Raw()` returns the view as well, so packet-level
-  passthrough and PID rewrite over `Raw()` run without leaving zero-copy.
+  passthrough and PID rewrite over `Raw()` run without leaving zero-copy. A `*bufio.Reader`
+  source is not re-buffered: the batch peeks views straight into the reader's own buffer, so
+  a buffered reader — which already holds the bytes — is never copied a second time.
 - **Multi-format packet reader**: plain TS (188), M2TS (192, with the 4-byte
   TP_extra_header exposed as `Packet.Prefix` / decoded by `ArrivalTimeStamp()`) and
   Reed-Solomon (204) are read transparently. The size is autodetected by locking onto the
