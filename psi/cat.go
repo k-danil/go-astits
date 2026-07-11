@@ -30,3 +30,11 @@ func parseCATSection(i *bytesiter.Iterator, offsetSectionsEnd int) (d *CAT, err 
 	i.Skip(n)
 	return
 }
+
+func (d *CAT) CalcSectionLength() int { return descriptor.CalcLength(d.Descriptors) }
+
+// appendSection appends the CAT body: descriptors bounded by the section length,
+// no loop-length prefix. The syntax header and CRC are added by the framing.
+func (d *CAT) appendSection(dst []byte) []byte {
+	return descriptor.Append(dst, d.Descriptors)
+}

@@ -8,6 +8,7 @@ import (
 	"github.com/k-danil/go-astits/v2/descriptor"
 	"github.com/k-danil/go-astits/v2/internal/bytesiter"
 	"github.com/k-danil/go-astits/v2/internal/dvb"
+	"github.com/k-danil/go-astits/v2/internal/util"
 )
 
 // EIT represents an EIT data
@@ -102,4 +103,30 @@ func parseEITSection(i *bytesiter.Iterator, offsetSectionsEnd int, tableIDExtens
 		d.Events = append(d.Events, e)
 	}
 	return
+}
+
+func (d *EIT) CalcSectionLength() int {
+	n := 6 // transport_stream_id + original_network_id + segment_last_section_number + last_table_id
+	for _, e := range d.Events {
+		n += 12 + descriptor.CalcLength(e.Descriptors) // event_id(2) + start_time(5) + duration(3) + 2 flag/length bytes
+	}
+	return n
+}
+
+func (d *EIT) appendSection(dst []byte) []byte {
+	dst = append(dst,
+		byte(d.TransportStreamID>>8), byte(d.TransportStreamID),
+		byte(d.OriginalNetworkID>>8), byte(d.OriginalNetworkID),
+		d.SegmentLastSectionNumber, d.LastTableID)
+	for _, e := range d.Events {
+		loopLen := descriptor.CalcLength(e.Descriptors)
+		dst = append(dst, byte(e.EventID>>8), byte(e.EventID))
+		dst = dvb.AppendTime(dst, e.StartTime)
+		dst = dvb.AppendDurationSeconds(dst, e.Duration)
+		dst = append(dst,
+			e.RunningStatus<<5|util.B2U(e.HasFreeCSAMode)<<4|byte(loopLen>>8)&0xf, // running_status(3) + free_CA(1) + descriptors_loop_length(12)
+			byte(loopLen))
+		dst = descriptor.Append(dst, e.Descriptors)
+	}
+	return dst
 }

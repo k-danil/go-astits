@@ -147,3 +147,72 @@ func TestRoundtripPSITrivial(t *testing.T) {
 		}
 	}
 }
+
+func randDuration(r *rand.Rand) time.Duration {
+	return time.Duration(r.UintN(24))*time.Hour + time.Duration(r.UintN(60))*time.Minute + time.Duration(r.UintN(60))*time.Second
+}
+
+func TestRoundtripPSITables(t *testing.T) {
+	r := rand.New(rand.NewPCG(13, 14))
+	for i := 0; i < 300; i++ {
+		// ext is the section's TableIDExtension; SDT/EIT/NIT/BAT mirror it into an ID field.
+		ext := uint16(r.UintN(1 << 16))
+
+		sdt := &SDT{TransportStreamID: ext, OriginalNetworkID: uint16(r.UintN(1 << 16))}
+		for j := uint(0); j < 1+r.UintN(4); j++ {
+			sdt.Services = append(sdt.Services, SDTService{
+				ServiceID: uint16(r.UintN(1 << 16)), HasEITSchedule: r.UintN(2) == 1,
+				HasEITPresentFollowing: r.UintN(2) == 1, HasFreeCSAMode: r.UintN(2) == 1,
+				RunningStatus: uint8(r.UintN(8)), Descriptors: randDescriptors(r),
+			})
+		}
+
+		eit := &EIT{ServiceID: ext, TransportStreamID: uint16(r.UintN(1 << 16)),
+			OriginalNetworkID: uint16(r.UintN(1 << 16)), SegmentLastSectionNumber: uint8(r.UintN(256)), LastTableID: uint8(r.UintN(256))}
+		for j := uint(0); j < 1+r.UintN(4); j++ {
+			eit.Events = append(eit.Events, EITEvent{
+				EventID: uint16(r.UintN(1 << 16)), StartTime: randDVBTime(r), Duration: randDuration(r),
+				RunningStatus: uint8(r.UintN(8)), HasFreeCSAMode: r.UintN(2) == 1, Descriptors: randDescriptors(r),
+			})
+		}
+
+		nit := &NIT{NetworkID: ext, NetworkDescriptors: randDescriptors(r)}
+		bat := &BAT{BouquetID: ext, BouquetDescriptors: randDescriptors(r)}
+		for j := uint(0); j < 1+r.UintN(3); j++ {
+			nit.TransportStreams = append(nit.TransportStreams, NITTransportStream{TransportStreamID: uint16(r.UintN(1 << 16)), OriginalNetworkID: uint16(r.UintN(1 << 16)), TransportDescriptors: randDescriptors(r)})
+			bat.TransportStreams = append(bat.TransportStreams, BATTransportStream{TransportStreamID: uint16(r.UintN(1 << 16)), OriginalNetworkID: uint16(r.UintN(1 << 16)), TransportDescriptors: randDescriptors(r)})
+		}
+
+		sit := &SIT{TransmissionInfoDescriptors: randDescriptors(r)}
+		for j := uint(0); j < 1+r.UintN(4); j++ {
+			sit.Services = append(sit.Services, SITService{ServiceID: uint16(r.UintN(1 << 16)), RunningStatus: uint8(r.UintN(8)), Descriptors: randDescriptors(r)})
+		}
+
+		cases := []struct {
+			tableID TableID
+			data    SectionSyntaxData
+		}{
+			{TableIDCAT, &CAT{Descriptors: randDescriptors(r)}},
+			{TableIDSDTVariant1, sdt},
+			{TableIDEITStart, eit},
+			{TableIDNITVariant1, nit},
+			{TableIDBAT, bat},
+			{TableIDSIT, sit},
+		}
+		for _, tc := range cases {
+			sec := randSection(r, tc.tableID, tc.data, tc.data.(sectionBody).CalcSectionLength())
+			sec.Syntax.Header.TableIDExtension = ext
+			d := &Data{PointerField: int(r.UintN(5)), Sections: []Section{sec}}
+
+			b1, err := d.Append(nil)
+			require.NoError(t, err, "%T", tc.data)
+			parsed, err := Parse(b1)
+			require.NoError(t, err, "%T", tc.data)
+			require.Len(t, parsed.Sections, 1, "%T", tc.data)
+			b2, err := parsed.Append(nil)
+			require.NoError(t, err, "%T", tc.data)
+			assert.Equal(t, b1, b2, "%T byte-stable", tc.data)
+			assert.Equal(t, tc.data, parsed.Sections[0].Syntax.Data, "%T semantic", tc.data)
+		}
+	}
+}

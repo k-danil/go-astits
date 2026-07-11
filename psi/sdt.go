@@ -6,6 +6,7 @@ import (
 
 	"github.com/k-danil/go-astits/v2/descriptor"
 	"github.com/k-danil/go-astits/v2/internal/bytesiter"
+	"github.com/k-danil/go-astits/v2/internal/util"
 )
 
 // Running statuses
@@ -94,4 +95,26 @@ func parseSDTSection(i *bytesiter.Iterator, offsetSectionsEnd int, tableIDExtens
 		d.Services = append(d.Services, s)
 	}
 	return
+}
+
+func (d *SDT) CalcSectionLength() int {
+	n := 3 // original_network_id + reserved_future_use
+	for _, s := range d.Services {
+		n += 5 + descriptor.CalcLength(s.Descriptors) // service_id + 2 flag bytes + descriptors_loop_length_lo
+	}
+	return n
+}
+
+func (d *SDT) appendSection(dst []byte) []byte {
+	dst = append(dst, byte(d.OriginalNetworkID>>8), byte(d.OriginalNetworkID), 0xff) // ONID + reserved_future_use
+	for _, s := range d.Services {
+		loopLen := descriptor.CalcLength(s.Descriptors)
+		dst = append(dst,
+			byte(s.ServiceID>>8), byte(s.ServiceID),
+			0xfc|util.B2U(s.HasEITSchedule)<<1|util.B2U(s.HasEITPresentFollowing), // reserved(6) + EIT_schedule + EIT_present_following
+			s.RunningStatus<<5|util.B2U(s.HasFreeCSAMode)<<4|byte(loopLen>>8)&0xf, // running_status(3) + free_CA(1) + descriptors_loop_length(12)
+			byte(loopLen))
+		dst = descriptor.Append(dst, s.Descriptors)
+	}
+	return dst
 }

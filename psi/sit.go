@@ -64,3 +64,24 @@ func parseSITSection(i *bytesiter.Iterator, offsetSectionsEnd int) (d *SIT, err 
 	}
 	return
 }
+
+func (d *SIT) CalcSectionLength() int {
+	n := 2 + descriptor.CalcLength(d.TransmissionInfoDescriptors) // transmission_info_loop_length prefix + descriptors
+	for _, s := range d.Services {
+		n += 4 + descriptor.CalcLength(s.Descriptors) // service_id + 2 status/length bytes + descriptors
+	}
+	return n
+}
+
+func (d *SIT) appendSection(dst []byte) []byte {
+	dst = descriptor.AppendWithLength(dst, d.TransmissionInfoDescriptors)
+	for _, s := range d.Services {
+		loopLen := descriptor.CalcLength(s.Descriptors)
+		dst = append(dst,
+			byte(s.ServiceID>>8), byte(s.ServiceID),
+			0x80|s.RunningStatus<<4|byte(loopLen>>8)&0xf, // reserved(1) + running_status(3) + service_loop_length(12)
+			byte(loopLen))
+		dst = descriptor.Append(dst, s.Descriptors)
+	}
+	return dst
+}

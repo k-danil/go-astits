@@ -68,3 +68,28 @@ func parseBATSection(i *bytesiter.Iterator, tableIDExtension uint16) (d *BAT, er
 	}
 	return
 }
+
+func (d *BAT) transportStreamsLength() (n int) {
+	for _, ts := range d.TransportStreams {
+		n += 6 + descriptor.CalcLength(ts.TransportDescriptors) // TSID + ONID + transport_descriptors_length prefix
+	}
+	return
+}
+
+func (d *BAT) CalcSectionLength() int {
+	// bouquet_descriptors_length prefix + bouquet descriptors + transport_stream_loop_length + TS loop
+	return 2 + descriptor.CalcLength(d.BouquetDescriptors) + 2 + d.transportStreamsLength()
+}
+
+func (d *BAT) appendSection(dst []byte) []byte {
+	dst = descriptor.AppendWithLength(dst, d.BouquetDescriptors)
+	loopLen := d.transportStreamsLength()
+	dst = append(dst, 0xf0|byte(loopLen>>8)&0xf, byte(loopLen)) // reserved(4) + transport_stream_loop_length(12)
+	for _, ts := range d.TransportStreams {
+		dst = append(dst,
+			byte(ts.TransportStreamID>>8), byte(ts.TransportStreamID),
+			byte(ts.OriginalNetworkID>>8), byte(ts.OriginalNetworkID))
+		dst = descriptor.AppendWithLength(dst, ts.TransportDescriptors)
+	}
+	return dst
+}
