@@ -1,9 +1,11 @@
 package demux
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -135,6 +137,38 @@ func TestZeroCopyRawMatchesCopy(t *testing.T) {
 	for i := range copyRaws {
 		require.Len(t, copyRaws[i], ts.PacketSize)
 		assert.Equal(t, copyRaws[i], viewRaws[i], "packet %d", i)
+	}
+}
+
+// A *bufio.Reader source routes view mode through the peek path — packets are
+// views straight into bufio's buffer, no second copy into an owned batch. Its
+// output must be byte-identical to copy mode.
+func TestPeekViewMatchesCopy(t *testing.T) {
+	stream := offsetTestStream([]uint16{0x100, 0x101, 0x102, 0x103, 0x104, 0x105})
+
+	walk := func(r io.Reader, zeroCopy bool) (raws [][]byte) {
+		opts := []func(*Demuxer){WithPacketSize(ts.PacketSize)}
+		if zeroCopy {
+			opts = append(opts, WithZeroCopyPackets(2))
+		}
+		dmx := New(context.Background(), r, opts...)
+		p := ts.NewPacket()
+		defer p.Close()
+		for {
+			if err := dmx.NextPacketTo(p); err != nil {
+				return
+			}
+			raws = append(raws, bytes.Clone(p.Raw()))
+		}
+	}
+
+	copyRaws := walk(bytes.NewReader(stream), false)
+	peekRaws := walk(bufio.NewReaderSize(bytes.NewReader(stream), 4096), true)
+	require.NotEmpty(t, copyRaws)
+	require.Equal(t, len(copyRaws), len(peekRaws))
+	for i := range copyRaws {
+		require.Len(t, copyRaws[i], ts.PacketSize)
+		assert.Equal(t, copyRaws[i], peekRaws[i], "packet %d", i)
 	}
 }
 

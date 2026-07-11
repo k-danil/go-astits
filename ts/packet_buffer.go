@@ -13,10 +13,22 @@ type packetBatch struct {
 	bs  []byte
 	len int
 	off int
+
+	// When peeker is set, bs is a view into the reader's own buffer rather than
+	// an owned copy: a bufio-backed source already holds the bytes, so there is
+	// no reason to copy them into a second batch. pending is the previous
+	// window's consumed bytes, dropped before the next peek.
+	peeker  Peeker
+	window  int
+	pending int
 }
 
 func newPacketBatch(packetSize, batchPackets uint) *packetBatch {
 	return &packetBatch{bs: make([]byte, packetSize*batchPackets)}
+}
+
+func newPeekBatch(peeker Peeker, window int) *packetBatch {
+	return &packetBatch{peeker: peeker, window: window}
 }
 
 func (b *packetBatch) empty() bool {
@@ -26,6 +38,9 @@ func (b *packetBatch) empty() bool {
 // refill drops a trailing partial packet: the stream either ends there or is torn,
 // exactly like the per-packet ReadFull path treats it.
 func (b *packetBatch) refill(r io.Reader, packetSize int) (err error) {
+	if b.peeker != nil {
+		return b.refillPeek(packetSize)
+	}
 	var n int
 	if n, err = io.ReadFull(r, b.bs); n < packetSize {
 		if err == io.EOF || err == io.ErrUnexpectedEOF || err == nil {
@@ -35,6 +50,31 @@ func (b *packetBatch) refill(r io.Reader, packetSize int) (err error) {
 	}
 	b.len = n - n%packetSize
 	b.off = 0
+	return nil
+}
+
+// refillPeek views the next whole-packet window straight out of the reader's
+// buffer, no copy. The previous window is dropped first; a trailing partial
+// packet is left buffered for the next peek.
+func (b *packetBatch) refillPeek(packetSize int) (err error) {
+	if b.pending > 0 {
+		if _, err = b.peeker.Discard(b.pending); err != nil {
+			return fmt.Errorf("astits: discarding %d bytes failed: %w", b.pending, err)
+		}
+		b.pending = 0
+	}
+	var bs []byte
+	if bs, err = peekUpTo(b.peeker, b.window); err != nil {
+		return fmt.Errorf("astits: peeking %d bytes failed: %w", b.window, err)
+	}
+	n := len(bs) - len(bs)%packetSize
+	if n < packetSize {
+		return ErrNoMorePackets
+	}
+	b.bs = bs
+	b.len = n
+	b.off = 0
+	b.pending = n
 	return nil
 }
 
@@ -125,9 +165,19 @@ func NewPacketBuffer(r io.Reader, cfg PacketBufferConfig) (pb *PacketBuffer, err
 	}
 
 	if cfg.ZeroCopyBatch > 0 {
-		pb.batch = newPacketBatch(pb.packetSize, cfg.ZeroCopyBatch)
+		pb.batch = pb.newBatch(cfg.ZeroCopyBatch)
 	}
 	return
+}
+
+// newBatch picks the view buffer. A *bufio.Reader already holds the stream in its
+// own buffer, so peek views straight into it rather than copying it into a second
+// batch of our own; any other reader gets an owned batch it is read (copied) into.
+func (pb *PacketBuffer) newBatch(batchPackets uint) *packetBatch {
+	if br, ok := pb.r.(*bufio.Reader); ok && br.Size() >= int(pb.packetSize) {
+		return newPeekBatch(br, br.Size())
+	}
+	return newPacketBatch(pb.packetSize, batchPackets)
 }
 
 // syncScanWindow is how many bytes a boundary search peeks: room to slide the
@@ -323,71 +373,44 @@ func Rewind(r io.Reader) (n int64, err error) {
 	return
 }
 
-// nextView fetches the next packet as a view into the batch buffer: no per-packet
-// read and no copy, the view dies on the refill triggered by a later call.
-func (pb *PacketBuffer) nextView(p *Packet) (err error) {
-	ps := int(pb.packetSize)
-	for {
-		if pb.batch.empty() {
-			if err = pb.batch.refill(pb.r, ps); err != nil {
-				return err
-			}
-		}
-
-		// parse overwrites Header and nils AF/Payload itself — no per-packet Reset needed
-		p.Offset = pb.pos
-		pb.pos += int64(ps)
-
-		view := pb.batch.next(ps)
-		p.raw = view
-
-		var skip bool
-		if skip, err = p.parse(view, pb.s); err != nil {
-			if skip && pb.skipErrCounter < pb.skipErrLimit {
-				pb.skipErrCounter++
-			} else {
-				return fmt.Errorf("astits: building packet failed: %w", err)
-			}
-		} else {
-			pb.skipErrCounter = 0
-		}
-
-		if !skip {
-			return nil
-		}
-	}
-}
-
 func (pb *PacketBuffer) PacketSize() uint {
 	return pb.packetSize
 }
 
-// Next fetches the next packet from the buffer
+// Next fetches the next packet. In zero-copy mode the packet is a view into the
+// batch buffer (valid until the next refill); otherwise it is read into the
+// packet's own bytes. Skipped packets and budgeted parse errors are read past;
+// sync-lock mode goes through nextSync.
 func (pb *PacketBuffer) Next(p *Packet) (err error) {
 	if pb.peeker != nil {
 		return pb.nextSync(p)
 	}
-	if pb.batch != nil {
-		return pb.nextView(p)
-	}
 
-	bs := p.bs[:pb.packetSize]
-	p.raw = bs
-
-	var skip bool
-	// Loop to make sure we return a packet even if first packets are skipped
+	ps := int(pb.packetSize)
 	for {
-		if _, err = io.ReadFull(pb.r, bs); err != nil {
-			if err == io.EOF || err == io.ErrUnexpectedEOF {
-				err = ErrNoMorePackets
-			} else {
-				err = fmt.Errorf("astits: reading %d bytes failed: %w", pb.packetSize, err)
+		var bs []byte
+		if pb.batch != nil {
+			if pb.batch.empty() {
+				if err = pb.batch.refill(pb.r, ps); err != nil {
+					return err
+				}
 			}
-			return err
+			bs = pb.batch.next(ps)
+		} else {
+			bs = p.bs[:ps]
+			if _, err = io.ReadFull(pb.r, bs); err != nil {
+				if err == io.EOF || errors.Is(err, io.ErrUnexpectedEOF) {
+					return ErrNoMorePackets
+				}
+				return fmt.Errorf("astits: reading %d bytes failed: %w", ps, err)
+			}
 		}
 
 		p.Offset = pb.pos
-		pb.pos += int64(pb.packetSize)
+		pb.pos += int64(ps)
+		p.raw = bs
+
+		var skip bool
 		if skip, err = p.parse(bs, pb.s); err != nil {
 			if skip && pb.skipErrCounter < pb.skipErrLimit {
 				pb.skipErrCounter++
@@ -397,13 +420,10 @@ func (pb *PacketBuffer) Next(p *Packet) (err error) {
 		} else {
 			pb.skipErrCounter = 0
 		}
-
 		if !skip {
-			break
+			return nil
 		}
 	}
-
-	return
 }
 
 // nextSync fetches the next packet under sync lock: it peeks a packet, resyncs
