@@ -188,6 +188,11 @@ func TestRoundtripPSITables(t *testing.T) {
 			sit.Services = append(sit.Services, SITService{ServiceID: uint16(r.UintN(1 << 16)), RunningStatus: uint8(r.UintN(8)), Descriptors: randDescriptors(r)})
 		}
 
+		iso := &ISO14496Section{}
+		for j := uint(0); j < 1+r.UintN(10); j++ {
+			iso.Data = append(iso.Data, uint8(r.UintN(256)))
+		}
+
 		cases := []struct {
 			tableID TableID
 			data    SectionSyntaxData
@@ -198,6 +203,7 @@ func TestRoundtripPSITables(t *testing.T) {
 			{TableIDNITVariant1, nit},
 			{TableIDBAT, bat},
 			{TableIDSIT, sit},
+			{TableIDISO14496, iso},
 		}
 		for _, tc := range cases {
 			sec := randSection(r, tc.tableID, tc.data, tc.data.(sectionBody).CalcSectionLength())
@@ -214,5 +220,46 @@ func TestRoundtripPSITables(t *testing.T) {
 			assert.Equal(t, b1, b2, "%T byte-stable", tc.data)
 			assert.Equal(t, tc.data, parsed.Sections[0].Syntax.Data, "%T semantic", tc.data)
 		}
+	}
+}
+
+func TestRoundtripPSIMetadata(t *testing.T) {
+	r := rand.New(rand.NewPCG(21, 22))
+	for i := 0; i < 300; i++ {
+		md := &Metadata{
+			MetadataServiceID:         uint8(r.UintN(256)),
+			SectionFragmentIndication: uint8(r.UintN(4)),
+			VersionNumber:             uint8(r.UintN(32)),
+			CurrentNextIndicator:      r.UintN(2) == 1,
+			SectionNumber:             uint8(r.UintN(256)),
+			LastSectionNumber:         uint8(r.UintN(256)),
+		}
+		for j := uint(0); j < 1+r.UintN(20); j++ {
+			md.MetadataBytes = append(md.MetadataBytes, uint8(r.UintN(256)))
+		}
+
+		sec := Section{
+			Header: SectionHeader{
+				TableID:                TableIDMetadata,
+				SectionSyntaxIndicator: true,
+				PrivateBit:             r.UintN(2) == 1,
+				RandomAccessIndicator:  r.UintN(2) == 1,
+				DecoderConfigFlag:      r.UintN(2) == 1,
+			},
+			Syntax: &SectionSyntax{Data: md},
+		}
+		d := &Data{PointerField: int(r.UintN(5)), Sections: []Section{sec}}
+
+		b1, err := d.Append(nil)
+		require.NoError(t, err)
+		parsed, err := Parse(b1)
+		require.NoError(t, err)
+		require.Len(t, parsed.Sections, 1)
+		b2, err := parsed.Append(nil)
+		require.NoError(t, err)
+		assert.Equal(t, b1, b2, "byte-stable")
+		assert.Equal(t, md, parsed.Sections[0].Syntax.Data, "metadata semantic")
+		assert.Equal(t, sec.Header.RandomAccessIndicator, parsed.Sections[0].Header.RandomAccessIndicator)
+		assert.Equal(t, sec.Header.DecoderConfigFlag, parsed.Sections[0].Header.DecoderConfigFlag)
 	}
 }

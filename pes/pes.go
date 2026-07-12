@@ -2,7 +2,6 @@ package pes
 
 import (
 	"encoding/binary"
-	"errors"
 	"fmt"
 
 	"github.com/k-danil/go-astits/v2/internal/util"
@@ -97,6 +96,7 @@ type OptionalHeader struct {
 type OptionalHeaderExtension struct {
 	PrivateData                     []byte
 	Extension2Reserved              []byte
+	PackHeader                      []byte
 	TREF                            ts.ClockReference
 	HasPrivateData                  bool
 	HasPackHeaderField              bool
@@ -314,18 +314,17 @@ func (h *OptionalHeaderExtension) parseBytes(bs []byte, o int) (err error) {
 		o += 16
 	}
 
-	// Pack header: PackField is its length, the body itself is not modeled —
-	// skip it so the following fields parse from the right offset
 	if h.HasPackHeaderField {
 		if o >= len(bs) {
 			return ts.ErrShortPacket
 		}
 		h.PackField = bs[o]
 		o++
-		o += int(h.PackField)
-		if o > len(bs) {
+		if o+int(h.PackField) > len(bs) {
 			return ts.ErrShortPacket
 		}
+		h.PackHeader = bs[o : o+int(h.PackField)]
+		o += int(h.PackField)
 	}
 
 	if h.HasProgramPacketSequenceCounter {
@@ -447,20 +446,9 @@ func (h *Header) PutHeader(bs []byte, payloadLen int) (n int, err error) {
 	return h.putBytes(bs, payloadLen)
 }
 
-// ErrUnsupportedHeaderWrite rejects serialization of optional header features
-// whose write path is not implemented: silently dropping them would produce a
-// header whose flags disagree with its content.
-var ErrUnsupportedHeaderWrite = errors.New("astits: writing PES headers with CRC or pack_header is not implemented")
-
 func (h *Header) putBytes(bs []byte, payloadSize int) (n int, err error) {
 	if len(bs) < HeaderSize {
 		return 0, ts.ErrShortPacket
-	}
-	if hasPESOptionalHeader(h.StreamID) && h.OptionalHeader != nil {
-		if h.OptionalHeader.HasCRC ||
-			(h.OptionalHeader.Extension != nil && h.OptionalHeader.Extension.HasPackHeaderField) {
-			return 0, ErrUnsupportedHeaderWrite
-		}
 	}
 	binary.BigEndian.PutUint32(bs, uint32(h.StreamID)|0x1<<8)
 	pesPacketLength := 0
@@ -502,9 +490,7 @@ func (h *OptionalHeader) calcDataLength() (length uint8) {
 	length += 3 * util.B2U(h.HasESRate)
 	length += dsmTrickModeLength * util.B2U(h.HasDSMTrickMode)
 	length += util.B2U(h.HasAdditionalCopyInfo)
-
-	// TODO
-	//if h.HasCRC { length += 4 }
+	length += 2 * util.B2U(h.HasCRC)
 
 	if h.HasExtension {
 		length += h.Extension.calcDataLength()
@@ -515,10 +501,9 @@ func (h *OptionalHeader) calcDataLength() (length uint8) {
 func (h *OptionalHeaderExtension) calcDataLength() (length uint8) {
 	length++
 	length += 16 * util.B2U(h.HasPrivateData)
-
-	// TODO
-	// if h.HasPackHeaderField { }
-
+	if h.HasPackHeaderField {
+		length += 1 + uint8(len(h.PackHeader))
+	}
 	length += 2 * util.B2U(h.HasProgramPacketSequenceCounter)
 	length += 2 * util.B2U(h.HasPSTDBuffer)
 	if h.HasExtension2 {
@@ -547,7 +532,7 @@ func (h *OptionalHeader) putBytes(bs []byte) (n int) {
 	b |= util.B2U(h.HasESRate) << 4
 	b |= util.B2U(h.HasDSMTrickMode) << 3
 	b |= util.B2U(h.HasAdditionalCopyInfo) << 2
-	//flags[1] |= 0 << 1
+	b |= util.B2U(h.HasCRC) << 1
 	b |= util.B2U(h.HasExtension)
 	bs[1] = b
 	bs[2] = h.calcDataLength()
@@ -582,9 +567,10 @@ func (h *OptionalHeader) putBytes(bs []byte) (n int) {
 		n++
 	}
 
-	//if h.HasCRC {
-	//	// TODO, not supported
-	//}
+	if h.HasCRC {
+		binary.BigEndian.PutUint16(bs[n:], h.CRC)
+		n += 2
+	}
 
 	if h.HasExtension {
 		n += h.Extension.putBytes(bs[n:])
@@ -597,8 +583,7 @@ func (h *OptionalHeaderExtension) putBytes(bs []byte) (n int) {
 	// exp 10110001
 	// act 10111111
 	bs[0] = util.B2U(h.HasPrivateData) << 7
-	//b.Write(false) // TODO pack_header_field_flag, not implemented
-	//b.Write(h.HasPackHeaderField)
+	bs[0] |= util.B2U(h.HasPackHeaderField) << 6
 	bs[0] |= util.B2U(h.HasProgramPacketSequenceCounter) << 5
 	bs[0] |= util.B2U(h.HasPSTDBuffer) << 4
 	bs[0] |= 0xe
@@ -614,9 +599,11 @@ func (h *OptionalHeaderExtension) putBytes(bs []byte) (n int) {
 		n += 16
 	}
 
-	//if h.HasPackHeaderField {
-	//	// TODO (see parsePESOptionalHeader)
-	//}
+	if h.HasPackHeaderField {
+		bs[n] = uint8(len(h.PackHeader))
+		n++
+		n += copy(bs[n:], h.PackHeader)
+	}
 
 	if h.HasProgramPacketSequenceCounter {
 		bs[n] = 0x80 | h.PacketSequenceCounter

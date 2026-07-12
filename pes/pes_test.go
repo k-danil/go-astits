@@ -377,25 +377,14 @@ func TestParsePESData(t *testing.T) {
 	}
 }
 
-// writableHeader clears the flags whose write path is guarded by
-// ErrUnsupportedHeaderWrite, keeping the rest of the fixture intact.
-func writableHeader(h Header) Header {
-	if h.OptionalHeader != nil {
-		oh := *h.OptionalHeader
-		oh.HasCRC = false
-		h.OptionalHeader = &oh
-	}
-	return h
-}
-
 func TestWritePESData(t *testing.T) {
 	for _, tc := range pesTestCases {
 		t.Run(tc.name, func(t *testing.T) {
 			bufExpected := bytes.Buffer{}
 			wExpected := bitstest.NewWriter(&bufExpected)
-			tc.headerBytesFunc(wExpected, false, false)
-			tc.optionalHeaderBytesFunc(wExpected, false, false)
-			tc.bytesFunc(wExpected, false, false)
+			tc.headerBytesFunc(wExpected, false, true)
+			tc.optionalHeaderBytesFunc(wExpected, false, true)
+			tc.bytesFunc(wExpected, false, true)
 
 			var bufActual bytes.Buffer
 			scratch := make([]byte, ts.PacketSize-ts.HeaderSize)
@@ -404,7 +393,7 @@ func TestWritePESData(t *testing.T) {
 			totalBytes := 0
 			payloadPos := 0
 
-			wh := writableHeader(tc.pesData.Header)
+			wh := tc.pesData.Header
 			for payloadPos+1 < len(tc.pesData.Data) {
 				n, payloadN, err := wh.Put(
 					scratch,
@@ -431,11 +420,11 @@ func TestWritePESHeader(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			bufExpected := bytes.Buffer{}
 			wExpected := bitstest.NewWriter(&bufExpected)
-			tc.headerBytesFunc(wExpected, false, false)
-			tc.optionalHeaderBytesFunc(wExpected, false, false)
+			tc.headerBytesFunc(wExpected, false, true)
+			tc.optionalHeaderBytesFunc(wExpected, false, true)
 
 			bs := make([]byte, ts.PacketSize)
-			wh := writableHeader(tc.pesData.Header)
+			wh := tc.pesData.Header
 			n, err := wh.putBytes(bs, len(tc.pesData.Data))
 			assert.NoError(t, err)
 			assert.Equal(t, bufExpected.Len(), n)
@@ -448,7 +437,7 @@ func BenchmarkWritePESHeader(b *testing.B) {
 	bs := make([]byte, ts.PacketSize)
 
 	for _, tc := range pesTestCases {
-		wh := writableHeader(tc.pesData.Header)
+		wh := tc.pesData.Header
 		b.Run(tc.name, func(b *testing.B) {
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {
@@ -463,7 +452,7 @@ func TestWritePESOptionalHeader(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			bufExpected := bytes.Buffer{}
 			wExpected := bitstest.NewWriter(&bufExpected)
-			tc.optionalHeaderBytesFunc(wExpected, false, false)
+			tc.optionalHeaderBytesFunc(wExpected, false, true)
 
 			bs := make([]byte, ts.PacketSize)
 			n := tc.pesData.Header.OptionalHeader.putBytes(bs)
@@ -497,9 +486,9 @@ func BenchmarkParsePESData(b *testing.B) {
 	}
 }
 
-// The pack_header body is length-prefixed and unmodeled: the parser must skip
-// it so the fields after it stay aligned.
-func TestParseOptionalHeaderSkipsPackHeader(t *testing.T) {
+// The pack_header body is length-prefixed; the parser captures it verbatim so
+// the following fields stay aligned and it round-trips on write.
+func TestParseOptionalHeaderPackHeader(t *testing.T) {
 	buf := bytes.Buffer{}
 	w := bitstest.NewWriter(&buf)
 	_ = w.Write("10")               // Marker bits
@@ -531,20 +520,34 @@ func TestParseOptionalHeaderSkipsPackHeader(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, h.HasExtension)
 	assert.Equal(t, uint8(4), h.Extension.PackField)
+	assert.Equal(t, []byte{0xde, 0xad, 0xbe, 0xef}, h.Extension.PackHeader)
 	assert.True(t, h.Extension.HasPSTDBuffer)
 	assert.Equal(t, uint8(1), h.Extension.PSTDBufferScale)
 	assert.Equal(t, uint16(0x1555), h.Extension.PSTDBufferSize)
 }
 
-func TestPutUnsupportedHeader(t *testing.T) {
-	h := Header{
-		StreamID:       0xc0,
-		OptionalHeader: &OptionalHeader{MarkerBits: 2, HasCRC: true},
+func TestWriteOptionalHeaderCRCAndPackHeader(t *testing.T) {
+	orig := &OptionalHeader{
+		MarkerBits:   2,
+		HasCRC:       true,
+		CRC:          0x1234,
+		HasExtension: true,
+		Extension: &OptionalHeaderExtension{
+			HasPackHeaderField: true,
+			PackField:          4,
+			PackHeader:         []byte{0xde, 0xad, 0xbe, 0xef},
+		},
 	}
-	_, _, err := h.Put(make([]byte, 256), []byte("data"), true)
-	assert.ErrorIs(t, err, ErrUnsupportedHeaderWrite)
 
-	h.OptionalHeader = &OptionalHeader{MarkerBits: 2, Extension: &OptionalHeaderExtension{HasPackHeaderField: true}, HasExtension: true}
-	_, _, err = h.Put(make([]byte, 256), []byte("data"), true)
-	assert.ErrorIs(t, err, ErrUnsupportedHeaderWrite)
+	bs := make([]byte, 256)
+	n := orig.putBytes(bs)
+
+	var got OptionalHeader
+	_, err := got.parseBytes(bs[:n], 0)
+	require.NoError(t, err)
+	assert.True(t, got.HasCRC)
+	assert.Equal(t, uint16(0x1234), got.CRC)
+	require.NotNil(t, got.Extension)
+	assert.True(t, got.Extension.HasPackHeaderField)
+	assert.Equal(t, []byte{0xde, 0xad, 0xbe, 0xef}, got.Extension.PackHeader)
 }

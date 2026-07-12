@@ -14,9 +14,9 @@ Dependency arrows point strictly downwards, no cycles:
 | Package      | Contents                                                                                                                                                       |
 |--------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `ts`         | packet, header, adaptation field: parse + serialization, clock codecs (PCR/PTS/DTS/ESCR), CRC32, packet reader (copy and zero-copy view modes, 188/192/204 autodetect), `Packet.Raw()` |
-| `pes`        | PES packets: parse + serialization                                                                                                                             |
-| `psi`        | PSI/SI tables — the full MPEG-2 systems + DVB-SI set: parse (all); serialize (PAT/PMT)                                                                          |
-| `descriptor` | DVB descriptors — the full EN 300 468 set (§6.2 main, §6.4 extension, audio annexes); one file per descriptor, unrecognized/MPEG tags degrade to `Unknown`         |
+| `pes`        | PES packets: parse + serialization, full optional header (PTS/DTS, ESCR, ES rate, DSM trick mode, CRC, pack_header, extension)                                  |
+| `psi`        | PSI/SI tables — MPEG-2 Systems + DVB-SI: parse and serialize, every table, byte-exact round-trip                                                                |
+| `descriptor` | MPEG-2 Systems (ISO/IEC 13818-1, Table 2-45) + DVB (EN 300 468 §6) descriptors: parse + serialize, one file per descriptor; DVB extension descriptors in `descriptor/ext`; tags defined outside these two specs degrade to `Unknown` |
 | `demux`      | demuxer: per-PID byte accumulator, event-based `Next`/`Events`, PSI table state, PSI dedup                                                                     |
 | `mux`        | muxer: PES packetization, table generation and retransmission, raw passthrough                                                                                 |
 
@@ -44,6 +44,14 @@ is GC-bound at this scale (10–33M allocs/pass), so its throughput varies run t
 
 How:
 
+- **Full standard coverage** (parse + byte-exact serialize round-trip): every descriptor,
+  PSI/SI table and PES-header field whose *syntax is defined in* ISO/IEC 13818-1 (H.222.0) or
+  ETSI EN 300 468 (DVB-SI) — the complete descriptor sets of both (ISO Table 2-45 and DVB §6,
+  main plus extension), every table (PAT/CAT/PMT/TSDT, NIT/BAT/SDT/EIT/TDT/TOT/RST/ST/DIT/SIT,
+  ISO_IEC_14496 and metadata sections), and the full PES optional header (CRC and pack_header
+  included). Structures those two documents defer to other specifications — payloads
+  referencing ISO/IEC 14496, DSM-CC (13818-6) or IPMP (13818-11) — are carried verbatim
+  rather than decoded; tags defined outside the two are surfaced as `Unknown`.
 - **Direct parsing and serialization**: no bit-writer/byte-iterator abstractions on hot
   paths — slice cursors for reads (the 4-byte TS header lands in one big-endian `uint32`,
   its fields sliced out in registers), packet assembly in a scratch buffer with a single

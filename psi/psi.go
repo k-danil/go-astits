@@ -13,22 +13,24 @@ import (
 
 // PSI table IDs
 const (
-	TableTypeBAT     = "BAT"
-	TableTypeCAT     = "CAT"
-	TableTypeDIT     = "DIT"
-	TableTypeEIT     = "EIT"
-	TableTypeNIT     = "NIT"
-	TableTypeNull    = "Null"
-	TableTypePAT     = "PAT"
-	TableTypePMT     = "PMT"
-	TableTypeRST     = "RST"
-	TableTypeSDT     = "SDT"
-	TableTypeSIT     = "SIT"
-	TableTypeST      = "ST"
-	TableTypeTDT     = "TDT"
-	TableTypeTOT     = "TOT"
-	TableTypeTSDT    = "TSDT"
-	TableTypeUnknown = "Unknown"
+	TableTypeBAT      = "BAT"
+	TableTypeCAT      = "CAT"
+	TableTypeDIT      = "DIT"
+	TableTypeEIT      = "EIT"
+	TableTypeISO14496 = "ISO14496"
+	TableTypeMetadata = "Metadata"
+	TableTypeNIT      = "NIT"
+	TableTypeNull     = "Null"
+	TableTypePAT      = "PAT"
+	TableTypePMT      = "PMT"
+	TableTypeRST      = "RST"
+	TableTypeSDT      = "SDT"
+	TableTypeSIT      = "SIT"
+	TableTypeST       = "ST"
+	TableTypeTDT      = "TDT"
+	TableTypeTOT      = "TOT"
+	TableTypeTSDT     = "TSDT"
+	TableTypeUnknown  = "Unknown"
 )
 
 // ErrCRC32Mismatch reports a section whose CRC32 does not match its content.
@@ -52,6 +54,11 @@ const (
 	TableIDCAT  TableID = 0x01
 	TableIDPMT  TableID = 0x02
 	TableIDTSDT TableID = 0x03
+
+	TableIDISO14496Scene  TableID = 0x04
+	TableIDISO14496Object TableID = 0x05
+	TableIDMetadata       TableID = 0x06
+	TableIDISO14496       TableID = 0x08
 
 	TableIDNITVariant1 TableID = 0x40
 	TableIDNITVariant2 TableID = 0x41
@@ -94,6 +101,8 @@ type SectionHeader struct {
 	TableID                TableID // Table Identifier, that defines the structure of the syntax section and other contained data. As an exception, if this is the byte that immediately follow previous table section and is set to 0xFF, then it indicates that the repeat of table section end here and the rest of TS data payload shall be stuffed with 0xFF. Consequently the value 0xFF shall not be used for the Table Identifier.
 	SectionSyntaxIndicator bool    // A flag that indicates if the syntax section follows the section length. The PAT, PMT, and CAT all set this to 1.
 	PrivateBit             bool    // The PAT, PMT, and CAT all set this to 0. Other tables set this to 1.
+	RandomAccessIndicator  bool    // metadata_section only; unused for every other table
+	DecoderConfigFlag      bool    // metadata_section only; unused for every other table
 }
 
 // SectionSyntax represents a PSI section syntax
@@ -242,6 +251,11 @@ func (h *SectionHeader) parsePSISectionHeader(i *bytesiter.Iterator) (offsets ps
 
 	h.PrivateBit = val&0x4000 > 0
 
+	if h.TableID == TableIDMetadata {
+		h.RandomAccessIndicator = val&0x2000 > 0
+		h.DecoderConfigFlag = val&0x1000 > 0
+	}
+
 	h.SectionLength = val & 0xfff
 
 	offsets.sectionsStart = i.Offset()
@@ -279,6 +293,10 @@ func (t TableID) Type() string {
 		return TableTypePMT
 	case t == TableIDTSDT:
 		return TableTypeTSDT
+	case t == TableIDISO14496Scene, t == TableIDISO14496Object, t == TableIDISO14496:
+		return TableTypeISO14496
+	case t == TableIDMetadata:
+		return TableTypeMetadata
 	case t == TableIDRST:
 		return TableTypeRST
 	case t == TableIDSDTVariant1, t == TableIDSDTVariant2:
@@ -306,12 +324,13 @@ func (t TableID) hasPSISyntaxHeader() bool {
 		t == TableIDNITVariant1 || t == TableIDNITVariant2 ||
 		t == TableIDSDTVariant1 || t == TableIDSDTVariant2 ||
 		t == TableIDSIT ||
+		t == TableIDISO14496Scene || t == TableIDISO14496Object || t == TableIDISO14496 ||
 		(t >= TableIDEITStart && t <= TableIDEITEnd)
 }
 
 // hasCRC32 checks whether the table has a CRC32
 func (t TableID) hasCRC32() bool {
-	return t.hasPSISyntaxHeader() || t == TableIDTOT
+	return t.hasPSISyntaxHeader() || t == TableIDTOT || t == TableIDMetadata
 }
 
 func (t TableID) IsUnknown() bool {
@@ -324,6 +343,8 @@ func (t TableID) IsUnknown() bool {
 		TableIDPAT,
 		TableIDPMT,
 		TableIDTSDT,
+		TableIDISO14496Scene, TableIDISO14496Object, TableIDISO14496,
+		TableIDMetadata,
 		TableIDRST,
 		TableIDSDTVariant1, TableIDSDTVariant2,
 		TableIDSIT,
@@ -431,6 +452,16 @@ func parsePSISectionSyntaxData(i *bytesiter.Iterator, h *SectionHeader, sh *Sect
 			err = fmt.Errorf("astits: parsing TSDT section failed: %w", err)
 			return
 		}
+	case TableIDISO14496Scene, TableIDISO14496Object, TableIDISO14496:
+		if d, err = parseISO14496Section(i, offsetSectionsEnd); err != nil {
+			err = fmt.Errorf("astits: parsing ISO_IEC_14496 section failed: %w", err)
+			return
+		}
+	case TableIDMetadata:
+		if d, err = parseMetadataSection(i, offsetSectionsEnd); err != nil {
+			err = fmt.Errorf("astits: parsing metadata section failed: %w", err)
+			return
+		}
 	case TableIDRST:
 		if d, err = parseRSTSection(i, offsetSectionsEnd); err != nil {
 			err = fmt.Errorf("astits: parsing RST section failed: %w", err)
@@ -526,9 +557,13 @@ func (s *Section) appendSection(dst []byte) ([]byte, error) {
 	}
 	crcStart := len(dst)
 
+	reserved := byte(0x30) // both reserved bits set, except metadata_section carries flags here
+	if s.Header.TableID == TableIDMetadata {
+		reserved = util.B2U(s.Header.RandomAccessIndicator)<<5 | util.B2U(s.Header.DecoderConfigFlag)<<4
+	}
 	dst = append(dst, uint8(s.Header.TableID))
 	dst = append(dst,
-		util.B2U(s.Header.SectionSyntaxIndicator)<<7|util.B2U(s.Header.PrivateBit)<<6|0x30|byte(sectionLength>>8)&0xf,
+		util.B2U(s.Header.SectionSyntaxIndicator)<<7|util.B2U(s.Header.PrivateBit)<<6|reserved|byte(sectionLength>>8)&0xf,
 		byte(sectionLength))
 
 	// A zero-length section has no syntax header, body or CRC to follow; anything
