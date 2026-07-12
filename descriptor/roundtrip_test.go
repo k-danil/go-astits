@@ -205,7 +205,7 @@ var roundtripGenerators = map[string]func(r *rand.Rand) Descriptor{
 		return &UserDefined{Header: Header{Tag: Tag(0x80 + r.UintN(0x7f))}, Data: randBytes(r, int(r.UintN(20)))}
 	},
 	"Unknown": func(r *rand.Rand) Descriptor {
-		return &Unknown{Header: Header{Tag: Tag(0x30)}, Content: randBytes(r, int(r.UintN(20)))}
+		return &Unknown{Header: Header{Tag: Tag(0x3a)}, Content: randBytes(r, int(r.UintN(20)))}
 	},
 	"VBIData": func(r *rand.Rand) Descriptor {
 		d := &VBIData{Header: Header{Tag: TagVBIData}}
@@ -677,6 +677,432 @@ var roundtripGenerators = map[string]func(r *rand.Rand) Descriptor{
 			d.Cells = append(d.Cells, cell)
 		}
 		return d
+	},
+	"VideoStream": func(r *rand.Rand) Descriptor {
+		d := &VideoStream{Header: Header{Tag: TagVideoStream},
+			MultipleFrameRate:    r.UintN(2) == 1,
+			FrameRateCode:        uint8(r.UintN(16)),
+			MPEG1Only:            r.UintN(2) == 1,
+			ConstrainedParameter: r.UintN(2) == 1,
+			StillPicture:         r.UintN(2) == 1}
+		if !d.MPEG1Only {
+			d.ProfileAndLevelIndication = uint8(r.UintN(256))
+			d.ChromaFormat = uint8(r.UintN(4))
+			d.FrameRateExtension = r.UintN(2) == 1
+		}
+		return d
+	},
+	"AudioStream": func(r *rand.Rand) Descriptor {
+		return &AudioStream{Header: Header{Tag: TagAudioStream},
+			Layer:                      uint8(r.UintN(4)),
+			FreeFormatFlag:             r.UintN(2) == 1,
+			ID:                         r.UintN(2) == 1,
+			VariableRateAudioIndicator: r.UintN(2) == 1}
+	},
+	"Hierarchy": func(r *rand.Rand) Descriptor {
+		return &Hierarchy{
+			Header:                      Header{Tag: TagHierarchy},
+			HierarchyType:               uint8(r.UintN(16)),
+			HierarchyLayerIndex:         uint8(r.UintN(64)),
+			HierarchyEmbeddedLayerIndex: uint8(r.UintN(64)),
+			HierarchyChannel:            uint8(r.UintN(64)),
+			NoViewScalabilityFlag:       r.UintN(2) == 1,
+			NoTemporalScalabilityFlag:   r.UintN(2) == 1,
+			NoSpatialScalabilityFlag:    r.UintN(2) == 1,
+			NoQualityScalabilityFlag:    r.UintN(2) == 1,
+			TREFPresentFlag:             r.UintN(2) == 1,
+		}
+	},
+	"TargetBackgroundGrid": func(r *rand.Rand) Descriptor {
+		return &TargetBackgroundGrid{Header: Header{Tag: TagTargetBackgroundGrid},
+			HorizontalSize: uint16(r.UintN(0x4000)), VerticalSize: uint16(r.UintN(0x4000)),
+			AspectRatioInformation: uint8(r.UintN(16))}
+	},
+	"VideoWindow": func(r *rand.Rand) Descriptor {
+		return &VideoWindow{Header: Header{Tag: TagVideoWindow},
+			HorizontalOffset: uint16(r.UintN(1 << 14)),
+			VerticalOffset:   uint16(r.UintN(1 << 14)),
+			WindowPriority:   uint8(r.UintN(16))}
+	},
+	"SystemClock": func(r *rand.Rand) Descriptor {
+		return &SystemClock{Header: Header{Tag: TagSystemClock},
+			ClockAccuracyInteger:            uint8(r.UintN(64)),
+			ClockAccuracyExponent:           uint8(r.UintN(8)),
+			ExternalClockReferenceIndicator: r.UintN(2) == 1}
+	},
+	"MultiplexBufferUtilization": func(r *rand.Rand) Descriptor {
+		return &MultiplexBufferUtilization{
+			Header:     Header{Tag: TagMultiplexBufferUtilization},
+			BoundValid: r.UintN(2) == 1,
+			LowerBound: uint16(r.UintN(1 << 15)),
+			UpperBound: uint16(r.UintN(1 << 15)),
+		}
+	},
+	"Copyright": func(r *rand.Rand) Descriptor {
+		return &Copyright{
+			Header:                  Header{Tag: TagCopyright},
+			CopyrightIdentifier:     r.Uint32(),
+			AdditionalCopyrightInfo: randBytes(r, int(r.UintN(10))),
+		}
+	},
+	"SmoothingBuffer": func(r *rand.Rand) Descriptor {
+		return &SmoothingBuffer{Header: Header{Tag: TagSmoothingBuffer}, SbLeakRate: uint32(r.UintN(1 << 22)), SbSize: uint32(r.UintN(1 << 22))}
+	},
+	"STD": func(r *rand.Rand) Descriptor {
+		return &STD{Header: Header{Tag: TagSTD}, LeakValidFlag: r.UintN(2) == 1}
+	},
+	"IBP": func(r *rand.Rand) Descriptor {
+		return &IBP{
+			Header:           Header{Tag: TagIBP},
+			MaxGOPLength:     uint16(1 + r.IntN(0x3fff)),
+			ClosedGOPFlag:    r.IntN(2) == 0,
+			IdenticalGOPFlag: r.IntN(2) == 0,
+		}
+	},
+	"MPEG4Video": func(r *rand.Rand) Descriptor {
+		return &MPEG4Video{Header: Header{Tag: TagMPEG4Video},
+			ProfileAndLevel: uint8(r.UintN(256))}
+	},
+	"MPEG4Audio": func(r *rand.Rand) Descriptor {
+		return &MPEG4Audio{Header: Header{Tag: TagMPEG4Audio}, ProfileAndLevel: uint8(r.UintN(256))}
+	},
+	"IOD": func(r *rand.Rand) Descriptor {
+		return &IOD{Header: Header{Tag: TagIOD},
+			ScopeOfIODLabel:         uint8(r.UintN(256)),
+			IODLabel:                uint8(r.UintN(256)),
+			InitialObjectDescriptor: randBytes(r, int(r.UintN(20)))}
+	},
+	"SL": func(r *rand.Rand) Descriptor {
+		return &SL{Header: Header{Tag: TagSL}, ESID: uint16(r.UintN(1 << 16))}
+	},
+	"FMC": func(r *rand.Rand) Descriptor {
+		d := &FMC{Header: Header{Tag: TagFMC}}
+		for i := uint(0); i < 1+r.UintN(5); i++ {
+			d.Entries = append(d.Entries, FMCEntry{
+				ESID:           uint16(r.UintN(1 << 16)),
+				FlexMuxChannel: uint8(r.UintN(256)),
+			})
+		}
+		return d
+	},
+	"ExternalESID": func(r *rand.Rand) Descriptor {
+		return &ExternalESID{
+			Header:       Header{Tag: TagExternalESID},
+			ExternalESID: uint16(r.UintN(1 << 16)),
+		}
+	},
+	"MuxCode": func(r *rand.Rand) Descriptor {
+		return &MuxCode{Header: Header{Tag: TagMuxCode}, MuxCodeTableEntries: randBytes(r, int(r.UintN(20)))}
+	},
+	"FmxBufferSize": func(r *rand.Rand) Descriptor {
+		return &FmxBufferSize{Header: Header{Tag: TagFmxBufferSize}, Body: randBytes(r, int(r.UintN(20)))}
+	},
+	"MultiplexBuffer": func(r *rand.Rand) Descriptor {
+		return &MultiplexBuffer{Header: Header{Tag: TagMultiplexBuffer},
+			MBBufferSize: uint32(r.UintN(1 << 24)), TBLeakRate: uint32(r.UintN(1 << 24))}
+	},
+	"ContentLabeling": func(r *rand.Rand) Descriptor {
+		d := &ContentLabeling{Header: Header{Tag: TagContentLabeling}}
+		if r.UintN(2) == 0 {
+			d.MetadataApplicationFormat = uint16(r.UintN(0xffff))
+		} else {
+			d.MetadataApplicationFormat = 0xffff
+			d.MetadataApplicationFormatIdentifier = r.Uint32()
+		}
+		d.ContentTimeBaseIndicator = uint8(r.UintN(16))
+		if r.UintN(2) == 1 {
+			d.ContentReferenceIDRecordFlag = true
+			d.ContentReferenceID = randBytes(r, 1+int(r.UintN(20)))
+		}
+		if d.ContentTimeBaseIndicator == 1 || d.ContentTimeBaseIndicator == 2 {
+			d.ContentTimeBaseValue = r.Uint64() & ((1 << 33) - 1)
+			d.MetadataTimeBaseValue = r.Uint64() & ((1 << 33) - 1)
+		}
+		if d.ContentTimeBaseIndicator == 2 {
+			d.ContentID = uint8(r.UintN(128))
+		}
+		if d.ContentTimeBaseIndicator >= 3 && d.ContentTimeBaseIndicator <= 7 {
+			d.TimeBaseAssociationData = randBytes(r, int(r.UintN(20)))
+		}
+		if r.UintN(2) == 1 {
+			d.PrivateData = randBytes(r, 1+int(r.UintN(20)))
+		}
+		return d
+	},
+	"MetadataPointer": func(r *rand.Rand) Descriptor {
+		d := &MetadataPointer{Header: Header{Tag: TagMetadataPointer},
+			MetadataApplicationFormat: uint16(r.UintN(0x10000)),
+			MetadataFormat:            uint8(r.UintN(256)),
+			MetadataServiceID:         uint8(r.UintN(256)),
+			MetadataLocatorRecordFlag: r.UintN(2) == 1,
+			MPEGCarriageFlags:         uint8(r.UintN(4)),
+			PrivateData:               randBytes(r, int(r.UintN(10)))}
+		if r.UintN(2) == 1 {
+			d.MetadataApplicationFormat = 0xffff
+		}
+		if d.MetadataApplicationFormat == 0xffff {
+			d.MetadataApplicationFormatIdentifier = r.Uint32()
+		}
+		if r.UintN(2) == 1 {
+			d.MetadataFormat = 0xff
+		}
+		if d.MetadataFormat == 0xff {
+			d.MetadataFormatIdentifier = r.Uint32()
+		}
+		if d.MetadataLocatorRecordFlag {
+			d.MetadataLocatorRecord = randBytes(r, 1+int(r.UintN(10)))
+		}
+		if d.MPEGCarriageFlags <= 2 {
+			d.ProgramNumber = uint16(r.UintN(0x10000))
+		}
+		if d.MPEGCarriageFlags == 1 {
+			d.TransportStreamLocation = uint16(r.UintN(0x10000))
+			d.TransportStreamID = uint16(r.UintN(0x10000))
+		}
+		return d
+	},
+	"Metadata": func(r *rand.Rand) Descriptor {
+		randRecord := func() []byte {
+			return randBytes(r, 1+r.IntN(8))
+		}
+		d := &Metadata{
+			Header:            Header{Tag: TagMetadata},
+			MetadataServiceID: uint8(r.IntN(256)),
+		}
+
+		if r.IntN(2) == 0 {
+			d.MetadataApplicationFormat = 0xffff
+			d.MetadataApplicationFormatIdentifier = r.Uint32()
+		} else {
+			d.MetadataApplicationFormat = uint16(r.IntN(0xffff)) // never the 0xffff escape
+		}
+
+		if r.IntN(2) == 0 {
+			d.MetadataFormat = 0xff
+			d.MetadataFormatIdentifier = r.Uint32()
+		} else {
+			d.MetadataFormat = uint8(r.IntN(0xff)) // never the 0xff escape
+		}
+
+		if d.DSMCCFlag = r.IntN(2) == 0; d.DSMCCFlag {
+			d.ServiceIdentificationRecord = randRecord()
+		}
+
+		d.DecoderConfigFlags = uint8(r.IntN(8))
+		switch d.DecoderConfigFlags {
+		case 0x1:
+			d.DecoderConfig = randRecord()
+		case 0x3:
+			d.DecConfigIdentificationRecord = randRecord()
+		case 0x4:
+			d.DecoderConfigMetadataServiceID = uint8(r.IntN(256))
+		case 0x5, 0x6:
+			d.ReservedData = randRecord()
+		}
+
+		if r.IntN(2) == 0 {
+			d.PrivateData = randRecord()
+		}
+		return d
+	},
+	"MetadataSTD": func(r *rand.Rand) Descriptor {
+		const max22 = 1<<22 - 1
+		return &MetadataSTD{
+			Header:         Header{Tag: TagMetadataSTD, Length: 9},
+			InputLeakRate:  r.Uint32() & max22,
+			BufferSize:     r.Uint32() & max22,
+			OutputLeakRate: r.Uint32() & max22,
+		}
+	},
+	"AVCTimingAndHRD": func(r *rand.Rand) Descriptor {
+		d := &AVCTimingAndHRD{Header: Header{Tag: TagAVCTimingAndHRD},
+			HRDManagementValid:          r.UintN(2) == 1,
+			PictureAndTimingInfoPresent: r.UintN(2) == 1,
+			FixedFrameRate:              r.UintN(2) == 1,
+			TemporalPOC:                 r.UintN(2) == 1,
+			PictureToDisplayConversion:  r.UintN(2) == 1}
+		if d.PictureAndTimingInfoPresent {
+			d.Is90kHz = r.UintN(2) == 1
+			if !d.Is90kHz {
+				d.N = r.Uint32()
+				d.K = r.Uint32()
+			}
+			d.NumUnitsInTick = r.Uint32()
+		}
+		return d
+	},
+	"MPEG2AACAudio": func(r *rand.Rand) Descriptor {
+		return &MPEG2AACAudio{Header: Header{Tag: TagMPEG2AACAudio},
+			Profile:               uint8(r.UintN(256)),
+			ChannelConfiguration:  uint8(r.UintN(256)),
+			AdditionalInformation: uint8(r.UintN(256))}
+	},
+	"FlexMuxTiming": func(r *rand.Rand) Descriptor {
+		return &FlexMuxTiming{
+			Header:        Header{Tag: TagFlexMuxTiming},
+			FCRESID:       uint16(r.UintN(1 << 16)),
+			FCRResolution: r.Uint32(),
+			FCRLength:     uint8(r.UintN(1 << 8)),
+			FmxRateLength: uint8(r.UintN(1 << 8)),
+		}
+	},
+	"MPEG4Text": func(r *rand.Rand) Descriptor {
+		return &MPEG4Text{Header: Header{Tag: TagMPEG4Text}, TextConfig: randBytes(r, int(r.UintN(20)))}
+	},
+	"MPEG4AudioExtension": func(r *rand.Rand) Descriptor {
+		d := &MPEG4AudioExtension{
+			Header:                      Header{Tag: TagMPEG4AudioExtension},
+			HasASC:                      r.UintN(2) == 1,
+			AudioProfileLevelIndication: randBytes(r, int(r.UintN(16))),
+		}
+		if d.HasASC {
+			d.AudioSpecificConfig = randBytes(r, int(r.UintN(200)))
+		}
+		return d
+	},
+	"AuxiliaryVideoStream": func(r *rand.Rand) Descriptor {
+		return &AuxiliaryVideoStream{Header: Header{Tag: TagAuxiliaryVideoStream},
+			AuxVideoCodedStreamType: uint8(r.UintN(256)),
+			SIRBSP:                  randBytes(r, int(r.UintN(16)))}
+	},
+	"SVCExtension": func(r *rand.Rand) Descriptor {
+		return &SVCExtension{Header: Header{Tag: TagSVCExtension},
+			Width: uint16(r.UintN(65536)), Height: uint16(r.UintN(65536)),
+			FrameRate: uint16(r.UintN(65536)), AverageBitrate: uint16(r.UintN(65536)),
+			MaximumBitrate: uint16(r.UintN(65536)),
+			DependencyID:   uint8(r.UintN(8)), QualityIDStart: uint8(r.UintN(16)),
+			QualityIDEnd: uint8(r.UintN(16)), TemporalIDStart: uint8(r.UintN(8)),
+			TemporalIDEnd: uint8(r.UintN(8)), NoSEINALUnitPresent: r.UintN(2) == 1}
+	},
+	"MVCExtension": func(r *rand.Rand) Descriptor {
+		return &MVCExtension{
+			Header:                    Header{Tag: TagMVCExtension},
+			AverageBitrate:            uint16(r.UintN(1 << 16)),
+			MaximumBitrate:            uint16(r.UintN(1 << 16)),
+			ViewOrderIndexMin:         uint16(r.UintN(1 << 10)),
+			ViewOrderIndexMax:         uint16(r.UintN(1 << 10)),
+			TemporalIDStart:           uint8(r.UintN(1 << 3)),
+			TemporalIDEnd:             uint8(r.UintN(1 << 3)),
+			ViewAssociationNotPresent: r.UintN(2) == 1,
+			BaseViewIsLeftEyeview:     r.UintN(2) == 1,
+			NoSEINALUnitPresent:       r.UintN(2) == 1,
+			NoPrefixNALUnitPresent:    r.UintN(2) == 1,
+		}
+	},
+	"J2KVideo": func(r *rand.Rand) Descriptor {
+		var pd []byte
+		if n := r.IntN(8); n > 0 {
+			pd = randBytes(r, n)
+		}
+		return &J2KVideo{
+			Header:             Header{Tag: TagJ2KVideo},
+			ProfileAndLevel:    uint16(r.Uint32()),
+			HorizontalSize:     r.Uint32(),
+			VerticalSize:       r.Uint32(),
+			MaxBitRate:         r.Uint32(),
+			MaxBufferSize:      r.Uint32(),
+			DENFrameRate:       uint16(r.Uint32()),
+			NUMFrameRate:       uint16(r.Uint32()),
+			ColorSpecification: uint8(r.Uint32()),
+			StillMode:          r.IntN(2) == 1,
+			InterlacedVideo:    r.IntN(2) == 1,
+			PrivateData:        pd,
+		}
+	},
+	"MVCOperationPoint": func(r *rand.Rand) Descriptor {
+		d := &MVCOperationPoint{
+			Header:             Header{Tag: TagMVCOperationPoint},
+			ProfileIDC:         uint8(r.IntN(256)),
+			AVCCompatibleFlags: uint8(r.IntN(4)),
+			ConstraintSet0Flag: r.IntN(2) == 0,
+			ConstraintSet1Flag: r.IntN(2) == 0,
+			ConstraintSet2Flag: r.IntN(2) == 0,
+			ConstraintSet3Flag: r.IntN(2) == 0,
+			ConstraintSet4Flag: r.IntN(2) == 0,
+			ConstraintSet5Flag: r.IntN(2) == 0,
+		}
+		d.Levels = make([]MVCOperationPointLevel, r.IntN(4))
+		for li := range d.Levels {
+			lv := &d.Levels[li]
+			lv.LevelIDC = uint8(r.IntN(256))
+			lv.OperationPoints = make([]MVCOperationPointEntry, r.IntN(4))
+			for oi := range lv.OperationPoints {
+				op := &lv.OperationPoints[oi]
+				op.ApplicableTemporalID = uint8(r.IntN(8))
+				op.NumTargetOutputViews = uint8(r.IntN(256))
+				op.ESReferences = make([]uint8, r.IntN(4))
+				for ei := range op.ESReferences {
+					op.ESReferences[ei] = uint8(r.IntN(64))
+				}
+			}
+		}
+		return d
+	},
+	"MPEG2StereoscopicVideoFormat": func(r *rand.Rand) Descriptor {
+		d := &MPEG2StereoscopicVideoFormat{Header: Header{Tag: TagMPEG2StereoscopicVideoFormat},
+			HasArrangementType: r.UintN(2) == 1}
+		if d.HasArrangementType {
+			d.ArrangementType = uint8(r.UintN(128))
+		}
+		return d
+	},
+	"StereoscopicProgramInfo": func(r *rand.Rand) Descriptor {
+		return &StereoscopicProgramInfo{
+			Header:      Header{Tag: TagStereoscopicProgramInfo, Length: 1},
+			ServiceType: uint8(r.IntN(8)),
+		}
+	},
+	"StereoscopicVideoInfo": func(r *rand.Rand) Descriptor {
+		d := &StereoscopicVideoInfo{
+			Header:        Header{Tag: TagStereoscopicVideoInfo},
+			BaseVideoFlag: r.IntN(2) == 0,
+		}
+		if d.BaseVideoFlag {
+			d.LeftviewFlag = r.IntN(2) == 0
+		} else {
+			d.UsableAs2D = r.IntN(2) == 0
+			d.HorizontalUpsamplingFactor = uint8(r.IntN(16))
+			d.VerticalUpsamplingFactor = uint8(r.IntN(16))
+		}
+		return d
+	},
+	"TransportProfile": func(r *rand.Rand) Descriptor {
+		return &TransportProfile{
+			Header:      Header{Tag: TagTransportProfile},
+			Profile:     uint8(r.UintN(256)),
+			PrivateData: randBytes(r, int(r.UintN(16))),
+		}
+	},
+	"HEVCVideo": func(r *rand.Rand) Descriptor {
+		d := &HEVCVideo{Header: Header{Tag: TagHEVCVideo},
+			ProfileSpace:                   uint8(r.UintN(4)),
+			ProfileIDC:                     uint8(r.UintN(32)),
+			LevelIDC:                       uint8(r.UintN(256)),
+			HDRWCGIdc:                      uint8(r.UintN(4)),
+			ProfileCompatibilityIndication: r.Uint32(),
+			Copied44Bits:                   r.Uint64() & (1<<44 - 1),
+			TierFlag:                       r.UintN(2) == 1,
+			ProgressiveSourceFlag:          r.UintN(2) == 1,
+			InterlacedSourceFlag:           r.UintN(2) == 1,
+			NonPackedConstraintFlag:        r.UintN(2) == 1,
+			FrameOnlyConstraintFlag:        r.UintN(2) == 1,
+			TemporalLayerSubsetFlag:        r.UintN(2) == 1,
+			HEVCStillPresentFlag:           r.UintN(2) == 1,
+			HEVC24hrPicturePresentFlag:     r.UintN(2) == 1,
+			SubPicHRDParamsNotPresentFlag:  r.UintN(2) == 1,
+		}
+		if d.TemporalLayerSubsetFlag {
+			d.TemporalIDMin = uint8(r.UintN(8))
+			d.TemporalIDMax = uint8(r.UintN(8))
+		}
+		return d
+	},
+	"MPEGExtension": func(r *rand.Rand) Descriptor {
+		return &MPEGExtension{
+			Header:    Header{Tag: TagMPEGExtension},
+			Extension: uint8(r.UintN(256)),
+			Body:      randBytes(r, int(r.UintN(20))),
+		}
 	},
 }
 

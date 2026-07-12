@@ -13,68 +13,108 @@ type Tag uint8
 // Descriptor tags
 // Chapter: 6.1 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 const (
-	TagAAC                        Tag = 0x7c
-	TagAC3                        Tag = 0x6a
-	TagAVCVideo                   Tag = 0x28
-	TagAdaptationFieldData        Tag = 0x70
-	TagAncillaryData              Tag = 0x6b
-	TagAnnouncementSupport        Tag = 0x6e
-	TagBouquetName                Tag = 0x47
-	TagCA                         Tag = 0x9
-	TagCAIdentifier               Tag = 0x53
-	TagCableDeliverySystem        Tag = 0x44
-	TagCellFrequencyLink          Tag = 0x6d
-	TagCellList                   Tag = 0x6c
-	TagComponent                  Tag = 0x50
-	TagContent                    Tag = 0x54
-	TagCountryAvailability        Tag = 0x49
-	TagDSNG                       Tag = 0x68
-	TagDTS                        Tag = 0x7b
-	TagDataBroadcast              Tag = 0x64
-	TagDataBroadcastID            Tag = 0x66
-	TagDataStreamAlignment        Tag = 0x6
-	TagEnhancedAC3                Tag = 0x7a
-	TagExtendedEvent              Tag = 0x4e
-	TagExtension                  Tag = 0x7f
-	TagFTAContentManagement       Tag = 0x7e
-	TagFrequencyList              Tag = 0x62
-	TagISO639LanguageAndAudioType Tag = 0xa
-	TagLinkage                    Tag = 0x4a
-	TagLocalTimeOffset            Tag = 0x58
-	TagMaximumBitrate             Tag = 0xe
-	TagMosaic                     Tag = 0x51
-	TagMultilingualBouquetName    Tag = 0x5c
-	TagMultilingualComponent      Tag = 0x5e
-	TagMultilingualNetworkName    Tag = 0x5b
-	TagMultilingualServiceName    Tag = 0x5d
-	TagNVODReference              Tag = 0x4b
-	TagNetworkName                Tag = 0x40
-	TagPDC                        Tag = 0x69
-	TagParentalRating             Tag = 0x55
-	TagPartialTransportStream     Tag = 0x63
-	TagPrivateDataIndicator       Tag = 0xf
-	TagPrivateDataSpecifier       Tag = 0x5f
-	TagRegistration               Tag = 0x5
-	TagS2SatelliteDeliverySystem  Tag = 0x79
-	TagSatelliteDeliverySystem    Tag = 0x43
-	TagScrambling                 Tag = 0x65
-	TagService                    Tag = 0x48
-	TagServiceAvailability        Tag = 0x72
-	TagServiceList                Tag = 0x41
-	TagServiceMove                Tag = 0x60
-	TagShortEvent                 Tag = 0x4d
-	TagShortSmoothingBuffer       Tag = 0x61
-	TagStreamIdentifier           Tag = 0x52
-	TagStuffing                   Tag = 0x42
-	TagSubtitling                 Tag = 0x59
-	TagTelephone                  Tag = 0x57
-	TagTeletext                   Tag = 0x56
-	TagTerrestrialDeliverySystem  Tag = 0x5a
-	TagTimeShiftedEvent           Tag = 0x4f
-	TagTimeShiftedService         Tag = 0x4c
-	TagTransportStream            Tag = 0x67
-	TagVBIData                    Tag = 0x45
-	TagVBITeletext                Tag = 0x46
+	TagAAC                          Tag = 0x7c
+	TagAC3                          Tag = 0x6a
+	TagAVCTimingAndHRD              Tag = 0x2a
+	TagAVCVideo                     Tag = 0x28
+	TagAdaptationFieldData          Tag = 0x70
+	TagAncillaryData                Tag = 0x6b
+	TagAnnouncementSupport          Tag = 0x6e
+	TagAudioStream                  Tag = 0x3
+	TagAuxiliaryVideoStream         Tag = 0x2f
+	TagBouquetName                  Tag = 0x47
+	TagCA                           Tag = 0x9
+	TagCAIdentifier                 Tag = 0x53
+	TagCableDeliverySystem          Tag = 0x44
+	TagCellFrequencyLink            Tag = 0x6d
+	TagCellList                     Tag = 0x6c
+	TagComponent                    Tag = 0x50
+	TagContent                      Tag = 0x54
+	TagContentLabeling              Tag = 0x24
+	TagCopyright                    Tag = 0xd
+	TagCountryAvailability          Tag = 0x49
+	TagDSNG                         Tag = 0x68
+	TagDTS                          Tag = 0x7b
+	TagDataBroadcast                Tag = 0x64
+	TagDataBroadcastID              Tag = 0x66
+	TagDataStreamAlignment          Tag = 0x6
+	TagEnhancedAC3                  Tag = 0x7a
+	TagExtendedEvent                Tag = 0x4e
+	TagExtension                    Tag = 0x7f
+	TagExternalESID                 Tag = 0x20
+	TagFMC                          Tag = 0x1f
+	TagFTAContentManagement         Tag = 0x7e
+	TagFlexMuxTiming                Tag = 0x2c
+	TagFmxBufferSize                Tag = 0x22
+	TagFrequencyList                Tag = 0x62
+	TagHEVCVideo                    Tag = 0x38
+	TagHierarchy                    Tag = 0x4
+	TagIBP                          Tag = 0x12
+	TagIOD                          Tag = 0x1d
+	TagISO639LanguageAndAudioType   Tag = 0xa
+	TagJ2KVideo                     Tag = 0x32
+	TagLinkage                      Tag = 0x4a
+	TagLocalTimeOffset              Tag = 0x58
+	TagMPEG2AACAudio                Tag = 0x2b
+	TagMPEG2StereoscopicVideoFormat Tag = 0x34
+	TagMPEG4Audio                   Tag = 0x1c
+	TagMPEG4AudioExtension          Tag = 0x2e
+	TagMPEG4Text                    Tag = 0x2d
+	TagMPEG4Video                   Tag = 0x1b
+	TagMPEGExtension                Tag = 0x3f
+	TagMVCExtension                 Tag = 0x31
+	TagMVCOperationPoint            Tag = 0x33
+	TagMaximumBitrate               Tag = 0xe
+	TagMetadata                     Tag = 0x26
+	TagMetadataPointer              Tag = 0x25
+	TagMetadataSTD                  Tag = 0x27
+	TagMosaic                       Tag = 0x51
+	TagMultilingualBouquetName      Tag = 0x5c
+	TagMultilingualComponent        Tag = 0x5e
+	TagMultilingualNetworkName      Tag = 0x5b
+	TagMultilingualServiceName      Tag = 0x5d
+	TagMultiplexBuffer              Tag = 0x23
+	TagMultiplexBufferUtilization   Tag = 0xc
+	TagMuxCode                      Tag = 0x21
+	TagNVODReference                Tag = 0x4b
+	TagNetworkName                  Tag = 0x40
+	TagPDC                          Tag = 0x69
+	TagParentalRating               Tag = 0x55
+	TagPartialTransportStream       Tag = 0x63
+	TagPrivateDataIndicator         Tag = 0xf
+	TagPrivateDataSpecifier         Tag = 0x5f
+	TagRegistration                 Tag = 0x5
+	TagS2SatelliteDeliverySystem    Tag = 0x79
+	TagSL                           Tag = 0x1e
+	TagSTD                          Tag = 0x11
+	TagSVCExtension                 Tag = 0x30
+	TagSatelliteDeliverySystem      Tag = 0x43
+	TagScrambling                   Tag = 0x65
+	TagService                      Tag = 0x48
+	TagServiceAvailability          Tag = 0x72
+	TagServiceList                  Tag = 0x41
+	TagServiceMove                  Tag = 0x60
+	TagShortEvent                   Tag = 0x4d
+	TagShortSmoothingBuffer         Tag = 0x61
+	TagSmoothingBuffer              Tag = 0x10
+	TagStereoscopicProgramInfo      Tag = 0x35
+	TagStereoscopicVideoInfo        Tag = 0x36
+	TagStreamIdentifier             Tag = 0x52
+	TagStuffing                     Tag = 0x42
+	TagSubtitling                   Tag = 0x59
+	TagSystemClock                  Tag = 0xb
+	TagTargetBackgroundGrid         Tag = 0x7
+	TagTelephone                    Tag = 0x57
+	TagTeletext                     Tag = 0x56
+	TagTerrestrialDeliverySystem    Tag = 0x5a
+	TagTimeShiftedEvent             Tag = 0x4f
+	TagTimeShiftedService           Tag = 0x4c
+	TagTransportProfile             Tag = 0x37
+	TagTransportStream              Tag = 0x67
+	TagVBIData                      Tag = 0x45
+	TagVBITeletext                  Tag = 0x46
+	TagVideoStream                  Tag = 0x2
+	TagVideoWindow                  Tag = 0x8
 )
 
 // Parse parses a length-prefixed descriptor list; n is the number of bytes
@@ -338,6 +378,86 @@ func (dh Header) parseDescriptor(i *bytesiter.Iterator, offsetEnd int) (d Descri
 		return newDescriptorTransportStream(i, dh, offsetEnd)
 	case TagVBIData:
 		return newDescriptorVBIData(i, dh, offsetEnd)
+	case TagAVCTimingAndHRD:
+		return newDescriptorAVCTimingAndHRD(i, dh, offsetEnd)
+	case TagAudioStream:
+		return newDescriptorAudioStream(i, dh, offsetEnd)
+	case TagAuxiliaryVideoStream:
+		return newDescriptorAuxiliaryVideoStream(i, dh, offsetEnd)
+	case TagContentLabeling:
+		return newDescriptorContentLabeling(i, dh, offsetEnd)
+	case TagCopyright:
+		return newDescriptorCopyright(i, dh, offsetEnd)
+	case TagExternalESID:
+		return newDescriptorExternalESID(i, dh, offsetEnd)
+	case TagFMC:
+		return newDescriptorFMC(i, dh, offsetEnd)
+	case TagFlexMuxTiming:
+		return newDescriptorFlexMuxTiming(i, dh, offsetEnd)
+	case TagFmxBufferSize:
+		return newDescriptorFmxBufferSize(i, dh, offsetEnd)
+	case TagHEVCVideo:
+		return newDescriptorHEVCVideo(i, dh, offsetEnd)
+	case TagHierarchy:
+		return newDescriptorHierarchy(i, dh, offsetEnd)
+	case TagIBP:
+		return newDescriptorIBP(i, dh, offsetEnd)
+	case TagIOD:
+		return newDescriptorIOD(i, dh, offsetEnd)
+	case TagJ2KVideo:
+		return newDescriptorJ2KVideo(i, dh, offsetEnd)
+	case TagMPEG2AACAudio:
+		return newDescriptorMPEG2AACAudio(i, dh, offsetEnd)
+	case TagMPEG2StereoscopicVideoFormat:
+		return newDescriptorMPEG2StereoscopicVideoFormat(i, dh, offsetEnd)
+	case TagMPEG4Audio:
+		return newDescriptorMPEG4Audio(i, dh, offsetEnd)
+	case TagMPEG4AudioExtension:
+		return newDescriptorMPEG4AudioExtension(i, dh, offsetEnd)
+	case TagMPEG4Text:
+		return newDescriptorMPEG4Text(i, dh, offsetEnd)
+	case TagMPEG4Video:
+		return newDescriptorMPEG4Video(i, dh, offsetEnd)
+	case TagMPEGExtension:
+		return newDescriptorMPEGExtension(i, dh, offsetEnd)
+	case TagMVCExtension:
+		return newDescriptorMVCExtension(i, dh, offsetEnd)
+	case TagMVCOperationPoint:
+		return newDescriptorMVCOperationPoint(i, dh, offsetEnd)
+	case TagMetadata:
+		return newDescriptorMetadata(i, dh, offsetEnd)
+	case TagMetadataPointer:
+		return newDescriptorMetadataPointer(i, dh, offsetEnd)
+	case TagMetadataSTD:
+		return newDescriptorMetadataSTD(i, dh, offsetEnd)
+	case TagMultiplexBuffer:
+		return newDescriptorMultiplexBuffer(i, dh, offsetEnd)
+	case TagMultiplexBufferUtilization:
+		return newDescriptorMultiplexBufferUtilization(i, dh, offsetEnd)
+	case TagMuxCode:
+		return newDescriptorMuxCode(i, dh, offsetEnd)
+	case TagSL:
+		return newDescriptorSL(i, dh, offsetEnd)
+	case TagSTD:
+		return newDescriptorSTD(i, dh, offsetEnd)
+	case TagSVCExtension:
+		return newDescriptorSVCExtension(i, dh, offsetEnd)
+	case TagSmoothingBuffer:
+		return newDescriptorSmoothingBuffer(i, dh, offsetEnd)
+	case TagStereoscopicProgramInfo:
+		return newDescriptorStereoscopicProgramInfo(i, dh, offsetEnd)
+	case TagStereoscopicVideoInfo:
+		return newDescriptorStereoscopicVideoInfo(i, dh, offsetEnd)
+	case TagSystemClock:
+		return newDescriptorSystemClock(i, dh, offsetEnd)
+	case TagTargetBackgroundGrid:
+		return newDescriptorTargetBackgroundGrid(i, dh, offsetEnd)
+	case TagTransportProfile:
+		return newDescriptorTransportProfile(i, dh, offsetEnd)
+	case TagVideoStream:
+		return newDescriptorVideoStream(i, dh, offsetEnd)
+	case TagVideoWindow:
+		return newDescriptorVideoWindow(i, dh, offsetEnd)
 	default:
 		if dh.Tag >= userDefinedTagsStart && dh.Tag != 0xff {
 			return newDescriptorUserDefined(i, dh, offsetEnd)
