@@ -1,4 +1,4 @@
-package descriptor
+package ext
 
 import (
 	"fmt"
@@ -6,11 +6,11 @@ import (
 	"github.com/k-danil/go-astits/v2/internal/bytesiter"
 )
 
-// ExtensionAC4 represents an AC-4 extension descriptor: configuration of an
+// AC4 represents an AC-4 extension descriptor: configuration of an
 // AC-4 audio elementary stream. The channel-mode/dialog fields are present when
 // AC4ConfigFlag and the TOC when AC4TOCFlag.
 // Chapter: D.7 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
-type ExtensionAC4 struct {
+type AC4 struct {
 	TOC                         []byte
 	AdditionalInfo              []byte
 	AC4ChannelMode              uint8
@@ -19,8 +19,8 @@ type ExtensionAC4 struct {
 	AC4DialogEnhancementEnabled bool
 }
 
-func newDescriptorExtensionAC4(i *bytesiter.Iterator, offsetEnd int) (d *ExtensionAC4, err error) {
-	d = &ExtensionAC4{}
+func parseAC4(i *bytesiter.Iterator, offsetEnd int) (d *AC4, err error) {
+	d = &AC4{}
 
 	var b byte
 	if b, err = i.NextByte(); err != nil {
@@ -52,7 +52,7 @@ func newDescriptorExtensionAC4(i *bytesiter.Iterator, offsetEnd int) (d *Extensi
 	return
 }
 
-func (d *ExtensionAC4) CalcLength() (n int) {
+func (d *AC4) CalcLength() (n int) {
 	n = 1
 	if d.AC4ConfigFlag {
 		n++
@@ -63,7 +63,7 @@ func (d *ExtensionAC4) CalcLength() (n int) {
 	return n + len(d.AdditionalInfo)
 }
 
-func (d *ExtensionAC4) Append(dst []byte) []byte {
+func (d *AC4) Append(dst []byte) []byte {
 	var b byte
 	if d.AC4ConfigFlag {
 		b |= 0x80

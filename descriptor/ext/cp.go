@@ -1,4 +1,4 @@
-package descriptor
+package ext
 
 import (
 	"encoding/binary"
@@ -7,17 +7,17 @@ import (
 	"github.com/k-danil/go-astits/v2/internal/bytesiter"
 )
 
-// ExtensionCP represents a content protection (CP) extension descriptor: the CP
+// CP represents a content protection (CP) extension descriptor: the CP
 // system and the PID carrying its program-related information.
 // Chapter: 6.4.2 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
-type ExtensionCP struct {
+type CP struct {
 	PrivateData []byte
 	CPSystemID  uint16
 	CPPID       uint16
 }
 
-func newDescriptorExtensionCP(i *bytesiter.Iterator, offsetEnd int) (d *ExtensionCP, err error) {
-	d = &ExtensionCP{}
+func parseCP(i *bytesiter.Iterator, offsetEnd int) (d *CP, err error) {
+	d = &CP{}
 
 	var bs []byte
 	if bs, err = i.NextBytesNoCopy(4); err != nil || len(bs) < 4 {
@@ -36,11 +36,11 @@ func newDescriptorExtensionCP(i *bytesiter.Iterator, offsetEnd int) (d *Extensio
 	return
 }
 
-func (d *ExtensionCP) CalcLength() int {
+func (d *CP) CalcLength() int {
 	return 4 + len(d.PrivateData)
 }
 
-func (d *ExtensionCP) Append(dst []byte) []byte {
+func (d *CP) Append(dst []byte) []byte {
 	dst = append(dst, byte(d.CPSystemID>>8), byte(d.CPSystemID),
 		0xe0|byte(d.CPPID>>8)&0x1f, byte(d.CPPID))
 	return append(dst, d.PrivateData...)

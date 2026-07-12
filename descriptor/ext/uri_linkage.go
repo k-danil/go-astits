@@ -1,4 +1,4 @@
-package descriptor
+package ext
 
 import (
 	"encoding/binary"
@@ -14,10 +14,10 @@ const (
 	URILinkageTypeMRS       = 0x02
 )
 
-// ExtensionURILinkage represents a URI linkage extension descriptor: a resource
+// URILinkage represents a URI linkage extension descriptor: a resource
 // reachable over IP. MinPollingInterval is present for URILinkageType 0 and 1.
 // Chapter: 6.4.14 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
-type ExtensionURILinkage struct {
+type URILinkage struct {
 	URI                []byte
 	PrivateData        []byte
 	MinPollingInterval uint16
@@ -28,8 +28,8 @@ func uriLinkageHasPollingInterval(uriLinkageType uint8) bool {
 	return uriLinkageType == URILinkageTypeOnlineSDT || uriLinkageType == URILinkageTypeIPTVSDS
 }
 
-func newDescriptorExtensionURILinkage(i *bytesiter.Iterator, offsetEnd int) (d *ExtensionURILinkage, err error) {
-	d = &ExtensionURILinkage{}
+func parseURILinkage(i *bytesiter.Iterator, offsetEnd int) (d *URILinkage, err error) {
+	d = &URILinkage{}
 
 	if d.URILinkageType, err = i.NextByte(); err != nil {
 		err = fmt.Errorf("astits: fetching next byte failed: %w", err)
@@ -55,7 +55,7 @@ func newDescriptorExtensionURILinkage(i *bytesiter.Iterator, offsetEnd int) (d *
 	return
 }
 
-func (d *ExtensionURILinkage) CalcLength() int {
+func (d *URILinkage) CalcLength() int {
 	n := 2 + len(d.URI) + len(d.PrivateData)
 	if uriLinkageHasPollingInterval(d.URILinkageType) {
 		n += 2
@@ -63,7 +63,7 @@ func (d *ExtensionURILinkage) CalcLength() int {
 	return n
 }
 
-func (d *ExtensionURILinkage) Append(dst []byte) []byte {
+func (d *URILinkage) Append(dst []byte) []byte {
 	dst = append(dst, d.URILinkageType, uint8(len(d.URI)))
 	dst = append(dst, d.URI...)
 	if uriLinkageHasPollingInterval(d.URILinkageType) {

@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/k-danil/go-astits/v2/descriptor/ext"
 	"github.com/k-danil/go-astits/v2/internal/bitstest"
 )
 
@@ -298,30 +299,28 @@ var descriptorTestTable = []descriptorTest{
 	{
 		"Extension",
 		func(w *bitstest.Writer) {
-			_ = w.Write(uint8(TagExtension))                   // Tag
-			_ = w.Write(uint8(12))                             // Length
-			_ = w.Write(uint8(TagExtensionSupplementaryAudio)) // Extension tag
-			_ = w.Write("1")                                   // Mix type
-			_ = w.Write("10101")                               // Editorial classification
-			_ = w.Write("1")                                   // Reserved
-			_ = w.Write("1")                                   // Language code flag
-			_ = w.Write([]byte("lan"))                         // Language code
-			_ = w.Write([]byte("private"))                     // Private data
+			_ = w.Write(uint8(TagExtension))              // Tag
+			_ = w.Write(uint8(12))                        // Length
+			_ = w.Write(uint8(ext.TagSupplementaryAudio)) // Extension tag
+			_ = w.Write("1")                              // Mix type
+			_ = w.Write("10101")                          // Editorial classification
+			_ = w.Write("1")                              // Reserved
+			_ = w.Write("1")                              // Language code flag
+			_ = w.Write([]byte("lan"))                    // Language code
+			_ = w.Write([]byte("private"))                // Private data
 		},
 		&Extension{
 			Header: Header{
 				Tag:    TagExtension,
 				Length: 12,
 			},
-			SupplementaryAudio: &ExtensionSupplementaryAudio{
+			Body: &ext.SupplementaryAudio{
 				EditorialClassification: 21,
 				HasLanguageCode:         true,
 				LanguageCode:            [3]byte{0x6c, 0x61, 0x6e}, // lan
 				MixType:                 true,
 				PrivateData:             []byte("private"),
 			},
-			Tag:     TagExtensionSupplementaryAudio,
-			Unknown: nil,
 		}},
 	{
 		"Component",
@@ -587,8 +586,7 @@ var descriptorTestTable = []descriptorTest{
 				Tag:    TagExtension,
 				Length: 5,
 			},
-			Tag:     0x12,
-			Unknown: []byte{'t', 'e', 's', 't'},
+			Body: &ext.Unknown{ExtTag: 0x12, Data: []byte{'t', 'e', 's', 't'}},
 		}},
 }
 

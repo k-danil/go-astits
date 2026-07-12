@@ -1,4 +1,4 @@
-package descriptor
+package ext
 
 import (
 	"fmt"
@@ -12,29 +12,29 @@ const (
 	VideoDepthRangeMultiRegionSEI          = 0x01
 )
 
-// ExtensionVideoDepthRange represents a video depth range extension descriptor:
+// VideoDepthRange represents a video depth range extension descriptor:
 // the intended depth range of plano-stereoscopic 3D video, so receivers can
 // place graphics. For RangeType 0 the two disparity hints apply; for types >= 2
 // the raw RangeSelector bytes apply.
 // Chapter: 6.4.15 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
-type ExtensionVideoDepthRange struct {
-	Ranges []VideoDepthRange
+type VideoDepthRange struct {
+	Ranges []DepthRange
 }
 
-// VideoDepthRange is one depth-range entry. VideoMaxDisparityHint /
+// DepthRange is one depth-range entry. VideoMaxDisparityHint /
 // VideoMinDisparityHint (raw 12-bit signed values) apply for RangeType 0.
-type VideoDepthRange struct {
+type DepthRange struct {
 	RangeSelector         []byte
 	VideoMaxDisparityHint uint16
 	VideoMinDisparityHint uint16
 	RangeType             uint8
 }
 
-func newDescriptorExtensionVideoDepthRange(i *bytesiter.Iterator, offsetEnd int) (d *ExtensionVideoDepthRange, err error) {
-	d = &ExtensionVideoDepthRange{}
+func parseVideoDepthRange(i *bytesiter.Iterator, offsetEnd int) (d *VideoDepthRange, err error) {
+	d = &VideoDepthRange{}
 
 	for i.Offset() < offsetEnd {
-		var rng VideoDepthRange
+		var rng DepthRange
 		var bs []byte
 		if bs, err = i.NextBytesNoCopy(2); err != nil || len(bs) < 2 {
 			err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
@@ -63,7 +63,7 @@ func newDescriptorExtensionVideoDepthRange(i *bytesiter.Iterator, offsetEnd int)
 	return
 }
 
-func (rng *VideoDepthRange) rangeLength() int {
+func (rng *DepthRange) rangeLength() int {
 	switch rng.RangeType {
 	case VideoDepthRangeProductionDisparityHint:
 		return 3
@@ -74,14 +74,14 @@ func (rng *VideoDepthRange) rangeLength() int {
 	}
 }
 
-func (d *ExtensionVideoDepthRange) CalcLength() (n int) {
+func (d *VideoDepthRange) CalcLength() (n int) {
 	for idx := range d.Ranges {
 		n += 2 + d.Ranges[idx].rangeLength()
 	}
 	return
 }
 
-func (d *ExtensionVideoDepthRange) Append(dst []byte) []byte {
+func (d *VideoDepthRange) Append(dst []byte) []byte {
 	for idx := range d.Ranges {
 		rng := &d.Ranges[idx]
 		dst = append(dst, rng.RangeType, uint8(rng.rangeLength()))

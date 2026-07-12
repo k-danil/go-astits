@@ -1,4 +1,4 @@
-package descriptor
+package ext
 
 import (
 	"encoding/binary"
@@ -7,12 +7,12 @@ import (
 	"github.com/k-danil/go-astits/v2/internal/bytesiter"
 )
 
-// ExtensionSHDeliverySystem represents an SH delivery system extension
+// SHDeliverySystem represents an SH delivery system extension
 // descriptor: the DVB-SH physical parameters — a diversity mode plus a loop of
 // modulation elements, each either TDM (ModulationType 0) or OFDM
 // (ModulationType 1) and optionally an interleaver block.
 // Chapter: 6.4.5.2 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
-type ExtensionSHDeliverySystem struct {
+type SHDeliverySystem struct {
 	Modulations   []SHModulation
 	DiversityMode uint8
 }
@@ -50,8 +50,8 @@ type SHModulation struct {
 	NonLateIncrements uint8
 }
 
-func newDescriptorExtensionSHDeliverySystem(i *bytesiter.Iterator, offsetEnd int) (d *ExtensionSHDeliverySystem, err error) {
-	d = &ExtensionSHDeliverySystem{}
+func parseSHDeliverySystem(i *bytesiter.Iterator, offsetEnd int) (d *SHDeliverySystem, err error) {
+	d = &SHDeliverySystem{}
 
 	var b byte
 	if b, err = i.NextByte(); err != nil {
@@ -129,7 +129,7 @@ func (m *SHModulation) length() int {
 	return n
 }
 
-func (d *ExtensionSHDeliverySystem) CalcLength() (n int) {
+func (d *SHDeliverySystem) CalcLength() (n int) {
 	n = 1
 	for idx := range d.Modulations {
 		n += d.Modulations[idx].length()
@@ -137,7 +137,7 @@ func (d *ExtensionSHDeliverySystem) CalcLength() (n int) {
 	return
 }
 
-func (d *ExtensionSHDeliverySystem) Append(dst []byte) []byte {
+func (d *SHDeliverySystem) Append(dst []byte) []byte {
 	dst = append(dst, d.DiversityMode&0x0f<<4|0x0f)
 	for idx := range d.Modulations {
 		m := &d.Modulations[idx]

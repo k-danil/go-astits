@@ -1,4 +1,4 @@
-package descriptor
+package ext
 
 import (
 	"encoding/binary"
@@ -7,18 +7,18 @@ import (
 	"github.com/k-danil/go-astits/v2/internal/bytesiter"
 )
 
-// ExtensionTargetRegionName represents a target region name extension
+// TargetRegionName represents a target region name extension
 // descriptor: the names of target regions within a country, in one language.
 // Chapter: 6.4.12 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
-type ExtensionTargetRegionName struct {
-	Regions     []TargetRegionName
+type TargetRegionName struct {
+	Regions     []NamedRegion
 	CountryCode [3]byte
 	Language    [3]byte
 }
 
-// TargetRegionName is one named region. SecondaryRegionCode is present for
+// NamedRegion is one named region. SecondaryRegionCode is present for
 // RegionDepth >= 2 and TertiaryRegionCode for RegionDepth == 3.
-type TargetRegionName struct {
+type NamedRegion struct {
 	RegionName          []byte
 	TertiaryRegionCode  uint16
 	RegionDepth         uint8
@@ -26,8 +26,8 @@ type TargetRegionName struct {
 	SecondaryRegionCode uint8
 }
 
-func newDescriptorExtensionTargetRegionName(i *bytesiter.Iterator, offsetEnd int) (d *ExtensionTargetRegionName, err error) {
-	d = &ExtensionTargetRegionName{}
+func parseTargetRegionName(i *bytesiter.Iterator, offsetEnd int) (d *TargetRegionName, err error) {
+	d = &TargetRegionName{}
 
 	var bs []byte
 	if bs, err = i.NextBytesNoCopy(6); err != nil || len(bs) < 6 {
@@ -38,7 +38,7 @@ func newDescriptorExtensionTargetRegionName(i *bytesiter.Iterator, offsetEnd int
 	copy(d.Language[:], bs[3:6])
 
 	for i.Offset() < offsetEnd {
-		var reg TargetRegionName
+		var reg NamedRegion
 		var b byte
 		if b, err = i.NextByte(); err != nil {
 			err = fmt.Errorf("astits: fetching next byte failed: %w", err)
@@ -71,7 +71,7 @@ func newDescriptorExtensionTargetRegionName(i *bytesiter.Iterator, offsetEnd int
 	return
 }
 
-func (reg *TargetRegionName) length() int {
+func (reg *NamedRegion) length() int {
 	n := 2 + len(reg.RegionName)
 	if reg.RegionDepth >= 2 {
 		n++
@@ -82,7 +82,7 @@ func (reg *TargetRegionName) length() int {
 	return n
 }
 
-func (d *ExtensionTargetRegionName) CalcLength() (n int) {
+func (d *TargetRegionName) CalcLength() (n int) {
 	n = 6
 	for idx := range d.Regions {
 		n += d.Regions[idx].length()
@@ -90,7 +90,7 @@ func (d *ExtensionTargetRegionName) CalcLength() (n int) {
 	return
 }
 
-func (d *ExtensionTargetRegionName) Append(dst []byte) []byte {
+func (d *TargetRegionName) Append(dst []byte) []byte {
 	dst = append(dst, d.CountryCode[:]...)
 	dst = append(dst, d.Language[:]...)
 	for idx := range d.Regions {

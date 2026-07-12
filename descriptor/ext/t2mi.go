@@ -1,4 +1,4 @@
-package descriptor
+package ext
 
 import (
 	"fmt"
@@ -6,18 +6,18 @@ import (
 	"github.com/k-danil/go-astits/v2/internal/bytesiter"
 )
 
-// ExtensionT2MI represents a T2-MI extension descriptor: identifies a PID
+// T2MI represents a T2-MI extension descriptor: identifies a PID
 // carrying a single T2-MI stream.
 // Chapter: 6.4.13 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
-type ExtensionT2MI struct {
+type T2MI struct {
 	Reserved               []byte
 	T2MIStreamID           uint8
 	NumT2MIStreamsMinusOne uint8
 	PCRISCRCommonClockFlag bool
 }
 
-func newDescriptorExtensionT2MI(i *bytesiter.Iterator, offsetEnd int) (d *ExtensionT2MI, err error) {
-	d = &ExtensionT2MI{}
+func parseT2MI(i *bytesiter.Iterator, offsetEnd int) (d *T2MI, err error) {
+	d = &T2MI{}
 
 	var bs []byte
 	if bs, err = i.NextBytesNoCopy(3); err != nil || len(bs) < 3 {
@@ -35,11 +35,11 @@ func newDescriptorExtensionT2MI(i *bytesiter.Iterator, offsetEnd int) (d *Extens
 	return
 }
 
-func (d *ExtensionT2MI) CalcLength() int {
+func (d *T2MI) CalcLength() int {
 	return 3 + len(d.Reserved)
 }
 
-func (d *ExtensionT2MI) Append(dst []byte) []byte {
+func (d *T2MI) Append(dst []byte) []byte {
 	var pcr byte
 	if d.PCRISCRCommonClockFlag {
 		pcr = 0x01

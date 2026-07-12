@@ -1,4 +1,4 @@
-package descriptor
+package ext
 
 import (
 	"encoding/binary"
@@ -7,10 +7,10 @@ import (
 	"github.com/k-danil/go-astits/v2/internal/bytesiter"
 )
 
-// ExtensionNetworkChangeNotify represents a network change notify extension
+// NetworkChangeNotify represents a network change notify extension
 // descriptor: scheduled network-change events, grouped by cell.
 // Chapter: 6.4.8 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
-type ExtensionNetworkChangeNotify struct {
+type NetworkChangeNotify struct {
 	Cells []NetworkChangeCell
 }
 
@@ -36,8 +36,8 @@ type NetworkChange struct {
 	InvariantTSPresent   bool
 }
 
-func newDescriptorExtensionNetworkChangeNotify(i *bytesiter.Iterator, offsetEnd int) (d *ExtensionNetworkChangeNotify, err error) {
-	d = &ExtensionNetworkChangeNotify{}
+func parseNetworkChangeNotify(i *bytesiter.Iterator, offsetEnd int) (d *NetworkChangeNotify, err error) {
+	d = &NetworkChangeNotify{}
 
 	for i.Offset() < offsetEnd {
 		var cell NetworkChangeCell
@@ -87,7 +87,7 @@ func (c *NetworkChange) length() int {
 	return 12
 }
 
-func (d *ExtensionNetworkChangeNotify) CalcLength() (n int) {
+func (d *NetworkChangeNotify) CalcLength() (n int) {
 	for idx := range d.Cells {
 		n += 3
 		for ci := range d.Cells[idx].Changes {
@@ -118,7 +118,7 @@ func invariantBit(present bool) byte {
 	return 0
 }
 
-func (d *ExtensionNetworkChangeNotify) Append(dst []byte) []byte {
+func (d *NetworkChangeNotify) Append(dst []byte) []byte {
 	for idx := range d.Cells {
 		cell := &d.Cells[idx]
 		var loopLength int

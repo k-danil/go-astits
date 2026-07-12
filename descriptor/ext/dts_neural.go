@@ -1,4 +1,4 @@
-package descriptor
+package ext
 
 import (
 	"fmt"
@@ -6,16 +6,16 @@ import (
 	"github.com/k-danil/go-astits/v2/internal/bytesiter"
 )
 
-// ExtensionDTSNeural represents a DTS Neural extension descriptor: identifies
+// DTSNeural represents a DTS Neural extension descriptor: identifies
 // audio streams processed with DTS Neural Surround, via ConfigID.
 // Chapter: L.1 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
-type ExtensionDTSNeural struct {
+type DTSNeural struct {
 	AdditionalInfo []byte
 	ConfigID       uint8
 }
 
-func newDescriptorExtensionDTSNeural(i *bytesiter.Iterator, offsetEnd int) (d *ExtensionDTSNeural, err error) {
-	d = &ExtensionDTSNeural{}
+func parseDTSNeural(i *bytesiter.Iterator, offsetEnd int) (d *DTSNeural, err error) {
+	d = &DTSNeural{}
 
 	if d.ConfigID, err = i.NextByte(); err != nil {
 		err = fmt.Errorf("astits: fetching next byte failed: %w", err)
@@ -30,11 +30,11 @@ func newDescriptorExtensionDTSNeural(i *bytesiter.Iterator, offsetEnd int) (d *E
 	return
 }
 
-func (d *ExtensionDTSNeural) CalcLength() int {
+func (d *DTSNeural) CalcLength() int {
 	return 1 + len(d.AdditionalInfo)
 }
 
-func (d *ExtensionDTSNeural) Append(dst []byte) []byte {
+func (d *DTSNeural) Append(dst []byte) []byte {
 	dst = append(dst, d.ConfigID)
 	return append(dst, d.AdditionalInfo...)
 }

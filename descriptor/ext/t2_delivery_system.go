@@ -1,4 +1,4 @@
-package descriptor
+package ext
 
 import (
 	"encoding/binary"
@@ -7,11 +7,11 @@ import (
 	"github.com/k-danil/go-astits/v2/internal/bytesiter"
 )
 
-// ExtensionT2DeliverySystem represents a T2 delivery system extension
+// T2DeliverySystem represents a T2 delivery system extension
 // descriptor: the DVB-T2 tuning parameters mapping a transport stream to a data
 // PLP. The block after T2SystemID is present only when HasExtension.
 // Chapter: 6.4.5.3 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
-type ExtensionT2DeliverySystem struct {
+type T2DeliverySystem struct {
 	Cells              []T2Cell
 	T2SystemID         uint16
 	PLPID              uint8
@@ -38,8 +38,8 @@ type T2Subcell struct {
 	TransposerFrequency uint32
 }
 
-func newDescriptorExtensionT2DeliverySystem(i *bytesiter.Iterator, offsetEnd int) (d *ExtensionT2DeliverySystem, err error) {
-	d = &ExtensionT2DeliverySystem{}
+func parseT2DeliverySystem(i *bytesiter.Iterator, offsetEnd int) (d *T2DeliverySystem, err error) {
+	d = &T2DeliverySystem{}
 
 	var bs []byte
 	if bs, err = i.NextBytesNoCopy(3); err != nil || len(bs) < 3 {
@@ -125,7 +125,7 @@ func nextUint32(i *bytesiter.Iterator) (v uint32, err error) {
 	return binary.BigEndian.Uint32(bs), nil
 }
 
-func (d *ExtensionT2DeliverySystem) CalcLength() (n int) {
+func (d *T2DeliverySystem) CalcLength() (n int) {
 	n = 3
 	if !d.HasExtension {
 		return
@@ -144,7 +144,7 @@ func (d *ExtensionT2DeliverySystem) CalcLength() (n int) {
 	return
 }
 
-func (d *ExtensionT2DeliverySystem) Append(dst []byte) []byte {
+func (d *T2DeliverySystem) Append(dst []byte) []byte {
 	dst = append(dst, d.PLPID, byte(d.T2SystemID>>8), byte(d.T2SystemID))
 	if !d.HasExtension {
 		return dst

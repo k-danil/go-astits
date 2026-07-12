@@ -1,4 +1,4 @@
-package descriptor
+package ext
 
 import (
 	"fmt"
@@ -6,15 +6,15 @@ import (
 	"github.com/k-danil/go-astits/v2/internal/bytesiter"
 )
 
-// ExtensionCIAncillaryData represents a CI ancillary data extension descriptor:
+// CIAncillaryData represents a CI ancillary data extension descriptor:
 // ancillary data used to build Content Identifiers in companion-screen apps.
 // Chapter: 6.4.1 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
-type ExtensionCIAncillaryData struct {
+type CIAncillaryData struct {
 	Data []byte
 }
 
-func newDescriptorExtensionCIAncillaryData(i *bytesiter.Iterator, offsetEnd int) (d *ExtensionCIAncillaryData, err error) {
-	d = &ExtensionCIAncillaryData{}
+func parseCIAncillaryData(i *bytesiter.Iterator, offsetEnd int) (d *CIAncillaryData, err error) {
+	d = &CIAncillaryData{}
 	if d.Data, err = i.NextBytes(offsetEnd - i.Offset()); err != nil {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return
@@ -22,10 +22,10 @@ func newDescriptorExtensionCIAncillaryData(i *bytesiter.Iterator, offsetEnd int)
 	return
 }
 
-func (d *ExtensionCIAncillaryData) CalcLength() int {
+func (d *CIAncillaryData) CalcLength() int {
 	return len(d.Data)
 }
 
-func (d *ExtensionCIAncillaryData) Append(dst []byte) []byte {
+func (d *CIAncillaryData) Append(dst []byte) []byte {
 	return append(dst, d.Data...)
 }

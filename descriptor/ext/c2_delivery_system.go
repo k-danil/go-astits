@@ -1,4 +1,4 @@
-package descriptor
+package ext
 
 import (
 	"encoding/binary"
@@ -7,11 +7,11 @@ import (
 	"github.com/k-danil/go-astits/v2/internal/bytesiter"
 )
 
-// ExtensionC2DeliverySystem represents a C2 delivery system extension
+// C2DeliverySystem represents a C2 delivery system extension
 // descriptor: the DVB-C2 tuning parameters mapping a transport stream to a data
 // PLP.
 // Chapter: 6.4.5.1 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
-type ExtensionC2DeliverySystem struct {
+type C2DeliverySystem struct {
 	C2SystemTuningFrequency     uint32
 	PLPID                       uint8
 	DataSliceID                 uint8
@@ -20,8 +20,8 @@ type ExtensionC2DeliverySystem struct {
 	GuardInterval               uint8
 }
 
-func newDescriptorExtensionC2DeliverySystem(i *bytesiter.Iterator, _ int) (d *ExtensionC2DeliverySystem, err error) {
-	d = &ExtensionC2DeliverySystem{}
+func parseC2DeliverySystem(i *bytesiter.Iterator, _ int) (d *C2DeliverySystem, err error) {
+	d = &C2DeliverySystem{}
 
 	var bs []byte
 	if bs, err = i.NextBytesNoCopy(7); err != nil || len(bs) < 7 {
@@ -37,11 +37,11 @@ func newDescriptorExtensionC2DeliverySystem(i *bytesiter.Iterator, _ int) (d *Ex
 	return
 }
 
-func (d *ExtensionC2DeliverySystem) CalcLength() int {
+func (d *C2DeliverySystem) CalcLength() int {
 	return 7
 }
 
-func (d *ExtensionC2DeliverySystem) Append(dst []byte) []byte {
+func (d *C2DeliverySystem) Append(dst []byte) []byte {
 	dst = append(dst, d.PLPID, d.DataSliceID,
 		byte(d.C2SystemTuningFrequency>>24), byte(d.C2SystemTuningFrequency>>16),
 		byte(d.C2SystemTuningFrequency>>8), byte(d.C2SystemTuningFrequency))

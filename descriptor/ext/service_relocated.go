@@ -1,4 +1,4 @@
-package descriptor
+package ext
 
 import (
 	"encoding/binary"
@@ -7,18 +7,18 @@ import (
 	"github.com/k-danil/go-astits/v2/internal/bytesiter"
 )
 
-// ExtensionServiceRelocated represents a service relocated extension
+// ServiceRelocated represents a service relocated extension
 // descriptor: the previous identifiers of a service that has moved, so an IRD
 // can track it to its new location.
 // Chapter: 6.4.9 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
-type ExtensionServiceRelocated struct {
+type ServiceRelocated struct {
 	OldOriginalNetworkID uint16
 	OldTransportStreamID uint16
 	OldServiceID         uint16
 }
 
-func newDescriptorExtensionServiceRelocated(i *bytesiter.Iterator, _ int) (d *ExtensionServiceRelocated, err error) {
-	d = &ExtensionServiceRelocated{}
+func parseServiceRelocated(i *bytesiter.Iterator, _ int) (d *ServiceRelocated, err error) {
+	d = &ServiceRelocated{}
 
 	var bs []byte
 	if bs, err = i.NextBytesNoCopy(6); err != nil || len(bs) < 6 {
@@ -31,11 +31,11 @@ func newDescriptorExtensionServiceRelocated(i *bytesiter.Iterator, _ int) (d *Ex
 	return
 }
 
-func (d *ExtensionServiceRelocated) CalcLength() int {
+func (d *ServiceRelocated) CalcLength() int {
 	return 6
 }
 
-func (d *ExtensionServiceRelocated) Append(dst []byte) []byte {
+func (d *ServiceRelocated) Append(dst []byte) []byte {
 	return append(dst,
 		byte(d.OldOriginalNetworkID>>8), byte(d.OldOriginalNetworkID),
 		byte(d.OldTransportStreamID>>8), byte(d.OldTransportStreamID),

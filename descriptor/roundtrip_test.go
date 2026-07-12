@@ -7,6 +7,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/k-danil/go-astits/v2/descriptor/ext"
 )
 
 func randBytes(r *rand.Rand, n int) []byte {
@@ -119,17 +121,16 @@ var roundtripGenerators = map[string]func(r *rand.Rand) Descriptor{
 		}
 		return d
 	},
-	"ExtensionSupplementaryAudio": func(r *rand.Rand) Descriptor {
-		d := &Extension{Header: Header{Tag: TagExtension}, Tag: TagExtensionSupplementaryAudio,
-			SupplementaryAudio: &ExtensionSupplementaryAudio{
-				MixType:                 r.UintN(2) == 1,
-				EditorialClassification: uint8(r.UintN(32)),
-				HasLanguageCode:         r.UintN(2) == 1,
-				PrivateData:             randBytes(r, int(r.UintN(8)))}}
-		if d.SupplementaryAudio.HasLanguageCode {
-			d.SupplementaryAudio.LanguageCode = randLang(r)
+	"ext.SupplementaryAudio": func(r *rand.Rand) Descriptor {
+		sa := &ext.SupplementaryAudio{
+			MixType:                 r.UintN(2) == 1,
+			EditorialClassification: uint8(r.UintN(32)),
+			HasLanguageCode:         r.UintN(2) == 1,
+			PrivateData:             randBytes(r, int(r.UintN(8)))}
+		if sa.HasLanguageCode {
+			sa.LanguageCode = randLang(r)
 		}
-		return d
+		return &Extension{Header: Header{Tag: TagExtension}, Body: sa}
 	},
 	"ISO639": func(r *rand.Rand) Descriptor {
 		d := &ISO639LanguageAndAudioType{Header: Header{Tag: TagISO639LanguageAndAudioType}}
@@ -441,44 +442,41 @@ var roundtripGenerators = map[string]func(r *rand.Rand) Descriptor{
 			OperatorCode: randBytes(r, int(r.UintN(4))), NationalAreaCode: randBytes(r, int(r.UintN(8))),
 			CoreNumber: randBytes(r, int(r.UintN(16)))}
 	},
-	"ExtensionCIAncillaryData": func(r *rand.Rand) Descriptor {
-		return &Extension{Header: Header{Tag: TagExtension}, Tag: TagExtensionCIAncillaryData,
-			CIAncillaryData: &ExtensionCIAncillaryData{Data: randBytes(r, int(r.UintN(16)))}}
+	"ext.CIAncillaryData": func(r *rand.Rand) Descriptor {
+		return &Extension{Header: Header{Tag: TagExtension}, Body: &ext.CIAncillaryData{Data: randBytes(r, int(r.UintN(16)))}}
 	},
-	"ExtensionCP": func(r *rand.Rand) Descriptor {
-		return &Extension{Header: Header{Tag: TagExtension}, Tag: TagExtensionCP,
-			CP: &ExtensionCP{CPSystemID: uint16(r.UintN(1 << 16)), CPPID: uint16(r.UintN(1 << 13)),
-				PrivateData: randBytes(r, int(r.UintN(8)))}}
+	"ext.CP": func(r *rand.Rand) Descriptor {
+		return &Extension{Header: Header{Tag: TagExtension}, Body: &ext.CP{CPSystemID: uint16(r.UintN(1 << 16)), CPPID: uint16(r.UintN(1 << 13)),
+			PrivateData: randBytes(r, int(r.UintN(8)))}}
 	},
-	"ExtensionCPIdentifier": func(r *rand.Rand) Descriptor {
-		e := &ExtensionCPIdentifier{}
+	"ext.CPIdentifier": func(r *rand.Rand) Descriptor {
+		e := &ext.CPIdentifier{}
 		for i := uint(0); i < 1+r.UintN(4); i++ {
 			e.SystemIDs = append(e.SystemIDs, uint16(r.UintN(1<<16)))
 		}
-		return &Extension{Header: Header{Tag: TagExtension}, Tag: TagExtensionCPIdentifier, CPIdentifier: e}
+		return &Extension{Header: Header{Tag: TagExtension}, Body: e}
 	},
-	"ExtensionC2DeliverySystem": func(r *rand.Rand) Descriptor {
-		return &Extension{Header: Header{Tag: TagExtension}, Tag: TagExtensionC2DeliverySystem,
-			C2DeliverySystem: &ExtensionC2DeliverySystem{
-				PLPID: uint8(r.UintN(256)), DataSliceID: uint8(r.UintN(256)),
-				C2SystemTuningFrequency: r.Uint32(), C2SystemTuningFrequencyType: uint8(r.UintN(4)),
-				ActiveOFDMSymbolDuration: uint8(r.UintN(8)), GuardInterval: uint8(r.UintN(8))}}
+	"ext.C2DeliverySystem": func(r *rand.Rand) Descriptor {
+		return &Extension{Header: Header{Tag: TagExtension}, Body: &ext.C2DeliverySystem{
+			PLPID: uint8(r.UintN(256)), DataSliceID: uint8(r.UintN(256)),
+			C2SystemTuningFrequency: r.Uint32(), C2SystemTuningFrequencyType: uint8(r.UintN(4)),
+			ActiveOFDMSymbolDuration: uint8(r.UintN(8)), GuardInterval: uint8(r.UintN(8))}}
 	},
-	"ExtensionC2BundleDeliverySystem": func(r *rand.Rand) Descriptor {
-		e := &ExtensionC2BundleDeliverySystem{}
+	"ext.C2BundleDeliverySystem": func(r *rand.Rand) Descriptor {
+		e := &ext.C2BundleDeliverySystem{}
 		for i := uint(0); i < 1+r.UintN(3); i++ {
-			e.Entries = append(e.Entries, C2BundleEntry{
+			e.Entries = append(e.Entries, ext.C2BundleEntry{
 				PLPID: uint8(r.UintN(256)), DataSliceID: uint8(r.UintN(256)),
 				C2SystemTuningFrequency: r.Uint32(), C2SystemTuningFrequencyType: uint8(r.UintN(4)),
 				ActiveOFDMSymbolDuration: uint8(r.UintN(8)), GuardInterval: uint8(r.UintN(8)),
 				MasterChannel: r.UintN(2) == 1})
 		}
-		return &Extension{Header: Header{Tag: TagExtension}, Tag: TagExtensionC2BundleDeliverySystem, C2BundleDeliverySystem: e}
+		return &Extension{Header: Header{Tag: TagExtension}, Body: e}
 	},
-	"ExtensionSHDeliverySystem": func(r *rand.Rand) Descriptor {
-		sh := &ExtensionSHDeliverySystem{DiversityMode: uint8(r.UintN(16))}
+	"ext.SHDeliverySystem": func(r *rand.Rand) Descriptor {
+		sh := &ext.SHDeliverySystem{DiversityMode: uint8(r.UintN(16))}
 		for i := uint(0); i < 1+r.UintN(3); i++ {
-			sh.Modulations = append(sh.Modulations, SHModulation{
+			sh.Modulations = append(sh.Modulations, ext.SHModulation{
 				ModulationType: uint8(r.UintN(2)), InterleaverPresence: r.UintN(2) == 1, InterleaverType: r.UintN(2) == 1,
 				Polarization: uint8(r.UintN(4)), RollOff: uint8(r.UintN(4)), ModulationMode: uint8(r.UintN(4)),
 				SymbolRate: uint8(r.UintN(32)), Bandwidth: uint8(r.UintN(8)), Priority: r.UintN(2) == 1,
@@ -487,20 +485,18 @@ var roundtripGenerators = map[string]func(r *rand.Rand) Descriptor{
 				CommonMultiplier: uint8(r.UintN(64)), NofLateTaps: uint8(r.UintN(64)), NofSlices: uint8(r.UintN(64)),
 				SliceDistance: uint8(r.UintN(256)), NonLateIncrements: uint8(r.UintN(64))})
 		}
-		return &Extension{Header: Header{Tag: TagExtension}, Tag: TagExtensionSHDeliverySystem, SHDeliverySystem: sh}
+		return &Extension{Header: Header{Tag: TagExtension}, Body: sh}
 	},
-	"ExtensionMessage": func(r *rand.Rand) Descriptor {
-		return &Extension{Header: Header{Tag: TagExtension}, Tag: TagExtensionMessage,
-			Message: &ExtensionMessage{MessageID: uint8(r.UintN(256)), Language: randLang(r),
-				Text: randBytes(r, int(r.UintN(20)))}}
+	"ext.Message": func(r *rand.Rand) Descriptor {
+		return &Extension{Header: Header{Tag: TagExtension}, Body: &ext.Message{MessageID: uint8(r.UintN(256)), Language: randLang(r),
+			Text: randBytes(r, int(r.UintN(20)))}}
 	},
-	"ExtensionServiceRelocated": func(r *rand.Rand) Descriptor {
-		return &Extension{Header: Header{Tag: TagExtension}, Tag: TagExtensionServiceRelocated,
-			ServiceRelocated: &ExtensionServiceRelocated{OldOriginalNetworkID: uint16(r.UintN(1 << 16)),
-				OldTransportStreamID: uint16(r.UintN(1 << 16)), OldServiceID: uint16(r.UintN(1 << 16))}}
+	"ext.ServiceRelocated": func(r *rand.Rand) Descriptor {
+		return &Extension{Header: Header{Tag: TagExtension}, Body: &ext.ServiceRelocated{OldOriginalNetworkID: uint16(r.UintN(1 << 16)),
+			OldTransportStreamID: uint16(r.UintN(1 << 16)), OldServiceID: uint16(r.UintN(1 << 16))}}
 	},
-	"ExtensionT2DeliverySystem": func(r *rand.Rand) Descriptor {
-		t2 := &ExtensionT2DeliverySystem{PLPID: uint8(r.UintN(256)), T2SystemID: uint16(r.UintN(1 << 16)),
+	"ext.T2DeliverySystem": func(r *rand.Rand) Descriptor {
+		t2 := &ext.T2DeliverySystem{PLPID: uint8(r.UintN(256)), T2SystemID: uint16(r.UintN(1 << 16)),
 			HasExtension: r.UintN(2) == 1}
 		if t2.HasExtension {
 			t2.SISOMISO = uint8(r.UintN(4))
@@ -510,7 +506,7 @@ var roundtripGenerators = map[string]func(r *rand.Rand) Descriptor{
 			t2.OtherFrequencyFlag = r.UintN(2) == 1
 			t2.TFSFlag = r.UintN(2) == 1
 			for i := uint(0); i < 1+r.UintN(3); i++ {
-				cell := T2Cell{CellID: uint16(r.UintN(1 << 16))}
+				cell := ext.T2Cell{CellID: uint16(r.UintN(1 << 16))}
 				freqs := uint(1)
 				if t2.TFSFlag {
 					freqs = 1 + r.UintN(3)
@@ -519,16 +515,16 @@ var roundtripGenerators = map[string]func(r *rand.Rand) Descriptor{
 					cell.CentreFrequencies = append(cell.CentreFrequencies, r.Uint32())
 				}
 				for j := uint(0); j < r.UintN(3); j++ {
-					cell.Subcells = append(cell.Subcells, T2Subcell{
+					cell.Subcells = append(cell.Subcells, ext.T2Subcell{
 						CellIDExtension: uint8(r.UintN(256)), TransposerFrequency: r.Uint32()})
 				}
 				t2.Cells = append(t2.Cells, cell)
 			}
 		}
-		return &Extension{Header: Header{Tag: TagExtension}, Tag: TagExtensionT2DeliverySystem, T2DeliverySystem: t2}
+		return &Extension{Header: Header{Tag: TagExtension}, Body: t2}
 	},
-	"ExtensionImageIcon": func(r *rand.Rand) Descriptor {
-		ii := &ExtensionImageIcon{LastDescriptorNumber: uint8(r.UintN(16)), IconID: uint8(r.UintN(8))}
+	"ext.ImageIcon": func(r *rand.Rand) Descriptor {
+		ii := &ext.ImageIcon{LastDescriptorNumber: uint8(r.UintN(16)), IconID: uint8(r.UintN(8))}
 		if r.UintN(2) == 1 {
 			ii.DescriptorNumber = uint8(1 + r.UintN(15))
 			ii.IconData = randBytes(r, int(r.UintN(20)))
@@ -541,45 +537,44 @@ var roundtripGenerators = map[string]func(r *rand.Rand) Descriptor{
 			ii.IconType = randBytes(r, int(r.UintN(8)))
 			ii.IconData = randBytes(r, int(r.UintN(20)))
 		}
-		return &Extension{Header: Header{Tag: TagExtension}, Tag: TagExtensionImageIcon, ImageIcon: ii}
+		return &Extension{Header: Header{Tag: TagExtension}, Body: ii}
 	},
-	"ExtensionTargetRegion": func(r *rand.Rand) Descriptor {
-		tr := &ExtensionTargetRegion{CountryCode: randLang(r)}
+	"ext.TargetRegion": func(r *rand.Rand) Descriptor {
+		tr := &ext.TargetRegion{CountryCode: randLang(r)}
 		for i := uint(0); i < 1+r.UintN(3); i++ {
-			tr.Regions = append(tr.Regions, TargetRegion{
+			tr.Regions = append(tr.Regions, ext.Region{
 				CountryCodeFlag: r.UintN(2) == 1, CountryCode: randLang(r), RegionDepth: uint8(r.UintN(4)),
 				PrimaryRegionCode: uint8(r.UintN(256)), SecondaryRegionCode: uint8(r.UintN(256)),
 				TertiaryRegionCode: uint16(r.UintN(1 << 16))})
 		}
-		return &Extension{Header: Header{Tag: TagExtension}, Tag: TagExtensionTargetRegion, TargetRegion: tr}
+		return &Extension{Header: Header{Tag: TagExtension}, Body: tr}
 	},
-	"ExtensionTargetRegionName": func(r *rand.Rand) Descriptor {
-		tr := &ExtensionTargetRegionName{CountryCode: randLang(r), Language: randLang(r)}
+	"ext.TargetRegionName": func(r *rand.Rand) Descriptor {
+		tr := &ext.TargetRegionName{CountryCode: randLang(r), Language: randLang(r)}
 		for i := uint(0); i < 1+r.UintN(3); i++ {
-			tr.Regions = append(tr.Regions, TargetRegionName{
+			tr.Regions = append(tr.Regions, ext.NamedRegion{
 				RegionDepth: uint8(1 + r.UintN(3)), RegionName: randBytes(r, int(r.UintN(16))),
 				PrimaryRegionCode: uint8(r.UintN(256)), SecondaryRegionCode: uint8(r.UintN(256)),
 				TertiaryRegionCode: uint16(r.UintN(1 << 16))})
 		}
-		return &Extension{Header: Header{Tag: TagExtension}, Tag: TagExtensionTargetRegionName, TargetRegionName: tr}
+		return &Extension{Header: Header{Tag: TagExtension}, Body: tr}
 	},
-	"ExtensionT2MI": func(r *rand.Rand) Descriptor {
-		return &Extension{Header: Header{Tag: TagExtension}, Tag: TagExtensionT2MI,
-			T2MI: &ExtensionT2MI{T2MIStreamID: uint8(r.UintN(8)), NumT2MIStreamsMinusOne: uint8(r.UintN(8)),
-				PCRISCRCommonClockFlag: r.UintN(2) == 1, Reserved: randBytes(r, int(r.UintN(4)))}}
+	"ext.T2MI": func(r *rand.Rand) Descriptor {
+		return &Extension{Header: Header{Tag: TagExtension}, Body: &ext.T2MI{T2MIStreamID: uint8(r.UintN(8)), NumT2MIStreamsMinusOne: uint8(r.UintN(8)),
+			PCRISCRCommonClockFlag: r.UintN(2) == 1, Reserved: randBytes(r, int(r.UintN(4)))}}
 	},
-	"ExtensionURILinkage": func(r *rand.Rand) Descriptor {
-		ul := &ExtensionURILinkage{URILinkageType: uint8(r.UintN(4)), URI: randBytes(r, int(r.UintN(16))),
+	"ext.URILinkage": func(r *rand.Rand) Descriptor {
+		ul := &ext.URILinkage{URILinkageType: uint8(r.UintN(4)), URI: randBytes(r, int(r.UintN(16))),
 			PrivateData: randBytes(r, int(r.UintN(8)))}
 		if ul.URILinkageType == 0 || ul.URILinkageType == 1 {
 			ul.MinPollingInterval = uint16(r.UintN(1 << 16))
 		}
-		return &Extension{Header: Header{Tag: TagExtension}, Tag: TagExtensionURILinkage, URILinkage: ul}
+		return &Extension{Header: Header{Tag: TagExtension}, Body: ul}
 	},
-	"ExtensionVideoDepthRange": func(r *rand.Rand) Descriptor {
-		vd := &ExtensionVideoDepthRange{}
+	"ext.VideoDepthRange": func(r *rand.Rand) Descriptor {
+		vd := &ext.VideoDepthRange{}
 		for i := uint(0); i < 1+r.UintN(3); i++ {
-			rng := VideoDepthRange{RangeType: uint8(r.UintN(4))}
+			rng := ext.DepthRange{RangeType: uint8(r.UintN(4))}
 			switch rng.RangeType {
 			case 0:
 				rng.VideoMaxDisparityHint = uint16(r.UintN(1 << 12))
@@ -590,14 +585,13 @@ var roundtripGenerators = map[string]func(r *rand.Rand) Descriptor{
 			}
 			vd.Ranges = append(vd.Ranges, rng)
 		}
-		return &Extension{Header: Header{Tag: TagExtension}, Tag: TagExtensionVideoDepthRange, VideoDepthRange: vd}
+		return &Extension{Header: Header{Tag: TagExtension}, Body: vd}
 	},
-	"ExtensionDTSNeural": func(r *rand.Rand) Descriptor {
-		return &Extension{Header: Header{Tag: TagExtension}, Tag: TagExtensionDTSNeural,
-			DTSNeural: &ExtensionDTSNeural{ConfigID: uint8(r.UintN(256)), AdditionalInfo: randBytes(r, int(r.UintN(8)))}}
+	"ext.DTSNeural": func(r *rand.Rand) Descriptor {
+		return &Extension{Header: Header{Tag: TagExtension}, Body: &ext.DTSNeural{ConfigID: uint8(r.UintN(256)), AdditionalInfo: randBytes(r, int(r.UintN(8)))}}
 	},
-	"ExtensionAC4": func(r *rand.Rand) Descriptor {
-		ac4 := &ExtensionAC4{AC4ConfigFlag: r.UintN(2) == 1, AC4TOCFlag: r.UintN(2) == 1,
+	"ext.AC4": func(r *rand.Rand) Descriptor {
+		ac4 := &ext.AC4{AC4ConfigFlag: r.UintN(2) == 1, AC4TOCFlag: r.UintN(2) == 1,
 			AdditionalInfo: randBytes(r, int(r.UintN(4)))}
 		if ac4.AC4ConfigFlag {
 			ac4.AC4DialogEnhancementEnabled = r.UintN(2) == 1
@@ -606,17 +600,17 @@ var roundtripGenerators = map[string]func(r *rand.Rand) Descriptor{
 		if ac4.AC4TOCFlag {
 			ac4.TOC = randBytes(r, int(r.UintN(16)))
 		}
-		return &Extension{Header: Header{Tag: TagExtension}, Tag: TagExtensionAC4, AC4: ac4}
+		return &Extension{Header: Header{Tag: TagExtension}, Body: ac4}
 	},
-	"ExtensionDTSHD": func(r *rand.Rand) Descriptor {
-		mkSub := func() *DTSHDSubstream {
+	"ext.DTSHD": func(r *rand.Rand) Descriptor {
+		mkSub := func() *ext.DTSHDSubstream {
 			if r.UintN(2) == 0 {
 				return nil
 			}
-			s := &DTSHDSubstream{ChannelCount: uint8(r.UintN(32)), SamplingFrequency: uint8(r.UintN(16)),
+			s := &ext.DTSHDSubstream{ChannelCount: uint8(r.UintN(32)), SamplingFrequency: uint8(r.UintN(16)),
 				LFEFlag: r.UintN(2) == 1, SampleResolution: r.UintN(2) == 1}
 			for i := uint(0); i < 1+r.UintN(4); i++ {
-				a := DTSHDAsset{AssetConstruction: uint8(r.UintN(32)), BitRate: uint16(r.UintN(1 << 13)),
+				a := ext.DTSHDAsset{AssetConstruction: uint8(r.UintN(32)), BitRate: uint16(r.UintN(1 << 13)),
 					VBRFlag: r.UintN(2) == 1, PostEncodeBRScalingFlag: r.UintN(2) == 1,
 					ComponentTypeFlag: r.UintN(2) == 1, LanguageCodeFlag: r.UintN(2) == 1,
 					ComponentType: uint8(r.UintN(256)), Language: randLang(r)}
@@ -624,16 +618,15 @@ var roundtripGenerators = map[string]func(r *rand.Rand) Descriptor{
 			}
 			return s
 		}
-		return &Extension{Header: Header{Tag: TagExtension}, Tag: TagExtensionDTSHD,
-			DTSHD: &ExtensionDTSHD{CoreSubstream: mkSub(), Substream0: mkSub(), Substream1: mkSub(),
-				Substream2: mkSub(), Substream3: mkSub(), AdditionalInfo: randBytes(r, int(r.UintN(4)))}}
+		return &Extension{Header: Header{Tag: TagExtension}, Body: &ext.DTSHD{CoreSubstream: mkSub(), Substream0: mkSub(), Substream1: mkSub(),
+			Substream2: mkSub(), Substream3: mkSub(), AdditionalInfo: randBytes(r, int(r.UintN(4)))}}
 	},
-	"ExtensionNetworkChangeNotify": func(r *rand.Rand) Descriptor {
-		ncn := &ExtensionNetworkChangeNotify{}
+	"ext.NetworkChangeNotify": func(r *rand.Rand) Descriptor {
+		ncn := &ext.NetworkChangeNotify{}
 		for i := uint(0); i < 1+r.UintN(2); i++ {
-			cell := NetworkChangeCell{CellID: uint16(r.UintN(1 << 16))}
+			cell := ext.NetworkChangeCell{CellID: uint16(r.UintN(1 << 16))}
 			for j := uint(0); j < 1+r.UintN(2); j++ {
-				cell.Changes = append(cell.Changes, NetworkChange{
+				cell.Changes = append(cell.Changes, ext.NetworkChange{
 					NetworkChangeID: uint8(r.UintN(256)), NetworkChangeVersion: uint8(r.UintN(256)),
 					StartTimeOfChange: r.Uint64N(1 << 40), ChangeDuration: uint32(r.UintN(1 << 24)),
 					ReceiverCategory: uint8(r.UintN(8)), InvariantTSPresent: r.UintN(2) == 1,
@@ -642,7 +635,7 @@ var roundtripGenerators = map[string]func(r *rand.Rand) Descriptor{
 			}
 			ncn.Cells = append(ncn.Cells, cell)
 		}
-		return &Extension{Header: Header{Tag: TagExtension}, Tag: TagExtensionNetworkChangeNotify, NetworkChangeNotify: ncn}
+		return &Extension{Header: Header{Tag: TagExtension}, Body: ncn}
 	},
 	"DTS": func(r *rand.Rand) Descriptor {
 		return &DTS{Header: Header{Tag: TagDTS},

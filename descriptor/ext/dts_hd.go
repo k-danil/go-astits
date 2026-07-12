@@ -1,4 +1,4 @@
-package descriptor
+package ext
 
 import (
 	"fmt"
@@ -6,11 +6,11 @@ import (
 	"github.com/k-danil/go-astits/v2/internal/bytesiter"
 )
 
-// ExtensionDTSHD represents a DTS-HD audio stream extension descriptor: the
+// DTSHD represents a DTS-HD audio stream extension descriptor: the
 // core and up to four extension substreams present, each described by a
 // DTSHDSubstream. A nil substream pointer means that substream is absent.
 // Chapter: G.3 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
-type ExtensionDTSHD struct {
+type DTSHD struct {
 	AdditionalInfo []byte
 	CoreSubstream  *DTSHDSubstream
 	Substream0     *DTSHDSubstream
@@ -42,8 +42,8 @@ type DTSHDAsset struct {
 	LanguageCodeFlag        bool
 }
 
-func newDescriptorExtensionDTSHD(i *bytesiter.Iterator, offsetEnd int) (d *ExtensionDTSHD, err error) {
-	d = &ExtensionDTSHD{}
+func parseDTSHD(i *bytesiter.Iterator, offsetEnd int) (d *DTSHD, err error) {
+	d = &DTSHD{}
 
 	var b byte
 	if b, err = i.NextByte(); err != nil {
@@ -150,7 +150,7 @@ func (s *DTSHDSubstream) bodyLength() (n int) {
 	return
 }
 
-func (d *ExtensionDTSHD) CalcLength() (n int) {
+func (d *DTSHD) CalcLength() (n int) {
 	n = 1
 	for _, s := range []*DTSHDSubstream{d.CoreSubstream, d.Substream0, d.Substream1, d.Substream2, d.Substream3} {
 		if s != nil {
@@ -160,7 +160,7 @@ func (d *ExtensionDTSHD) CalcLength() (n int) {
 	return n + len(d.AdditionalInfo)
 }
 
-func (d *ExtensionDTSHD) Append(dst []byte) []byte {
+func (d *DTSHD) Append(dst []byte) []byte {
 	var b byte
 	for _, s := range []struct {
 		bit byte
