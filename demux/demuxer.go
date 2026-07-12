@@ -33,6 +33,10 @@ const (
 	EventSIT
 	EventST
 	EventTSDT
+	// EventError: a recoverable parse error was skipped; Next returns it in err
+	// (a *ts.RecoverableError) and iteration continues on the following call.
+	// Emitted only under WithRecoverableErrors.
+	EventError
 )
 
 // Demuxer represents a demuxer
@@ -54,6 +58,7 @@ type Demuxer struct {
 	optSyncLock      bool
 	optDVBTables     bool
 	optPSIRepeats    bool
+	optRecoverable   bool
 	optPacketHook    func(*ts.Packet)
 
 	packetBuffer *ts.PacketBuffer
@@ -62,23 +67,28 @@ type Demuxer struct {
 	psiPrev      pidmap.Map[psiCache]
 
 	// Result of the last Next
-	pat      *psi.PAT
-	pmt      *psi.PMT
-	cur      tableEvent // section + changed flag behind the last table event
-	tblQueue []tableEvent
-	pending  *PES
-	claimed  bool
+	pat         *psi.PAT
+	pmt         *psi.PMT
+	cur         tableEvent // section + changed flag behind the last table event
+	tblQueue    []tableEvent
+	pendingErrs []*ts.RecoverableError
+	// pendingFatal holds a fatal read error until the recoverable errors queued
+	// during that same read are flushed, so a lossy tail is not lost to the fatal.
+	pendingFatal error
+	pending      *PES
+	claimed      bool
 
 	pkt ts.Packet
 
 	// Inline storage, each paired with a field above to keep the common small
 	// case off the heap.
-	tblArr     [8]tableEvent // tblQueue
-	unitsArr   [2]unit       // acc.add result
-	pmKeysArr  [4]uint16     // programMap keys
-	pmValsArr  [4]uint16     // programMap vals
-	psiKeysArr [8]uint16     // psiPrev keys
-	psiValsArr [8]psiCache   // psiPrev vals
+	tblArr     [8]tableEvent           // tblQueue
+	errArr     [4]*ts.RecoverableError // pendingErrs
+	unitsArr   [2]unit                 // acc.add result
+	pmKeysArr  [4]uint16               // programMap keys
+	pmValsArr  [4]uint16               // programMap vals
+	psiKeysArr [8]uint16               // psiPrev keys
+	psiValsArr [8]psiCache             // psiPrev vals
 }
 
 // New creates a new transport stream demuxer based on a reader
@@ -91,6 +101,7 @@ func New(ctx context.Context, r io.Reader, opts ...func(*Demuxer)) (d *Demuxer) 
 	d.programMap = pidmap.Map[uint16]{Keys: d.pmKeysArr[:0], Vals: d.pmValsArr[:0]}
 	d.psiPrev = pidmap.Map[psiCache]{Keys: d.psiKeysArr[:0], Vals: d.psiValsArr[:0]}
 	d.tblQueue = d.tblArr[:0]
+	d.pendingErrs = d.errArr[:0]
 
 	for _, opt := range opts {
 		opt(d)
@@ -200,8 +211,28 @@ func WithPacketHook(fn func(*ts.Packet)) func(*Demuxer) {
 	}
 }
 
+// WithRecoverableErrors surfaces non-fatal parse failures the demuxer would
+// otherwise skip silently: a PSI CRC32 mismatch, a torn PSI section, a bad PES
+// unit, a lost sync byte or a dropped corrupt packet. Next then returns
+// EventError with a *ts.RecoverableError in err and continues on the following
+// call; Events yields it without ending the sequence. Off by default — the
+// silent fast path is unchanged.
+func WithRecoverableErrors() func(*Demuxer) {
+	return func(d *Demuxer) {
+		d.optRecoverable = true
+	}
+}
+
+func (dmx *Demuxer) reportRecoverable(e ts.RecoverableError) {
+	dmx.pendingErrs = append(dmx.pendingErrs, &e)
+}
+
 func (dmx *Demuxer) nextPacket(p *ts.Packet) (err error) {
 	if dmx.packetBuffer == nil {
+		var onRecover func(ts.RecoverableError)
+		if dmx.optRecoverable {
+			onRecover = dmx.reportRecoverable
+		}
 		if dmx.packetBuffer, err = ts.NewPacketBuffer(dmx.r, ts.PacketBufferConfig{
 			PacketSize:    dmx.optPacketSize,
 			SkipErrLimit:  dmx.optSkipErrLimit,
@@ -209,6 +240,7 @@ func (dmx *Demuxer) nextPacket(p *ts.Packet) (err error) {
 			ZeroCopyBatch: dmx.optZeroCopyBatch,
 			SyncLock:      dmx.optSyncLock,
 			ResyncLimit:   dmx.optResyncLimit,
+			OnRecover:     onRecover,
 		}); err != nil {
 			err = fmt.Errorf("astits: creating packet buffer failed: %w", err)
 			return
@@ -283,7 +315,23 @@ func (dmx *Demuxer) Next() (ev Event, err error) {
 	}
 
 	for {
-		// Queued table emissions first
+		// Recoverable errors reported by the packet buffer or unit parsing come
+		// out first, one per call; EventError carries them in err.
+		if len(dmx.pendingErrs) > 0 {
+			e := dmx.pendingErrs[0]
+			dmx.pendingErrs = dmx.pendingErrs[1:]
+			if len(dmx.pendingErrs) == 0 {
+				dmx.pendingErrs = dmx.errArr[:0]
+			}
+			return EventError, e
+		}
+		if dmx.pendingFatal != nil {
+			err = dmx.pendingFatal
+			dmx.pendingFatal = nil
+			return 0, err
+		}
+
+		// Queued table emissions next
 		if len(dmx.tblQueue) > 0 {
 			e := dmx.tblQueue[0]
 			dmx.tblQueue = dmx.tblQueue[1:]
@@ -297,12 +345,23 @@ func (dmx *Demuxer) Next() (ev Event, err error) {
 		var units []unit
 		if err = dmx.nextPacket(&dmx.pkt); err != nil {
 			if !errors.Is(err, ts.ErrNoMorePackets) {
-				return 0, fmt.Errorf("astits: fetching next packet failed: %w", err)
+				werr := fmt.Errorf("astits: fetching next packet failed: %w", err)
+				// Flush recoverable errors reported during this failed read before
+				// the fatal one ends the stream.
+				if len(dmx.pendingErrs) > 0 {
+					dmx.pendingFatal = werr
+					continue
+				}
+				return 0, werr
 			}
 			// EOF: drain the unfinished units, lowest PID first. The reader is
 			// retried on the next call — it may grow.
 			u, ok := dmx.acc.drain()
 			if !ok {
+				// Flush any errors the final read reported before ending.
+				if len(dmx.pendingErrs) > 0 {
+					continue
+				}
 				return 0, ts.ErrNoMorePackets
 			}
 			units = append(dmx.unitsArr[:0], u)
@@ -361,14 +420,22 @@ func (dmx *Demuxer) PMT() *psi.PMT {
 }
 
 // Events iterates Next until the packets are exhausted: ts.ErrNoMorePackets
-// ends the sequence, any other error is yielded with an undefined Event.
+// ends the sequence, a recoverable error (EventError, see WithRecoverableErrors)
+// is yielded and iteration continues, any other error is yielded once and ends
+// the sequence.
 func (dmx *Demuxer) Events() iter.Seq2[Event, error] {
 	return func(yield func(Event, error) bool) {
 		for {
 			ev, err := dmx.Next()
 			if err != nil {
-				if !errors.Is(err, ts.ErrNoMorePackets) {
-					yield(ev, err)
+				if errors.Is(err, ts.ErrNoMorePackets) {
+					return
+				}
+				if !yield(ev, err) {
+					return
+				}
+				if ts.IsRecoverable(err) {
+					continue
 				}
 				return
 			}
@@ -396,6 +463,8 @@ func (dmx *Demuxer) Rewind() (n int64, err error) {
 	dmx.Close()
 	dmx.packetBuffer = nil
 	dmx.tblQueue = dmx.tblArr[:0]
+	dmx.pendingErrs = dmx.errArr[:0]
+	dmx.pendingFatal = nil
 	dmx.psiPrev = pidmap.Map[psiCache]{Keys: dmx.psiKeysArr[:0], Vals: dmx.psiValsArr[:0]}
 	dmx.acc.init(&dmx.programMap, dmx.optDVBTables)
 	if n, err = ts.Rewind(dmx.r); err != nil {

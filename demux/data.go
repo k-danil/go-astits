@@ -3,6 +3,7 @@ package demux
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"sync"
 
 	"github.com/k-danil/go-astits/v2/pes"
@@ -105,6 +106,11 @@ func (dmx *Demuxer) processUnit(u unit) (emitted *PES, err error) {
 
 		if perr := d.Data.Parse(u.buf.bs); perr != nil {
 			d.Close()
+			if dmx.optRecoverable {
+				dmx.pendingErrs = append(dmx.pendingErrs, &ts.RecoverableError{
+					Kind: ts.ErrorKindPES, PID: u.pid, Offset: dmx.pkt.Offset, Err: perr,
+				})
+			}
 			return nil, perr
 		}
 
@@ -120,6 +126,18 @@ func (dmx *Demuxer) processUnit(u unit) (emitted *PES, err error) {
 		poolOfPayload.put(u.buf)
 	}
 	return nil, nil
+}
+
+// reportPSIError splits out a CRC32 mismatch (TR 101 290 CRC_error) from other
+// section damage.
+func (dmx *Demuxer) reportPSIError(pid uint16, err error) {
+	kind := ts.ErrorKindPSI
+	if errors.Is(err, psi.ErrCRC32Mismatch) {
+		kind = ts.ErrorKindCRC
+	}
+	dmx.pendingErrs = append(dmx.pendingErrs, &ts.RecoverableError{
+		Kind: kind, PID: pid, Offset: dmx.pkt.Offset, Err: err,
+	})
 }
 
 func (dmx *Demuxer) processPSI(u unit) {
@@ -138,7 +156,9 @@ func (dmx *Demuxer) processPSI(u unit) {
 
 	psiData, err := psi.Parse(u.buf.bs)
 	if err != nil {
-		// Swallow: a torn or corrupt section produces no emission
+		if dmx.optRecoverable {
+			dmx.reportPSIError(u.pid, err)
+		}
 		poolOfPayload.put(u.buf)
 		return
 	}

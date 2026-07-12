@@ -114,6 +114,10 @@ type PacketBufferConfig struct {
 	ZeroCopyBatch uint
 	SyncLock      bool
 	ResyncLimit   uint
+	// OnRecover, when set, is called for each recovered damage event (sync loss,
+	// dropped packet); nil keeps the silent fast path. Only invoked on the cold
+	// error branches, never on a clean read.
+	OnRecover func(RecoverableError)
 }
 
 // PacketBuffer represents a packet buffer
@@ -130,6 +134,7 @@ type PacketBuffer struct {
 	skipErrLimit   uint
 	resyncCounter  uint
 	resyncLimit    uint // 0 = unlimited
+	onRecover      func(RecoverableError)
 }
 
 // NewPacketBuffer creates a new packet buffer
@@ -141,6 +146,7 @@ func NewPacketBuffer(r io.Reader, cfg PacketBufferConfig) (pb *PacketBuffer, err
 		zeroCopy:     cfg.ZeroCopyBatch > 0,
 		skipErrLimit: cfg.SkipErrLimit,
 		resyncLimit:  cfg.ResyncLimit,
+		onRecover:    cfg.OnRecover,
 	}
 	if cfg.SyncLock {
 		if err = pb.initSyncLock(cfg); err != nil {
@@ -414,6 +420,9 @@ func (pb *PacketBuffer) Next(p *Packet) (err error) {
 		if skip, err = p.parse(bs, pb.s); err != nil {
 			if skip && pb.skipErrCounter < pb.skipErrLimit {
 				pb.skipErrCounter++
+				if pb.onRecover != nil {
+					pb.onRecover(RecoverableError{Kind: ErrorKindPacketDrop, PID: PIDUnset, Offset: p.Offset, Err: err})
+				}
 			} else {
 				return fmt.Errorf("astits: building packet failed: %w", err)
 			}
@@ -443,6 +452,9 @@ func (pb *PacketBuffer) nextSync(p *Packet) (err error) {
 		}
 
 		if buf[pb.prefixLen] != syncByte {
+			if pb.onRecover != nil {
+				pb.onRecover(RecoverableError{Kind: ErrorKindSyncLoss, PID: PIDUnset, Offset: pb.pos, Err: ErrPacketMustStartWithASyncByte})
+			}
 			if err = pb.resync(ps); err != nil {
 				return err
 			}
@@ -460,6 +472,9 @@ func (pb *PacketBuffer) nextSync(p *Packet) (err error) {
 		var skip bool
 		if skip, err = p.parse(pkt, pb.s); err != nil {
 			// Sync was present, so scanning won't help: drop the damaged packet.
+			if pb.onRecover != nil {
+				pb.onRecover(RecoverableError{Kind: ErrorKindPacketDrop, PID: PIDUnset, Offset: p.Offset, Err: err})
+			}
 			if err = pb.dropDamaged(ps); err != nil {
 				return err
 			}

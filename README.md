@@ -63,7 +63,8 @@ How:
   table state is read through `Section()`/`PAT()`/`PMT()`. The full MPEG-2 systems + DVB-SI
   table set is parsed, each surfaced as its own typed event; everything beyond PAT/PMT is off
   by default (`WithDVBTables`). `WithPSIRepeats` also emits byte-identical repeats
-  (`TableChanged` distinguishes them) for stream-composition analysis.
+  (`TableChanged` distinguishes them) for stream-composition analysis. Under
+  `WithRecoverableErrors`, `EventError` additionally surfaces skipped corruption (below).
 - **Per-PID byte accumulator**: each PID assembles its unit into one contiguous pooled
   buffer sized from the unit's own length hint (PSI section length, PES packet length) with
   a sticky-max fallback — packets are one-shot scratch, so both copy and view modes reach the
@@ -107,6 +108,13 @@ How:
   roundtrip properties; corrupt input never panics and yields errors matchable with
   `errors.Is` — `ts.ErrInvalidData` classifies any corrupt-input failure,
   `psi.ErrCRC32Mismatch` flags checksum errors.
+- **Recoverable-error signalling** (`demux.WithRecoverableErrors`) — opt-in: instead of
+  silently skipping a corrupt PSI section (CRC32 mismatch — TR 101 290 CRC_error), a torn
+  table, a bad PES unit, a lost sync byte or a dropped packet, `Next` surfaces it as
+  `EventError` carrying a typed `*ts.RecoverableError` (kind, PID, byte offset) and continues.
+  The error is non-terminal — `Events()` yields it without ending the stream, so a lossy feed
+  keeps demuxing while the consumer counts damage (e.g. TR 101 290 error counters). Off by
+  default; the silent fast path is byte-for-byte unchanged.
 - **`Demuxer.Close()`** — deterministic resource return for demuxers abandoned before EOF;
   `Rewind()` cleans up after itself.
 - **Muxer**: raw packet passthrough (`WritePacket` of `Packet.Raw()` with `UpdateHeader`),
@@ -128,6 +136,10 @@ How:
   `WithPSIRepeats`.
 - **`Next` results are borrowed**: `PES()` before `Close` and `Section()` are valid only
   until the next `Next`; retaining beyond that means claiming (`PES`) or copying.
+- **`WithRecoverableErrors` changes the error contract**: without it, a non-nil error from
+  `Next`/`Events` is terminal (as before). With it, a `*ts.RecoverableError` is non-terminal —
+  distinguish with `ts.IsRecoverable(err)` and keep iterating; only a genuine fatal (or
+  `ts.ErrNoMorePackets`) ends the stream.
 - Requires **Go ≥ 1.26**.
 
 ## Roadmap
