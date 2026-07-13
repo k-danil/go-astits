@@ -8,9 +8,9 @@ import (
 
 // MPEGExtension is the MPEG-2 systems extension_descriptor (ISO/IEC 13818-1).
 type MPEGExtension struct {
-	Body      []byte
-	Header    Header
-	Extension uint8
+	Body      []byte `json:"_body"`
+	Header    Header `json:"_header"`
+	Extension uint8  `json:"extension_descriptor_tag"`
 }
 
 func newDescriptorMPEGExtension(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {

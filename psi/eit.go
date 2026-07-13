@@ -15,22 +15,22 @@ import (
 // Page: 36 | Chapter: 5.2.4 | Link: https://www.dvb.org/resources/public/standards/a38_dvb-si_specification.pdf
 // (barbashov) the link above can be broken, alternative: https://dvb.org/wp-content/uploads/2019/12/a038_tm1217r37_en300468v1_17_1_-_rev-134_-_si_specification.pdf
 type EIT struct {
-	Events                   []EITEvent
-	OriginalNetworkID        uint16
-	ServiceID                uint16
-	TransportStreamID        uint16
-	LastTableID              uint8
-	SegmentLastSectionNumber uint8
+	Events                   []EITEvent `json:"_events"`
+	OriginalNetworkID        uint16     `json:"original_network_id"`
+	ServiceID                uint16     `json:"service_id"`
+	TransportStreamID        uint16     `json:"transport_stream_id"`
+	LastTableID              TableID    `json:"last_table_id"`
+	SegmentLastSectionNumber uint8      `json:"segment_last_section_number"`
 }
 
 // EITEvent represents an EIT data event
 type EITEvent struct {
-	Descriptors    []descriptor.Descriptor
-	Duration       time.Duration
-	StartTime      time.Time
-	EventID        uint16
-	HasFreeCSAMode bool // When true indicates that access to one or more streams may be controlled by a CA system.
-	RunningStatus  uint8
+	Descriptors    []descriptor.Descriptor `json:"_descriptors"`
+	Duration       time.Duration           `json:"duration"`
+	StartTime      time.Time               `json:"start_time"`
+	EventID        uint16                  `json:"event_id"`
+	HasFreeCSAMode bool                    `json:"free_CA_mode"` // When true indicates that access to one or more streams may be controlled by a CA system.
+	RunningStatus  RunningStatus           `json:"running_status"`
 }
 
 // parseEITSection parses an EIT section
@@ -60,7 +60,7 @@ func parseEITSection(i *bytesiter.Iterator, offsetSectionsEnd int, tableIDExtens
 		return
 	}
 
-	d.LastTableID = b
+	d.LastTableID = TableID(b)
 
 	for i.Offset() < offsetSectionsEnd {
 		if bs, err = i.NextBytesNoCopy(2); err != nil || len(bs) < 2 {
@@ -86,7 +86,7 @@ func parseEITSection(i *bytesiter.Iterator, offsetSectionsEnd int, tableIDExtens
 			return
 		}
 
-		e.RunningStatus = b >> 5
+		e.RunningStatus = RunningStatus(b >> 5)
 
 		e.HasFreeCSAMode = b&0x10 > 0
 
@@ -117,14 +117,14 @@ func (d *EIT) appendSection(dst []byte) []byte {
 	dst = append(dst,
 		byte(d.TransportStreamID>>8), byte(d.TransportStreamID),
 		byte(d.OriginalNetworkID>>8), byte(d.OriginalNetworkID),
-		d.SegmentLastSectionNumber, d.LastTableID)
+		d.SegmentLastSectionNumber, byte(d.LastTableID))
 	for _, e := range d.Events {
 		loopLen := descriptor.CalcLength(e.Descriptors)
 		dst = append(dst, byte(e.EventID>>8), byte(e.EventID))
 		dst = dvb.AppendTime(dst, e.StartTime)
 		dst = dvb.AppendDurationSeconds(dst, e.Duration)
 		dst = append(dst,
-			e.RunningStatus<<5|util.B2U(e.HasFreeCSAMode)<<4|byte(loopLen>>8)&0xf, // running_status(3) + free_CA(1) + descriptors_loop_length(12)
+			byte(e.RunningStatus)<<5|util.B2U(e.HasFreeCSAMode)<<4|byte(loopLen>>8)&0xf, // running_status(3) + free_CA(1) + descriptors_loop_length(12)
 			byte(loopLen))
 		dst = descriptor.Append(dst, e.Descriptors)
 	}

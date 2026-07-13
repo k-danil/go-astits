@@ -12,16 +12,16 @@ import (
 // Page: 29 | Chapter: 5.2.1 | Link: https://www.dvb.org/resources/public/standards/a38_dvb-si_specification.pdf
 // (barbashov) the link above can be broken, alternative: https://dvb.org/wp-content/uploads/2019/12/a038_tm1217r37_en300468v1_17_1_-_rev-134_-_si_specification.pdf
 type NIT struct {
-	NetworkDescriptors []descriptor.Descriptor
-	TransportStreams   []NITTransportStream
-	NetworkID          uint16
+	NetworkDescriptors []descriptor.Descriptor `json:"_network_descriptors"`
+	TransportStreams   []NITTransportStream    `json:"_transport_streams"`
+	NetworkID          uint16                  `json:"network_id"`
 }
 
 // NITTransportStream represents a NIT data transport stream
 type NITTransportStream struct {
-	TransportDescriptors []descriptor.Descriptor
-	TransportStreamID    uint16
-	OriginalNetworkID    uint16
+	TransportDescriptors []descriptor.Descriptor `json:"_transport_descriptors"`
+	TransportStreamID    uint16                  `json:"transport_stream_id"`
+	OriginalNetworkID    uint16                  `json:"original_network_id"`
 }
 
 // parseNITSection parses a NIT section

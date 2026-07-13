@@ -11,8 +11,8 @@ import (
 // sub-descriptor, selected by an extension_descriptor_tag, is held in Body.
 // Chapter: 6.2.16 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type Extension struct {
-	Body   ext.Body
-	Header Header
+	Body   ext.Body `json:"_body"`
+	Header Header   `json:"_header"`
 }
 
 func newDescriptorExtension(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
@@ -23,7 +23,7 @@ func newDescriptorExtension(i *bytesiter.Iterator, h Header, offsetEnd int) (dd 
 	}
 
 	d := &Extension{Header: h}
-	if d.Body, err = ext.Parse(i, b, offsetEnd); err != nil {
+	if d.Body, err = ext.Parse(i, ext.Tag(b), offsetEnd); err != nil {
 		return
 	}
 	dd = d
@@ -36,6 +36,6 @@ func (d *Extension) CalcLength() int {
 
 func (d *Extension) Append(dst []byte) []byte {
 	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
-	dst = append(dst, d.Body.Tag())
+	dst = append(dst, uint8(d.Body.Tag()))
 	return d.Body.Append(dst)
 }

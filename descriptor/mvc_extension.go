@@ -9,17 +9,17 @@ import (
 
 // MVCExtension is the MPEG-2 systems MVC_extension_descriptor (ISO/IEC 13818-1).
 type MVCExtension struct {
-	AverageBitrate            uint16 // in kbit/s
-	MaximumBitrate            uint16 // in kbit/s
-	ViewOrderIndexMin         uint16
-	ViewOrderIndexMax         uint16
-	Header                    Header
-	TemporalIDStart           uint8
-	TemporalIDEnd             uint8
-	ViewAssociationNotPresent bool
-	BaseViewIsLeftEyeview     bool
-	NoSEINALUnitPresent       bool
-	NoPrefixNALUnitPresent    bool
+	AverageBitrate            uint16 `json:"average_bitrate"` // in kbit/s
+	MaximumBitrate            uint16 `json:"maximum_bitrate"` // in kbit/s
+	ViewOrderIndexMin         uint16 `json:"view_order_index_min"`
+	ViewOrderIndexMax         uint16 `json:"view_order_index_max"`
+	Header                    Header `json:"_header"`
+	TemporalIDStart           uint8  `json:"temporal_id_start"`
+	TemporalIDEnd             uint8  `json:"temporal_id_end"`
+	ViewAssociationNotPresent bool   `json:"view_association_not_present"`
+	BaseViewIsLeftEyeview     bool   `json:"base_view_is_left_eyeview"`
+	NoSEINALUnitPresent       bool   `json:"no_sei_nal_unit_present"`
+	NoPrefixNALUnitPresent    bool   `json:"no_prefix_nal_unit_present"`
 }
 
 func newDescriptorMVCExtension(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {

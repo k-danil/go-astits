@@ -11,13 +11,13 @@ import (
 // only when HasFlags (descriptor_length > 1).
 // Chapter: H.2 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type AAC struct {
-	AdditionalInfo  []byte
-	Header          Header
-	ProfileAndLevel uint8
-	AACType         uint8
-	AACTypeFlag     bool
-	SAOCDEFlag      bool
-	HasFlags        bool
+	AdditionalInfo  []byte `json:"additional_info_byte"`
+	Header          Header `json:"_header"`
+	ProfileAndLevel uint8  `json:"profile_and_level"`
+	AACType         uint8  `json:"AAC_type"`
+	AACTypeFlag     bool   `json:"AAC_type_flag"`
+	SAOCDEFlag      bool   `json:"SAOC_DE_flag"`
+	HasFlags        bool   `json:"_has_flags"`
 }
 
 func newDescriptorAAC(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {

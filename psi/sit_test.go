@@ -25,6 +25,6 @@ func TestParseSITSection(t *testing.T) {
 
 	require.Len(t, d.Services, 1)
 	assert.Equal(t, uint16(0x0005), d.Services[0].ServiceID)
-	assert.Equal(t, uint8(4), d.Services[0].RunningStatus)
+	assert.Equal(t, RunningStatusRunning, d.Services[0].RunningStatus)
 	assert.Empty(t, d.Services[0].Descriptors)
 }

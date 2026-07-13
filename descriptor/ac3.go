@@ -10,16 +10,16 @@ import (
 // AC3 represents an AC3 descriptor
 // Chapter: Annex D | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type AC3 struct {
-	Header           Header
-	AdditionalInfo   []byte
-	ASVC             uint8
-	BSID             uint8
-	ComponentType    uint8
-	HasASVC          bool
-	HasBSID          bool
-	HasComponentType bool
-	HasMainID        bool
-	MainID           uint8
+	Header           Header `json:"_header"`
+	AdditionalInfo   []byte `json:"additional_info_byte"`
+	ASVC             uint8  `json:"asvc"`
+	BSID             uint8  `json:"bsid"`
+	ComponentType    uint8  `json:"component_type"`
+	HasASVC          bool   `json:"asvc_flag"`
+	HasBSID          bool   `json:"bsid_flag"`
+	HasComponentType bool   `json:"component_type_flag"`
+	HasMainID        bool   `json:"mainid_flag"`
+	MainID           uint8  `json:"mainid"`
 }
 
 func newDescriptorAC3(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {

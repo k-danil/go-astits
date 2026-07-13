@@ -213,13 +213,13 @@ var descriptorTestTable = []descriptorTest{
 					Language: [3]byte{0x6c, 0x67, 0x31}, // lg1
 					Magazine: uint8(2),
 					Page:     uint8(0x12),
-					Type:     uint8(1),
+					Type:     TeletextType(1),
 				},
 				{
 					Language: [3]byte{0x6c, 0x67, 0x32}, // lg2
 					Magazine: uint8(4),
 					Page:     uint8(0x23),
-					Type:     uint8(3),
+					Type:     TeletextType(3),
 				},
 			}}},
 	{
@@ -450,7 +450,7 @@ var descriptorTestTable = []descriptorTest{
 				Language: [3]byte{0x6c, 0x61, 0x6e}, // lan
 				Magazine: uint8(2),
 				Page:     uint8(0x12),
-				Type:     uint8(1),
+				Type:     TeletextType(1),
 			}}}},
 	{
 		"AVCVideo",

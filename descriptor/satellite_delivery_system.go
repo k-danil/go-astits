@@ -12,16 +12,16 @@ import (
 // BCD-packed values; RollOff is only meaningful when ModulationSystem (DVB-S2).
 // Chapter: 6.2.13.2 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type SatelliteDeliverySystem struct {
-	Header           Header
-	Frequency        uint32
-	SymbolRate       uint32
-	OrbitalPosition  uint16
-	Polarization     uint8
-	RollOff          uint8
-	ModulationType   uint8
-	FECInner         uint8
-	WestEastFlag     bool
-	ModulationSystem bool
+	Header           Header `json:"_header"`
+	Frequency        uint32 `json:"frequency"`
+	SymbolRate       uint32 `json:"symbol_rate"`
+	OrbitalPosition  uint16 `json:"orbital_position"`
+	Polarization     uint8  `json:"polarization"`
+	RollOff          uint8  `json:"roll_off"`
+	ModulationType   uint8  `json:"modulation_type"`
+	FECInner         uint8  `json:"FEC_inner"`
+	WestEastFlag     bool   `json:"west_east_flag"`
+	ModulationSystem bool   `json:"modulation_system"`
 }
 
 func newDescriptorSatelliteDeliverySystem(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {

@@ -9,19 +9,19 @@ import (
 // ExtendedEvent represents an extended event descriptor
 // Chapter: 6.2.15 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type ExtendedEvent struct {
-	Text                 []byte
-	Items                []ExtendedEventItem
-	Header               Header
-	ISO639LanguageCode   [3]byte
-	LastDescriptorNumber uint8
-	Number               uint8
+	Text                 []byte              `json:"text_char"`
+	Items                []ExtendedEventItem `json:"_items"`
+	Header               Header              `json:"_header"`
+	ISO639LanguageCode   [3]byte             `json:"ISO_639_language_code"`
+	LastDescriptorNumber uint8               `json:"last_descriptor_number"`
+	Number               uint8               `json:"descriptor_number"`
 }
 
 // ExtendedEventItem represents an extended event item descriptor
 // Chapter: 6.2.15 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type ExtendedEventItem struct {
-	Content     []byte
-	Description []byte
+	Content     []byte `json:"item_char"`
+	Description []byte `json:"item_description"`
 }
 
 func newDescriptorExtendedEvent(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {

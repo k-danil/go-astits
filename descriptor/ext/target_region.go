@@ -11,20 +11,20 @@ import (
 // of target regions, each qualified by a country code and a region depth.
 // Chapter: 6.4.11 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type TargetRegion struct {
-	Regions     []Region
-	CountryCode [3]byte
+	Regions     []Region `json:"_regions"`
+	CountryCode [3]byte  `json:"country_code"`
 }
 
 // Region is one region loop of a target region descriptor. Which region
 // codes are present is selected by RegionDepth (1: primary; 2: +secondary;
 // 3: +tertiary); CountryCode is present only when CountryCodeFlag.
 type Region struct {
-	CountryCode         [3]byte
-	TertiaryRegionCode  uint16
-	RegionDepth         uint8
-	PrimaryRegionCode   uint8
-	SecondaryRegionCode uint8
-	CountryCodeFlag     bool
+	CountryCode         [3]byte `json:"country_code"`
+	TertiaryRegionCode  uint16  `json:"tertiary_region_code"`
+	RegionDepth         uint8   `json:"region_depth"`
+	PrimaryRegionCode   uint8   `json:"primary_region_code"`
+	SecondaryRegionCode uint8   `json:"secondary_region_code"`
+	CountryCodeFlag     bool    `json:"country_code_flag"`
 }
 
 func parseTargetRegion(i *bytesiter.Iterator, offsetEnd int) (d *TargetRegion, err error) {

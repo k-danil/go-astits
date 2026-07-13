@@ -11,7 +11,7 @@ import (
 // distinguishes the stream type; the body is defined in ISO/IEC 14496-1 and is
 // carried verbatim.
 type ISO14496Section struct {
-	Data []byte
+	Data []byte `json:"_data"`
 }
 
 func parseISO14496Section(i *bytesiter.Iterator, offsetSectionsEnd int) (d *ISO14496Section, err error) {

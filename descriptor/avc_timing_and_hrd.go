@@ -10,16 +10,16 @@ import (
 
 // AVCTimingAndHRD is the MPEG-2 systems AVC timing and HRD descriptor (ISO/IEC 13818-1).
 type AVCTimingAndHRD struct {
-	N                           uint32
-	K                           uint32
-	NumUnitsInTick              uint32
-	Header                      Header
-	HRDManagementValid          bool
-	PictureAndTimingInfoPresent bool
-	Is90kHz                     bool
-	FixedFrameRate              bool
-	TemporalPOC                 bool
-	PictureToDisplayConversion  bool
+	N                           uint32 `json:"N"`
+	K                           uint32 `json:"K"`
+	NumUnitsInTick              uint32 `json:"num_units_in_tick"`
+	Header                      Header `json:"_header"`
+	HRDManagementValid          bool   `json:"hrd_management_valid_flag"`
+	PictureAndTimingInfoPresent bool   `json:"picture_and_timing_info_present"`
+	Is90kHz                     bool   `json:"90kHz_flag"`
+	FixedFrameRate              bool   `json:"fixed_frame_rate_flag"`
+	TemporalPOC                 bool   `json:"temporal_poc_flag"`
+	PictureToDisplayConversion  bool   `json:"picture_to_display_conversion_flag"`
 }
 
 func newDescriptorAVCTimingAndHRD(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {

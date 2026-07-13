@@ -8,9 +8,9 @@ import (
 
 // AuxiliaryVideoStream is the MPEG-2 systems Auxiliary_video_stream_descriptor (ISO/IEC 13818-1).
 type AuxiliaryVideoStream struct {
-	SIRBSP                  []byte
-	Header                  Header
-	AuxVideoCodedStreamType uint8
+	SIRBSP                  []byte `json:"si_rbsp"`
+	Header                  Header `json:"_header"`
+	AuxVideoCodedStreamType uint8  `json:"aux_video_codedstreamtype"`
 }
 
 func newDescriptorAuxiliaryVideoStream(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {

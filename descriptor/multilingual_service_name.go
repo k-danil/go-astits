@@ -10,15 +10,15 @@ import (
 // the service provider and service names in one or more languages.
 // Chapter: 6.2.25 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type MultilingualServiceName struct {
-	Items  []MultilingualServiceNameItem
-	Header Header
+	Items  []MultilingualServiceNameItem `json:"_items"`
+	Header Header                        `json:"_header"`
 }
 
 // MultilingualServiceNameItem is one language variant of a service name
 type MultilingualServiceNameItem struct {
-	Provider []byte
-	Name     []byte
-	Language [3]byte
+	Provider []byte  `json:"service_provider_name"`
+	Name     []byte  `json:"service_name"`
+	Language [3]byte `json:"ISO_639_language_code"`
 }
 
 func newDescriptorMultilingualServiceName(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {

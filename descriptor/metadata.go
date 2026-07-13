@@ -23,20 +23,20 @@ const (
 
 // Metadata is the MPEG-2 systems metadata_descriptor (ISO/IEC 13818-1).
 type Metadata struct {
-	ServiceIdentificationRecord         []byte
-	DecoderConfig                       []byte
-	DecConfigIdentificationRecord       []byte
-	ReservedData                        []byte
-	PrivateData                         []byte
-	MetadataApplicationFormatIdentifier uint32
-	MetadataFormatIdentifier            uint32
-	Header                              Header
-	MetadataApplicationFormat           uint16
-	MetadataFormat                      uint8
-	MetadataServiceID                   uint8
-	DecoderConfigFlags                  uint8
-	DecoderConfigMetadataServiceID      uint8
-	DSMCCFlag                           bool
+	ServiceIdentificationRecord         []byte `json:"service_identification_record"`
+	DecoderConfig                       []byte `json:"decoder_config_byte"`
+	DecConfigIdentificationRecord       []byte `json:"dec_config_identification_record"`
+	ReservedData                        []byte `json:"_reserved_data"`
+	PrivateData                         []byte `json:"private_data"`
+	MetadataApplicationFormatIdentifier uint32 `json:"metadata_application_format_identifier"`
+	MetadataFormatIdentifier            uint32 `json:"metadata_format_identifier"`
+	Header                              Header `json:"_header"`
+	MetadataApplicationFormat           uint16 `json:"metadata_application_format"`
+	MetadataFormat                      uint8  `json:"metadata_format"`
+	MetadataServiceID                   uint8  `json:"metadata_service_id"`
+	DecoderConfigFlags                  uint8  `json:"decoder_config_flags"`
+	DecoderConfigMetadataServiceID      uint8  `json:"decoder_config_metadata_service_id"`
+	DSMCCFlag                           bool   `json:"DSM-CC_flag"`
 }
 
 func nextMetadataRecord(i *bytesiter.Iterator) (bs []byte, err error) {

@@ -8,10 +8,10 @@ import (
 
 // MultiplexBufferUtilization is the MPEG-2 systems multiplex_buffer_utilization_descriptor (ISO/IEC 13818-1).
 type MultiplexBufferUtilization struct {
-	Header     Header
-	LowerBound uint16
-	UpperBound uint16
-	BoundValid bool
+	Header     Header `json:"_header"`
+	LowerBound uint16 `json:"lower_bound"`
+	UpperBound uint16 `json:"upper_bound"`
+	BoundValid bool   `json:"bound_valid"`
 }
 
 func newDescriptorMultiplexBufferUtilization(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {

@@ -12,9 +12,9 @@ import (
 // event descriptor.
 // Chapter: 6.2.44 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type TimeShiftedEvent struct {
-	Header             Header
-	ReferenceServiceID uint16
-	ReferenceEventID   uint16
+	Header             Header `json:"_header"`
+	ReferenceServiceID uint16 `json:"reference_service_id"`
+	ReferenceEventID   uint16 `json:"reference_event_id"`
 }
 
 func newDescriptorTimeShiftedEvent(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {

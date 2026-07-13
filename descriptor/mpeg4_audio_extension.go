@@ -9,10 +9,10 @@ import (
 
 // MPEG4AudioExtension is the MPEG-2 systems MPEG-4_audio_extension_descriptor (ISO/IEC 13818-1).
 type MPEG4AudioExtension struct {
-	AudioProfileLevelIndication []byte
-	AudioSpecificConfig         []byte
-	Header                      Header
-	HasASC                      bool
+	AudioProfileLevelIndication []byte `json:"audioProfileLevelIndication"`
+	AudioSpecificConfig         []byte `json:"audioSpecificConfig"`
+	Header                      Header `json:"_header"`
+	HasASC                      bool   `json:"ASC_flag"`
 }
 
 func newDescriptorMPEG4AudioExtension(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {

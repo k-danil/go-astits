@@ -11,12 +11,12 @@ import (
 // component plus an optional text description.
 // Chapter: 6.2.11 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type DataBroadcast struct {
-	Selector        []byte
-	Text            []byte
-	Header          Header
-	DataBroadcastID uint16
-	Language        [3]byte
-	ComponentTag    uint8
+	Selector        []byte  `json:"selector_byte"`
+	Text            []byte  `json:"text_char"`
+	Header          Header  `json:"_header"`
+	DataBroadcastID uint16  `json:"data_broadcast_id"`
+	Language        [3]byte `json:"ISO_639_language_code"`
+	ComponentTag    uint8   `json:"component_tag"`
 }
 
 func newDescriptorDataBroadcast(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {

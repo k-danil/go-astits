@@ -10,15 +10,15 @@ import (
 // elementary stream (sample/bit rate, frame sizing, surround mode).
 // Chapter: G.2 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type DTS struct {
-	AdditionalInfo       []byte
-	Header               Header
-	SampleRateCode       uint8
-	BitRateCode          uint8
-	NBLKS                uint8
-	FSize                uint16
-	SurroundMode         uint8
-	ExtendedSurroundFlag uint8
-	LFEFlag              bool
+	AdditionalInfo       []byte `json:"additional_info_byte"`
+	Header               Header `json:"_header"`
+	SampleRateCode       uint8  `json:"sample_rate_code"`
+	BitRateCode          uint8  `json:"bit_rate_code"`
+	NBLKS                uint8  `json:"nblks"`
+	FSize                uint16 `json:"fsize"`
+	SurroundMode         uint8  `json:"surround_mode"`
+	ExtendedSurroundFlag uint8  `json:"extended_surround_flag"`
+	LFEFlag              bool   `json:"lfe_flag"`
 }
 
 func newDescriptorDTS(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {

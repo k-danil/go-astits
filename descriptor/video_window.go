@@ -9,10 +9,10 @@ import (
 
 // VideoWindow is the MPEG-2 systems video_window_descriptor (ISO/IEC 13818-1).
 type VideoWindow struct {
-	Header           Header
-	HorizontalOffset uint16
-	VerticalOffset   uint16
-	WindowPriority   uint8
+	Header           Header `json:"_header"`
+	HorizontalOffset uint16 `json:"horizontal_offset"`
+	VerticalOffset   uint16 `json:"vertical_offset"`
+	WindowPriority   uint8  `json:"window_priority"`
 }
 
 func newDescriptorVideoWindow(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {

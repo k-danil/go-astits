@@ -14,13 +14,13 @@ import (
 // section_fragment_indication replace table_id_extension / the syntax header's
 // reserved bits. The metadata Access Unit payload is carried verbatim.
 type Metadata struct {
-	MetadataBytes             []byte
-	MetadataServiceID         uint8
-	SectionFragmentIndication uint8
-	VersionNumber             uint8
-	SectionNumber             uint8
-	LastSectionNumber         uint8
-	CurrentNextIndicator      bool
+	MetadataBytes             []byte `json:"metadata_byte"`
+	MetadataServiceID         uint8  `json:"metadata_service_id"`
+	SectionFragmentIndication uint8  `json:"section_fragment_indication"`
+	VersionNumber             uint8  `json:"version_number"`
+	SectionNumber             uint8  `json:"section_number"`
+	LastSectionNumber         uint8  `json:"last_section_number"`
+	CurrentNextIndicator      bool   `json:"current_next_indicator"`
 }
 
 func parseMetadataSection(i *bytesiter.Iterator, offsetSectionsEnd int) (d *Metadata, err error) {

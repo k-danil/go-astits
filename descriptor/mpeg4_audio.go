@@ -8,8 +8,8 @@ import (
 
 // MPEG4Audio is the MPEG-2 systems MPEG-4_audio_descriptor (ISO/IEC 13818-1).
 type MPEG4Audio struct {
-	Header          Header
-	ProfileAndLevel uint8
+	Header          Header `json:"_header"`
+	ProfileAndLevel uint8  `json:"profile_and_level"`
 }
 
 func newDescriptorMPEG4Audio(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {

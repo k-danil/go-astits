@@ -8,8 +8,8 @@ import (
 
 // StereoscopicProgramInfo is the MPEG-2 systems Stereoscopic_program_info_descriptor (ISO/IEC 13818-1).
 type StereoscopicProgramInfo struct {
-	Header      Header
-	ServiceType uint8
+	Header      Header `json:"_header"`
+	ServiceType uint8  `json:"service_type"`
 }
 
 func newDescriptorStereoscopicProgramInfo(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {

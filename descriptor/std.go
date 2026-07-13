@@ -9,8 +9,8 @@ import (
 
 // STD is the MPEG-2 systems STD_descriptor (ISO/IEC 13818-1).
 type STD struct {
-	Header        Header
-	LeakValidFlag bool
+	Header        Header `json:"_header"`
+	LeakValidFlag bool   `json:"leak_valid_flag"`
 }
 
 func newDescriptorSTD(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {

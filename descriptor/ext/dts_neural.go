@@ -10,8 +10,8 @@ import (
 // audio streams processed with DTS Neural Surround, via ConfigID.
 // Chapter: L.1 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type DTSNeural struct {
-	AdditionalInfo []byte
-	ConfigID       uint8
+	AdditionalInfo []byte `json:"additional_info"`
+	ConfigID       uint8  `json:"config_id"`
 }
 
 func parseDTSNeural(i *bytesiter.Iterator, offsetEnd int) (d *DTSNeural, err error) {

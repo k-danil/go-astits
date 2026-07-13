@@ -13,12 +13,12 @@ import (
 // MultipleInputStreamFlag.
 // Chapter: 6.2.13.3 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type S2SatelliteDeliverySystem struct {
-	Header                          Header
-	ScramblingSequenceIndex         uint32
-	InputStreamIdentifier           uint8
-	ScramblingSequenceSelector      bool
-	MultipleInputStreamFlag         bool
-	BackwardsCompatibilityIndicator bool
+	Header                          Header `json:"_header"`
+	ScramblingSequenceIndex         uint32 `json:"scrambling_sequence_index"`
+	InputStreamIdentifier           uint8  `json:"input_stream_identifier"`
+	ScramblingSequenceSelector      bool   `json:"scrambling_sequence_selector"`
+	MultipleInputStreamFlag         bool   `json:"multiple_input_stream_flag"`
+	BackwardsCompatibilityIndicator bool   `json:"backwards_compatibility_indicator"`
 }
 
 func newDescriptorS2SatelliteDeliverySystem(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {

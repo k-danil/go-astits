@@ -8,10 +8,10 @@ import (
 
 // MetadataSTD is the MPEG-2 systems metadata_STD_descriptor (ISO/IEC 13818-1).
 type MetadataSTD struct {
-	InputLeakRate  uint32 // 400 bits/s
-	BufferSize     uint32 // 1024 bytes
-	OutputLeakRate uint32 // 400 bits/s
-	Header         Header
+	InputLeakRate  uint32 `json:"metadata_input_leak_rate"`  // 400 bits/s
+	BufferSize     uint32 `json:"metadata_buffer_size"`      // 1024 bytes
+	OutputLeakRate uint32 `json:"metadata_output_leak_rate"` // 400 bits/s
+	Header         Header `json:"_header"`
 }
 
 func newDescriptorMetadataSTD(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {

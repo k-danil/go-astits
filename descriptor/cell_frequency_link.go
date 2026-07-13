@@ -11,21 +11,21 @@ import (
 // terrestrial network and the frequencies used in them and their subcells.
 // Chapter: 6.2.6 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type CellFrequencyLink struct {
-	Cells  []CellFrequencyLinkCell
-	Header Header
+	Cells  []CellFrequencyLinkCell `json:"_cells"`
+	Header Header                  `json:"_header"`
 }
 
 // CellFrequencyLinkCell is one cell of a cell frequency link descriptor
 type CellFrequencyLinkCell struct {
-	Subcells  []CellFrequencyLinkSubcell
-	CellID    uint16
-	Frequency uint32
+	Subcells  []CellFrequencyLinkSubcell `json:"_subcells"`
+	CellID    uint16                     `json:"cell_id"`
+	Frequency uint32                     `json:"frequency"`
 }
 
 // CellFrequencyLinkSubcell is one subcell of a cell frequency link cell
 type CellFrequencyLinkSubcell struct {
-	CellIDExtension     uint8
-	TransposerFrequency uint32
+	CellIDExtension     uint8  `json:"cell_id_extension"`
+	TransposerFrequency uint32 `json:"transposer_frequency"`
 }
 
 func newDescriptorCellFrequencyLink(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {

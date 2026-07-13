@@ -11,14 +11,14 @@ import (
 // channels.
 // Chapter: 6.2.42 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type Telephone struct {
-	CountryPrefix         []byte
-	InternationalAreaCode []byte
-	OperatorCode          []byte
-	NationalAreaCode      []byte
-	CoreNumber            []byte
-	Header                Header
-	ConnectionType        uint8
-	ForeignAvailability   bool
+	CountryPrefix         []byte `json:"country_prefix_char"`
+	InternationalAreaCode []byte `json:"international_area_code_char"`
+	OperatorCode          []byte `json:"operator_code_char"`
+	NationalAreaCode      []byte `json:"national_area_code_char"`
+	CoreNumber            []byte `json:"core_number_char"`
+	Header                Header `json:"_header"`
+	ConnectionType        uint8  `json:"connection_type"`
+	ForeignAvailability   bool   `json:"foreign_availability"`
 }
 
 func newDescriptorTelephone(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {

@@ -9,15 +9,15 @@ import (
 
 // VideoStream is the MPEG-2 systems video_stream_descriptor (ISO/IEC 13818-1).
 type VideoStream struct {
-	Header                    Header
-	FrameRateCode             uint8
-	ProfileAndLevelIndication uint8
-	ChromaFormat              uint8
-	MultipleFrameRate         bool
-	MPEG1Only                 bool
-	ConstrainedParameter      bool
-	StillPicture              bool
-	FrameRateExtension        bool
+	Header                    Header `json:"_header"`
+	FrameRateCode             uint8  `json:"frame_rate_code"`
+	ProfileAndLevelIndication uint8  `json:"profile_and_level_indication"`
+	ChromaFormat              uint8  `json:"chroma_format"`
+	MultipleFrameRate         bool   `json:"multiple_frame_rate_flag"`
+	MPEG1Only                 bool   `json:"MPEG_1_only_flag"`
+	ConstrainedParameter      bool   `json:"constrained_parameter_flag"`
+	StillPicture              bool   `json:"still_picture_flag"`
+	FrameRateExtension        bool   `json:"frame_rate_extension_flag"`
 }
 
 func newDescriptorVideoStream(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {

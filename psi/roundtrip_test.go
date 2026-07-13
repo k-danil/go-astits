@@ -104,7 +104,7 @@ func randRST(r *rand.Rand) *RST {
 			OriginalNetworkID: uint16(r.UintN(1 << 16)),
 			ServiceID:         uint16(r.UintN(1 << 16)),
 			EventID:           uint16(r.UintN(1 << 16)),
-			RunningStatus:     uint8(r.UintN(8)),
+			RunningStatus:     RunningStatus(r.UintN(8)),
 		})
 	}
 	return rst
@@ -163,16 +163,16 @@ func TestRoundtripPSITables(t *testing.T) {
 			sdt.Services = append(sdt.Services, SDTService{
 				ServiceID: uint16(r.UintN(1 << 16)), HasEITSchedule: r.UintN(2) == 1,
 				HasEITPresentFollowing: r.UintN(2) == 1, HasFreeCSAMode: r.UintN(2) == 1,
-				RunningStatus: uint8(r.UintN(8)), Descriptors: randDescriptors(r),
+				RunningStatus: RunningStatus(r.UintN(8)), Descriptors: randDescriptors(r),
 			})
 		}
 
 		eit := &EIT{ServiceID: ext, TransportStreamID: uint16(r.UintN(1 << 16)),
-			OriginalNetworkID: uint16(r.UintN(1 << 16)), SegmentLastSectionNumber: uint8(r.UintN(256)), LastTableID: uint8(r.UintN(256))}
+			OriginalNetworkID: uint16(r.UintN(1 << 16)), SegmentLastSectionNumber: uint8(r.UintN(256)), LastTableID: TableID(r.UintN(256))}
 		for j := uint(0); j < 1+r.UintN(4); j++ {
 			eit.Events = append(eit.Events, EITEvent{
 				EventID: uint16(r.UintN(1 << 16)), StartTime: randDVBTime(r), Duration: randDuration(r),
-				RunningStatus: uint8(r.UintN(8)), HasFreeCSAMode: r.UintN(2) == 1, Descriptors: randDescriptors(r),
+				RunningStatus: RunningStatus(r.UintN(8)), HasFreeCSAMode: r.UintN(2) == 1, Descriptors: randDescriptors(r),
 			})
 		}
 
@@ -185,7 +185,7 @@ func TestRoundtripPSITables(t *testing.T) {
 
 		sit := &SIT{TransmissionInfoDescriptors: randDescriptors(r)}
 		for j := uint(0); j < 1+r.UintN(4); j++ {
-			sit.Services = append(sit.Services, SITService{ServiceID: uint16(r.UintN(1 << 16)), RunningStatus: uint8(r.UintN(8)), Descriptors: randDescriptors(r)})
+			sit.Services = append(sit.Services, SITService{ServiceID: uint16(r.UintN(1 << 16)), RunningStatus: RunningStatus(r.UintN(8)), Descriptors: randDescriptors(r)})
 		}
 
 		iso := &ISO14496Section{}

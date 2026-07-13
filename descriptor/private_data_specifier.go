@@ -9,8 +9,8 @@ import (
 
 // PrivateDataSpecifier represents a private data specifier descriptor
 type PrivateDataSpecifier struct {
-	Header    Header
-	Specifier uint32
+	Header    Header `json:"_header"`
+	Specifier uint32 `json:"private_data_specifier"`
 }
 
 func newDescriptorPrivateDataSpecifier(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {

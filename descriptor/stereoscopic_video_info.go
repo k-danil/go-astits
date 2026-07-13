@@ -9,12 +9,12 @@ import (
 
 // StereoscopicVideoInfo is the MPEG-2 systems stereoscopic_video_info_descriptor (ISO/IEC 13818-1).
 type StereoscopicVideoInfo struct {
-	Header                     Header
-	HorizontalUpsamplingFactor uint8
-	VerticalUpsamplingFactor   uint8
-	BaseVideoFlag              bool
-	LeftviewFlag               bool
-	UsableAs2D                 bool
+	Header                     Header `json:"_header"`
+	HorizontalUpsamplingFactor uint8  `json:"horizontal_upsampling_factor"`
+	VerticalUpsamplingFactor   uint8  `json:"vertical_upsampling_factor"`
+	BaseVideoFlag              bool   `json:"base_video_flag"`
+	LeftviewFlag               bool   `json:"leftview_flag"`
+	UsableAs2D                 bool   `json:"usable_as_2D"`
 }
 
 func newDescriptorStereoscopicVideoInfo(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {

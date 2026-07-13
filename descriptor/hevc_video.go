@@ -10,24 +10,24 @@ import (
 
 // HEVCVideo is the MPEG-2 systems HEVC_video_descriptor (ISO/IEC 13818-1).
 type HEVCVideo struct {
-	Copied44Bits                   uint64
-	ProfileCompatibilityIndication uint32
-	Header                         Header
-	ProfileSpace                   uint8
-	ProfileIDC                     uint8
-	LevelIDC                       uint8
-	HDRWCGIdc                      uint8
-	TemporalIDMin                  uint8
-	TemporalIDMax                  uint8
-	TierFlag                       bool
-	ProgressiveSourceFlag          bool
-	InterlacedSourceFlag           bool
-	NonPackedConstraintFlag        bool
-	FrameOnlyConstraintFlag        bool
-	TemporalLayerSubsetFlag        bool
-	HEVCStillPresentFlag           bool
-	HEVC24hrPicturePresentFlag     bool
-	SubPicHRDParamsNotPresentFlag  bool
+	Copied44Bits                   uint64 `json:"copied_44bits"`
+	ProfileCompatibilityIndication uint32 `json:"profile_compatibility_indication"`
+	Header                         Header `json:"_header"`
+	ProfileSpace                   uint8  `json:"profile_space"`
+	ProfileIDC                     uint8  `json:"profile_idc"`
+	LevelIDC                       uint8  `json:"level_idc"`
+	HDRWCGIdc                      uint8  `json:"HDR_WCG_idc"`
+	TemporalIDMin                  uint8  `json:"temporal_id_min"`
+	TemporalIDMax                  uint8  `json:"temporal_id_max"`
+	TierFlag                       bool   `json:"tier_flag"`
+	ProgressiveSourceFlag          bool   `json:"progressive_source_flag"`
+	InterlacedSourceFlag           bool   `json:"interlaced_source_flag"`
+	NonPackedConstraintFlag        bool   `json:"non_packed_constraint_flag"`
+	FrameOnlyConstraintFlag        bool   `json:"frame_only_constraint_flag"`
+	TemporalLayerSubsetFlag        bool   `json:"temporal_layer_subset_flag"`
+	HEVCStillPresentFlag           bool   `json:"HEVC_still_present_flag"`
+	HEVC24hrPicturePresentFlag     bool   `json:"HEVC_24hr_picture_present_flag"`
+	SubPicHRDParamsNotPresentFlag  bool   `json:"sub_pic_hrd_params_not_present_flag"`
 }
 
 func newDescriptorHEVCVideo(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {

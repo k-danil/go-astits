@@ -1,16 +1,42 @@
 package ext
 
 import (
+	"encoding/json"
 	"fmt"
 
 	"github.com/k-danil/go-astits/v2/internal/bytesiter"
+	"github.com/k-danil/go-astits/v2/internal/util"
 )
+
+type VideoDepthRangeType uint8
 
 // range_type values (EN 300 468 Table 153)
 const (
-	VideoDepthRangeProductionDisparityHint = 0x00
-	VideoDepthRangeMultiRegionSEI          = 0x01
+	VideoDepthRangeProductionDisparityHint VideoDepthRangeType = 0x00
+	VideoDepthRangeMultiRegionSEI          VideoDepthRangeType = 0x01
 )
+
+var videoDepthRangeTypeNames = map[VideoDepthRangeType]string{
+	VideoDepthRangeProductionDisparityHint: "production_disparity_hint",
+	VideoDepthRangeMultiRegionSEI:          "multi_region_disparity_SEI_present",
+}
+
+func (t VideoDepthRangeType) String() (s string) {
+	var ok bool
+	if s, ok = videoDepthRangeTypeNames[t]; !ok {
+		s = fmt.Sprintf("0x%02x", uint8(t))
+	}
+	return
+}
+
+func (t VideoDepthRangeType) MarshalJSON() (b []byte, err error) {
+	return json.Marshal(t.String())
+}
+
+func (t *VideoDepthRangeType) UnmarshalJSON(b []byte) (err error) {
+	*t, err = util.UnmarshalEnum(b, videoDepthRangeTypeNames)
+	return
+}
 
 // VideoDepthRange represents a video depth range extension descriptor:
 // the intended depth range of plano-stereoscopic 3D video, so receivers can
@@ -18,16 +44,16 @@ const (
 // the raw RangeSelector bytes apply.
 // Chapter: 6.4.15 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type VideoDepthRange struct {
-	Ranges []DepthRange
+	Ranges []DepthRange `json:"_ranges"`
 }
 
 // DepthRange is one depth-range entry. VideoMaxDisparityHint /
 // VideoMinDisparityHint (raw 12-bit signed values) apply for RangeType 0.
 type DepthRange struct {
-	RangeSelector         []byte
-	VideoMaxDisparityHint uint16
-	VideoMinDisparityHint uint16
-	RangeType             uint8
+	RangeSelector         []byte              `json:"range_selector_byte"`
+	VideoMaxDisparityHint uint16              `json:"video_max_disparity_hint"`
+	VideoMinDisparityHint uint16              `json:"video_min_disparity_hint"`
+	RangeType             VideoDepthRangeType `json:"range_type"`
 }
 
 func parseVideoDepthRange(i *bytesiter.Iterator, offsetEnd int) (d *VideoDepthRange, err error) {
@@ -40,7 +66,7 @@ func parseVideoDepthRange(i *bytesiter.Iterator, offsetEnd int) (d *VideoDepthRa
 			err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 			return
 		}
-		rng.RangeType = bs[0]
+		rng.RangeType = VideoDepthRangeType(bs[0])
 		rangeLength := int(bs[1])
 
 		switch rng.RangeType {
@@ -84,7 +110,7 @@ func (d *VideoDepthRange) CalcLength() (n int) {
 func (d *VideoDepthRange) Append(dst []byte) []byte {
 	for idx := range d.Ranges {
 		rng := &d.Ranges[idx]
-		dst = append(dst, rng.RangeType, uint8(rng.rangeLength()))
+		dst = append(dst, uint8(rng.RangeType), uint8(rng.rangeLength()))
 		switch rng.RangeType {
 		case VideoDepthRangeProductionDisparityHint:
 			dst = append(dst,

@@ -10,19 +10,19 @@ import (
 // AVCVideo represents an AVC video descriptor
 // Chapter: 2.6.64 | Link: doc/h222.0-201703-iso13818-1.pdf (ITU-T H.222.0 = ISO/IEC 13818-1)
 type AVCVideo struct {
-	Header                        Header
-	AVC24HourPictureFlag          bool
-	AVCStillPresent               bool
-	FramePackingSEINotPresentFlag bool
-	ConstraintSet0Flag            bool
-	ConstraintSet1Flag            bool
-	ConstraintSet2Flag            bool
-	ConstraintSet3Flag            bool
-	ConstraintSet4Flag            bool
-	ConstraintSet5Flag            bool
-	CompatibleFlags               uint8
-	LevelIDC                      uint8
-	ProfileIDC                    uint8
+	Header                        Header `json:"_header"`
+	AVC24HourPictureFlag          bool   `json:"AVC_24_hour_picture_flag"`
+	AVCStillPresent               bool   `json:"AVC_still_present"`
+	FramePackingSEINotPresentFlag bool   `json:"Frame_Packing_SEI_not_present_flag"`
+	ConstraintSet0Flag            bool   `json:"constraint_set0_flag"`
+	ConstraintSet1Flag            bool   `json:"constraint_set1_flag"`
+	ConstraintSet2Flag            bool   `json:"constraint_set2_flag"`
+	ConstraintSet3Flag            bool   `json:"constraint_set3_flag"`
+	ConstraintSet4Flag            bool   `json:"constraint_set4_flag"`
+	ConstraintSet5Flag            bool   `json:"constraint_set5_flag"`
+	CompatibleFlags               uint8  `json:"AVC_compatible_flags"`
+	LevelIDC                      uint8  `json:"level_idc"`
+	ProfileIDC                    uint8  `json:"profile_idc"`
 }
 
 func newDescriptorAVCVideo(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {

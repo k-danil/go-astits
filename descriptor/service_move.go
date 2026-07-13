@@ -11,10 +11,10 @@ import (
 // service being moved between transport streams.
 // Chapter: 6.2.36 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type ServiceMove struct {
-	Header               Header
-	NewOriginalNetworkID uint16
-	NewTransportStreamID uint16
-	NewServiceID         uint16
+	Header               Header `json:"_header"`
+	NewOriginalNetworkID uint16 `json:"new_original_network_id"`
+	NewTransportStreamID uint16 `json:"new_transport_stream_id"`
+	NewServiceID         uint16 `json:"new_service_id"`
 }
 
 func newDescriptorServiceMove(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {

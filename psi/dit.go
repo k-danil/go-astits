@@ -11,7 +11,7 @@ import (
 // transition flag. It has neither a syntax header nor a CRC.
 // Page: 40 | Chapter: 5.2.9 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type DIT struct {
-	TransitionFlag bool
+	TransitionFlag bool `json:"transition_flag"`
 }
 
 // parseDITSection parses a DIT section

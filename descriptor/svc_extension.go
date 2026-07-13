@@ -10,18 +10,18 @@ import (
 
 // SVCExtension is the MPEG-2 systems SVC extension descriptor (ISO/IEC 13818-1).
 type SVCExtension struct {
-	Header              Header
-	Width               uint16
-	Height              uint16
-	FrameRate           uint16 // frames per 256 seconds
-	AverageBitrate      uint16 // kbit/s
-	MaximumBitrate      uint16 // kbit/s
-	DependencyID        uint8
-	QualityIDStart      uint8
-	QualityIDEnd        uint8
-	TemporalIDStart     uint8
-	TemporalIDEnd       uint8
-	NoSEINALUnitPresent bool
+	Header              Header `json:"_header"`
+	Width               uint16 `json:"width"`
+	Height              uint16 `json:"height"`
+	FrameRate           uint16 `json:"frame_rate"`      // frames per 256 seconds
+	AverageBitrate      uint16 `json:"average_bitrate"` // kbit/s
+	MaximumBitrate      uint16 `json:"maximum_bitrate"` // kbit/s
+	DependencyID        uint8  `json:"dependency_id"`
+	QualityIDStart      uint8  `json:"quality_id_start"`
+	QualityIDEnd        uint8  `json:"quality_id_end"`
+	TemporalIDStart     uint8  `json:"temporal_id_start"`
+	TemporalIDEnd       uint8  `json:"temporal_id_end"`
+	NoSEINALUnitPresent bool   `json:"no_sei_nal_unit_present"`
 }
 
 func newDescriptorSVCExtension(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {

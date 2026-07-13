@@ -8,8 +8,8 @@ import (
 
 // MaximumBitrate represents a maximum bitrate descriptor
 type MaximumBitrate struct {
-	Bitrate uint32 // In bytes/second
-	Header  Header
+	Bitrate uint32 `json:"bit_rate"` // In bytes/second
+	Header  Header `json:"_header"`
 }
 
 func newDescriptorMaximumBitrate(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {

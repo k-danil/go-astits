@@ -8,17 +8,17 @@ import (
 
 // ContentLabeling represents a content labelling descriptor (ISO/IEC 13818-1).
 type ContentLabeling struct {
-	ContentReferenceID                  []byte
-	TimeBaseAssociationData             []byte
-	PrivateData                         []byte
-	ContentTimeBaseValue                uint64 // 90 kHz units
-	MetadataTimeBaseValue               uint64 // 90 kHz units
-	MetadataApplicationFormatIdentifier uint32
-	Header                              Header
-	MetadataApplicationFormat           uint16
-	ContentTimeBaseIndicator            uint8
-	ContentID                           uint8
-	ContentReferenceIDRecordFlag        bool
+	ContentReferenceID                  []byte `json:"content_reference_id_byte"`
+	TimeBaseAssociationData             []byte `json:"time_base_association_data"`
+	PrivateData                         []byte `json:"private_data_byte"`
+	ContentTimeBaseValue                uint64 `json:"content_time_base_value"`  // 90 kHz units
+	MetadataTimeBaseValue               uint64 `json:"metadata_time_base_value"` // 90 kHz units
+	MetadataApplicationFormatIdentifier uint32 `json:"metadata_application_format_identifier"`
+	Header                              Header `json:"_header"`
+	MetadataApplicationFormat           uint16 `json:"metadata_application_format"`
+	ContentTimeBaseIndicator            uint8  `json:"content_time_base_indicator"`
+	ContentID                           uint8  `json:"contentId"`
+	ContentReferenceIDRecordFlag        bool   `json:"content_reference_id_record_flag"`
 }
 
 func newDescriptorContentLabeling(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {

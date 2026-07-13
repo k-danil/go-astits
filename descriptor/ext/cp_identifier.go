@@ -11,7 +11,7 @@ import (
 // systems a bouquet, service or event is associated with.
 // Chapter: 6.4.3 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type CPIdentifier struct {
-	SystemIDs []uint16
+	SystemIDs []uint16 `json:"_CP_system_ids"`
 }
 
 func parseCPIdentifier(i *bytesiter.Iterator, offsetEnd int) (d *CPIdentifier, err error) {

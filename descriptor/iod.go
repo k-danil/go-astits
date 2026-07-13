@@ -8,10 +8,10 @@ import (
 
 // IOD is the MPEG-2 systems IOD descriptor (ISO/IEC 13818-1).
 type IOD struct {
-	InitialObjectDescriptor []byte // defined in ISO/IEC 14496-1
-	Header                  Header
-	ScopeOfIODLabel         uint8
-	IODLabel                uint8
+	InitialObjectDescriptor []byte `json:"InitialObjectDescriptor"` // defined in ISO/IEC 14496-1
+	Header                  Header `json:"_header"`
+	ScopeOfIODLabel         uint8  `json:"Scope_of_IOD_label"`
+	IODLabel                uint8  `json:"IOD_label"`
 }
 
 func newDescriptorIOD(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {

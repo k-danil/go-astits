@@ -11,9 +11,9 @@ import (
 // of a terrestrial network in which a service is (un)available.
 // Chapter: 6.2.34 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type ServiceAvailability struct {
-	CellIDs          []uint16
-	Header           Header
-	AvailabilityFlag bool
+	CellIDs          []uint16 `json:"cell_ids"`
+	Header           Header   `json:"_header"`
+	AvailabilityFlag bool     `json:"availability_flag"`
 }
 
 func newDescriptorServiceAvailability(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {

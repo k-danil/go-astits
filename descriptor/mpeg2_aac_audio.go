@@ -8,10 +8,10 @@ import (
 
 // MPEG2AACAudio is the MPEG-2 systems MPEG-2_AAC_audio_descriptor (ISO/IEC 13818-1).
 type MPEG2AACAudio struct {
-	Header                Header
-	Profile               uint8
-	ChannelConfiguration  uint8
-	AdditionalInformation uint8
+	Header                Header `json:"_header"`
+	Profile               uint8  `json:"MPEG-2_AAC_profile"`
+	ChannelConfiguration  uint8  `json:"MPEG-2_AAC_channel_configuration"`
+	AdditionalInformation uint8  `json:"MPEG-2_AAC_additional_information"`
 }
 
 func newDescriptorMPEG2AACAudio(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {

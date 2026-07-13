@@ -2,6 +2,7 @@ package ts
 
 import (
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"sync"
 
@@ -9,12 +10,38 @@ import (
 )
 
 // Scrambling Controls
+type ScramblingControl uint8
+
 const (
-	ScramblingControlNotScrambled         = 0
-	ScramblingControlReservedForFutureUse = 1
-	ScramblingControlScrambledWithEvenKey = 2
-	ScramblingControlScrambledWithOddKey  = 3
+	ScramblingControlNotScrambled         ScramblingControl = 0
+	ScramblingControlReservedForFutureUse ScramblingControl = 1
+	ScramblingControlScrambledWithEvenKey ScramblingControl = 2
+	ScramblingControlScrambledWithOddKey  ScramblingControl = 3
 )
+
+var scramblingControlNames = map[ScramblingControl]string{
+	ScramblingControlNotScrambled:         "not_scrambled",
+	ScramblingControlReservedForFutureUse: "reserved_for_future_use",
+	ScramblingControlScrambledWithEvenKey: "scrambled_with_even_key",
+	ScramblingControlScrambledWithOddKey:  "scrambled_with_odd_key",
+}
+
+func (c ScramblingControl) String() (s string) {
+	var ok bool
+	if s, ok = scramblingControlNames[c]; !ok {
+		s = fmt.Sprintf("0x%02x", uint8(c))
+	}
+	return
+}
+
+func (c ScramblingControl) MarshalJSON() (b []byte, err error) {
+	return json.Marshal(c.String())
+}
+
+func (c *ScramblingControl) UnmarshalJSON(b []byte) (err error) {
+	*c, err = util.UnmarshalEnum(b, scramblingControlNames)
+	return
+}
 
 const (
 	PacketSize     = 188
@@ -38,15 +65,15 @@ type Packet struct {
 	raw []byte                // the on-wire bytes: a subslice of bs in copy mode, a batch view in zero-copy mode
 	af  PacketAdaptationField // AdaptationField points here — no per-packet allocation
 
-	Header          PacketHeader
-	AdaptationField *PacketAdaptationField
-	Payload         []byte // This is only the payload content
-	Prefix          []byte // the 192-byte M2TS TP_extra_header (4 bytes); empty otherwise. See ArrivalTimeStamp.
+	Header          PacketHeader           `json:"_header"`
+	AdaptationField *PacketAdaptationField `json:"adaptation_field"`
+	Payload         []byte                 `json:"data_byte"` // This is only the payload content
+	Prefix          []byte                 `json:"_prefix"`   // the 192-byte M2TS TP_extra_header (4 bytes); empty otherwise. See ArrivalTimeStamp.
 
 	// Offset is the byte offset of the raw packet start (including any M2TS prefix)
 	// within the demuxed stream, counted from the Demuxer's first packet. Packets
 	// dropped by a PacketSkipper advance it too, so it stays a valid byte map.
-	Offset int64
+	Offset int64 `json:"_offset"`
 }
 
 // UpdateHeader re-serializes Header into the packet bytes; call it after
@@ -61,35 +88,35 @@ func (p *Packet) UpdateHeader() {
 
 // PacketHeader represents a packet header
 type PacketHeader struct {
-	ContinuityCounter          uint8 // Sequence number of payload packets (0x00 to 0x0F) within each stream (except PID 8191)
-	HasAdaptationField         bool
-	HasPayload                 bool
-	PayloadUnitStartIndicator  bool   // Set when a PES, PSI, or DVB-MIP packet begins immediately following the header.
-	PID                        uint16 // Packet Identifier, describing the payload data.
-	TransportErrorIndicator    bool   // Set when a demodulator can't correct errors from FEC data; indicating the packet is corrupt.
-	TransportPriority          bool   // Set when the current packet has a higher priority than other packets with the same PID.
-	TransportScramblingControl uint8
+	ContinuityCounter          uint8             `json:"continuity_counter"` // Sequence number of payload packets (0x00 to 0x0F) within each stream (except PID 8191)
+	HasAdaptationField         bool              `json:"_has_adaptation_field"`
+	HasPayload                 bool              `json:"_has_payload"`
+	PayloadUnitStartIndicator  bool              `json:"payload_unit_start_indicator"` // Set when a PES, PSI, or DVB-MIP packet begins immediately following the header.
+	PID                        uint16            `json:"PID"`                          // Packet Identifier, describing the payload data.
+	TransportErrorIndicator    bool              `json:"transport_error_indicator"`    // Set when a demodulator can't correct errors from FEC data; indicating the packet is corrupt.
+	TransportPriority          bool              `json:"transport_priority"`           // Set when the current packet has a higher priority than other packets with the same PID.
+	TransportScramblingControl ScramblingControl `json:"transport_scrambling_control"`
 }
 
 // PacketAdaptationField represents a packet adaptation field
 type PacketAdaptationField struct {
-	AdaptationExtensionField          *PacketAdaptationExtensionField
-	OPCR                              ClockReference // Original Program clock reference. Helps when one TS is copied into another
-	PCR                               ClockReference // Program clock reference
-	TransportPrivateData              []byte         // a view into the packet buffer after parse; CopyFrom takes an owned copy
-	TransportPrivateDataLength        uint8
-	Length                            uint8
-	StuffingLength                    uint8 // Only used in writePacketAdaptationField to request stuffing
-	SpliceCountdown                   int8  // TS packets from this one until the splicing point; negative once it has passed.
-	IsOneByteStuffing                 bool  // Only used for one byte stuffing - if true, adaptation field will be written as one uint8(0). Not part of TS format
-	DiscontinuityIndicator            bool  // Set if current TS packet is in a discontinuity state with respect to either the continuity counter or the program clock reference
-	RandomAccessIndicator             bool  // Set when the stream may be decoded without errors from this point
-	ElementaryStreamPriorityIndicator bool  // Set when this stream should be considered "high priority"
-	HasPCR                            bool
-	HasOPCR                           bool
-	HasSplicingCountdown              bool
-	HasTransportPrivateData           bool
-	HasAdaptationExtensionField       bool
+	AdaptationExtensionField          *PacketAdaptationExtensionField `json:"adaptation_field_extension"`
+	OPCR                              ClockReference                  `json:"OPCR"`              // Original Program clock reference. Helps when one TS is copied into another
+	PCR                               ClockReference                  `json:"PCR"`               // Program clock reference
+	TransportPrivateData              []byte                          `json:"private_data_byte"` // a view into the packet buffer after parse; CopyFrom takes an owned copy
+	TransportPrivateDataLength        uint8                           `json:"transport_private_data_length"`
+	Length                            uint8                           `json:"adaptation_field_length"`
+	StuffingLength                    uint8                           `json:"_stuffing_length"`                     // Only used in writePacketAdaptationField to request stuffing
+	SpliceCountdown                   int8                            `json:"splice_countdown"`                     // TS packets from this one until the splicing point; negative once it has passed.
+	IsOneByteStuffing                 bool                            `json:"_is_one_byte_stuffing"`                // Only used for one byte stuffing - if true, adaptation field will be written as one uint8(0). Not part of TS format
+	DiscontinuityIndicator            bool                            `json:"discontinuity_indicator"`              // Set if current TS packet is in a discontinuity state with respect to either the continuity counter or the program clock reference
+	RandomAccessIndicator             bool                            `json:"random_access_indicator"`              // Set when the stream may be decoded without errors from this point
+	ElementaryStreamPriorityIndicator bool                            `json:"elementary_stream_priority_indicator"` // Set when this stream should be considered "high priority"
+	HasPCR                            bool                            `json:"PCR_flag"`
+	HasOPCR                           bool                            `json:"OPCR_flag"`
+	HasSplicingCountdown              bool                            `json:"splicing_point_flag"`
+	HasTransportPrivateData           bool                            `json:"transport_private_data_flag"`
+	HasAdaptationExtensionField       bool                            `json:"adaptation_field_extension_flag"`
 }
 
 // Reset clears everything parse may NOT overwrite: pointers/slices must not outlive
@@ -115,17 +142,17 @@ func (af *PacketAdaptationField) CopyFrom(src *PacketAdaptationField) {
 
 // PacketAdaptationExtensionField represents a packet adaptation extension field
 type PacketAdaptationExtensionField struct {
-	DTSNextAccessUnit      ClockReference // The PES DTS of the splice point. Split up as 3 bits, 1 marker bit (0x1), 15 bits, 1 marker bit, 15 bits, and 1 marker bit, for 33 data bits total.
-	AFDescriptors          []byte         // Raw af_descriptor() payload (H.222.0 Annex U), kept verbatim; present when HasAFDescriptors.
-	PiecewiseRate          uint32         // The rate of the stream, measured in 188-byte packets, to define the end-time of the LTW.
-	LegalTimeWindowOffset  uint16         // Extra information for rebroadcasters to determine the state of buffers when packets may be missing.
-	LegalTimeWindowIsValid bool
-	HasLegalTimeWindow     bool
-	HasPiecewiseRate       bool
-	HasSeamlessSplice      bool
-	HasAFDescriptors       bool // af_descriptor_not_present_flag == 0
-	Length                 uint8
-	SpliceType             uint8 // Indicates the parameters of the H.262 splice.
+	DTSNextAccessUnit      ClockReference `json:"DTS_next_AU"`    // The PES DTS of the splice point. Split up as 3 bits, 1 marker bit (0x1), 15 bits, 1 marker bit, 15 bits, and 1 marker bit, for 33 data bits total.
+	AFDescriptors          []byte         `json:"AF_descriptors"` // Raw af_descriptor() payload (H.222.0 Annex U), kept verbatim; present when HasAFDescriptors.
+	PiecewiseRate          uint32         `json:"piecewise_rate"` // The rate of the stream, measured in 188-byte packets, to define the end-time of the LTW.
+	LegalTimeWindowOffset  uint16         `json:"ltw_offset"`     // Extra information for rebroadcasters to determine the state of buffers when packets may be missing.
+	LegalTimeWindowIsValid bool           `json:"ltw_valid_flag"`
+	HasLegalTimeWindow     bool           `json:"ltw_flag"`
+	HasPiecewiseRate       bool           `json:"piecewise_rate_flag"`
+	HasSeamlessSplice      bool           `json:"seamless_splice_flag"`
+	HasAFDescriptors       bool           `json:"_has_af_descriptors"` // af_descriptor_not_present_flag == 0
+	Length                 uint8          `json:"adaptation_field_extension_length"`
+	SpliceType             uint8          `json:"splice_type"` // Indicates the parameters of the H.262 splice.
 }
 
 // NewPacket returns a zeroed packet from the pool; return it with Close when
@@ -258,7 +285,7 @@ func (ph *PacketHeader) parseBytes(h uint32) {
 	ph.PayloadUnitStartIndicator = b0&0x40 > 0
 	ph.TransportPriority = b0&0x20 > 0
 	ph.PID = uint16(h>>8) & 0x1fff
-	ph.TransportScramblingControl = b2 >> 6 & 0x3
+	ph.TransportScramblingControl = ScramblingControl(b2 >> 6 & 0x3)
 	ph.HasAdaptationField = b2&0x20 > 0
 	ph.HasPayload = b2&0x10 > 0
 	ph.ContinuityCounter = b2 & 0xf

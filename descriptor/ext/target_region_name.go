@@ -11,19 +11,19 @@ import (
 // descriptor: the names of target regions within a country, in one language.
 // Chapter: 6.4.12 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type TargetRegionName struct {
-	Regions     []NamedRegion
-	CountryCode [3]byte
-	Language    [3]byte
+	Regions     []NamedRegion `json:"_regions"`
+	CountryCode [3]byte       `json:"country_code"`
+	Language    [3]byte       `json:"ISO_639_language_code"`
 }
 
 // NamedRegion is one named region. SecondaryRegionCode is present for
 // RegionDepth >= 2 and TertiaryRegionCode for RegionDepth == 3.
 type NamedRegion struct {
-	RegionName          []byte
-	TertiaryRegionCode  uint16
-	RegionDepth         uint8
-	PrimaryRegionCode   uint8
-	SecondaryRegionCode uint8
+	RegionName          []byte `json:"region_name"`
+	TertiaryRegionCode  uint16 `json:"tertiary_region_code"`
+	RegionDepth         uint8  `json:"region_depth"`
+	PrimaryRegionCode   uint8  `json:"primary_region_code"`
+	SecondaryRegionCode uint8  `json:"secondary_region_code"`
 }
 
 func parseTargetRegionName(i *bytesiter.Iterator, offsetEnd int) (d *TargetRegionName, err error) {

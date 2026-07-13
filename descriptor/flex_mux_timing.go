@@ -9,11 +9,11 @@ import (
 
 // FlexMuxTiming is the MPEG-2 systems FlexMuxTiming_descriptor (ISO/IEC 13818-1).
 type FlexMuxTiming struct {
-	FCRResolution uint32 // cycles per second
-	Header        Header
-	FCRESID       uint16
-	FCRLength     uint8
-	FmxRateLength uint8
+	FCRResolution uint32 `json:"FCRResolution"` // cycles per second
+	Header        Header `json:"_header"`
+	FCRESID       uint16 `json:"FCR_ES_ID"`
+	FCRLength     uint8  `json:"FCRLength"`
+	FmxRateLength uint8  `json:"FmxRateLength"`
 }
 
 func newDescriptorFlexMuxTiming(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {

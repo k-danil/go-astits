@@ -11,12 +11,12 @@ import (
 // AC4ConfigFlag and the TOC when AC4TOCFlag.
 // Chapter: D.7 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type AC4 struct {
-	TOC                         []byte
-	AdditionalInfo              []byte
-	AC4ChannelMode              uint8
-	AC4ConfigFlag               bool
-	AC4TOCFlag                  bool
-	AC4DialogEnhancementEnabled bool
+	TOC                         []byte `json:"ac4_dsi_byte"`
+	AdditionalInfo              []byte `json:"additional_info"`
+	AC4ChannelMode              uint8  `json:"ac4_channel_mode"`
+	AC4ConfigFlag               bool   `json:"ac4_config_flag"`
+	AC4TOCFlag                  bool   `json:"ac4_toc_flag"`
+	AC4DialogEnhancementEnabled bool   `json:"ac4_dialog_enhancement_enabled"`
 }
 
 func parseAC4(i *bytesiter.Iterator, offsetEnd int) (d *AC4, err error) {

@@ -12,7 +12,7 @@ import (
 // loop is bounded by the section length, like a CAT.
 // Chapter: 2.4.4.12 | Link: ISO/IEC 13818-1
 type TSDT struct {
-	Descriptors []descriptor.Descriptor
+	Descriptors []descriptor.Descriptor `json:"_descriptors"`
 }
 
 // parseTSDTSection parses a TSDT section

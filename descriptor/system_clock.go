@@ -9,10 +9,10 @@ import (
 
 // SystemClock is the MPEG-2 systems system_clock_descriptor (ISO/IEC 13818-1).
 type SystemClock struct {
-	Header                          Header
-	ClockAccuracyInteger            uint8
-	ClockAccuracyExponent           uint8
-	ExternalClockReferenceIndicator bool
+	Header                          Header `json:"_header"`
+	ClockAccuracyInteger            uint8  `json:"clock_accuracy_integer"`
+	ClockAccuracyExponent           uint8  `json:"clock_accuracy_exponent"`
+	ExternalClockReferenceIndicator bool   `json:"external_clock_reference_indicator"`
 }
 
 func newDescriptorSystemClock(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {

@@ -2,9 +2,11 @@ package descriptor
 
 import (
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 
 	"github.com/k-danil/go-astits/v2/internal/bytesiter"
+	"github.com/k-danil/go-astits/v2/internal/util"
 )
 
 // Tag identifies a descriptor type on the wire.
@@ -116,6 +118,128 @@ const (
 	TagVideoStream                  Tag = 0x2
 	TagVideoWindow                  Tag = 0x8
 )
+
+var tagNames = map[Tag]string{
+	TagAAC:                          "AAC_descriptor",
+	TagAC3:                          "AC-3_descriptor",
+	TagAVCTimingAndHRD:              "AVC_timing_and_HRD_descriptor",
+	TagAVCVideo:                     "AVC_video_descriptor",
+	TagAdaptationFieldData:          "adaptation_field_data_descriptor",
+	TagAncillaryData:                "ancillary_data_descriptor",
+	TagAnnouncementSupport:          "announcement_support_descriptor",
+	TagAudioStream:                  "audio_stream_descriptor",
+	TagAuxiliaryVideoStream:         "Auxiliary_video_stream_descriptor",
+	TagBouquetName:                  "bouquet_name_descriptor",
+	TagCA:                           "CA_descriptor",
+	TagCAIdentifier:                 "CA_identifier_descriptor",
+	TagCableDeliverySystem:          "cable_delivery_system_descriptor",
+	TagCellFrequencyLink:            "cell_frequency_link_descriptor",
+	TagCellList:                     "cell_list_descriptor",
+	TagComponent:                    "component_descriptor",
+	TagContent:                      "content_descriptor",
+	TagContentLabeling:              "content_labeling_descriptor",
+	TagCopyright:                    "copyright_descriptor",
+	TagCountryAvailability:          "country_availability_descriptor",
+	TagDSNG:                         "DSNG_descriptor",
+	TagDTS:                          "DTS_audio_stream_descriptor",
+	TagDataBroadcast:                "data_broadcast_descriptor",
+	TagDataBroadcastID:              "data_broadcast_id_descriptor",
+	TagDataStreamAlignment:          "data_stream_alignment_descriptor",
+	TagEnhancedAC3:                  "enhanced_AC-3_descriptor",
+	TagExtendedEvent:                "extended_event_descriptor",
+	TagExtension:                    "extension_descriptor",
+	TagExternalESID:                 "external_ES_ID_descriptor",
+	TagFMC:                          "FMC_descriptor",
+	TagFTAContentManagement:         "FTA_content_management_descriptor",
+	TagFlexMuxTiming:                "FlexMuxTiming_descriptor",
+	TagFmxBufferSize:                "FmxBufferSize_descriptor",
+	TagFrequencyList:                "frequency_list_descriptor",
+	TagHEVCVideo:                    "HEVC_video_descriptor",
+	TagHierarchy:                    "hierarchy_descriptor",
+	TagIBP:                          "IBP_descriptor",
+	TagIOD:                          "IOD_descriptor",
+	TagISO639LanguageAndAudioType:   "ISO_639_language_descriptor",
+	TagJ2KVideo:                     "J2K_video_descriptor",
+	TagLinkage:                      "linkage_descriptor",
+	TagLocalTimeOffset:              "local_time_offset_descriptor",
+	TagMPEG2AACAudio:                "MPEG-2_AAC_audio_descriptor",
+	TagMPEG2StereoscopicVideoFormat: "MPEG2_stereoscopic_video_format_descriptor",
+	TagMPEG4Audio:                   "MPEG-4_audio_descriptor",
+	TagMPEG4AudioExtension:          "MPEG-4_audio_extension_descriptor",
+	TagMPEG4Text:                    "MPEG-4_text_descriptor",
+	TagMPEG4Video:                   "MPEG-4_video_descriptor",
+	TagMPEGExtension:                "Extension_descriptor",
+	TagMVCExtension:                 "MVC_extension_descriptor",
+	TagMVCOperationPoint:            "MVC_operation_point_descriptor",
+	TagMaximumBitrate:               "maximum_bitrate_descriptor",
+	TagMetadata:                     "metadata_descriptor",
+	TagMetadataPointer:              "metadata_pointer_descriptor",
+	TagMetadataSTD:                  "metadata_STD_descriptor",
+	TagMosaic:                       "mosaic_descriptor",
+	TagMultilingualBouquetName:      "multilingual_bouquet_name_descriptor",
+	TagMultilingualComponent:        "multilingual_component_descriptor",
+	TagMultilingualNetworkName:      "multilingual_network_name_descriptor",
+	TagMultilingualServiceName:      "multilingual_service_name_descriptor",
+	TagMultiplexBuffer:              "multiplexBuffer_descriptor",
+	TagMultiplexBufferUtilization:   "multiplex_buffer_utilization_descriptor",
+	TagMuxCode:                      "MuxCode_descriptor",
+	TagNVODReference:                "NVOD_reference_descriptor",
+	TagNetworkName:                  "network_name_descriptor",
+	TagPDC:                          "PDC_descriptor",
+	TagParentalRating:               "parental_rating_descriptor",
+	TagPartialTransportStream:       "partial_transport_stream_descriptor",
+	TagPrivateDataIndicator:         "private_data_indicator_descriptor",
+	TagPrivateDataSpecifier:         "private_data_specifier_descriptor",
+	TagRegistration:                 "registration_descriptor",
+	TagS2SatelliteDeliverySystem:    "S2_satellite_delivery_system_descriptor",
+	TagSL:                           "SL_descriptor",
+	TagSTD:                          "STD_descriptor",
+	TagSVCExtension:                 "SVC_extension_descriptor",
+	TagSatelliteDeliverySystem:      "satellite_delivery_system_descriptor",
+	TagScrambling:                   "scrambling_descriptor",
+	TagService:                      "service_descriptor",
+	TagServiceAvailability:          "service_availability_descriptor",
+	TagServiceList:                  "service_list_descriptor",
+	TagServiceMove:                  "service_move_descriptor",
+	TagShortEvent:                   "short_event_descriptor",
+	TagShortSmoothingBuffer:         "short_smoothing_buffer_descriptor",
+	TagSmoothingBuffer:              "smoothing_buffer_descriptor",
+	TagStereoscopicProgramInfo:      "Stereoscopic_program_info_descriptor",
+	TagStereoscopicVideoInfo:        "Stereoscopic_video_info_descriptor",
+	TagStreamIdentifier:             "stream_identifier_descriptor",
+	TagStuffing:                     "stuffing_descriptor",
+	TagSubtitling:                   "subtitling_descriptor",
+	TagSystemClock:                  "system_clock_descriptor",
+	TagTargetBackgroundGrid:         "target_background_grid_descriptor",
+	TagTelephone:                    "telephone_descriptor",
+	TagTeletext:                     "teletext_descriptor",
+	TagTerrestrialDeliverySystem:    "terrestrial_delivery_system_descriptor",
+	TagTimeShiftedEvent:             "time_shifted_event_descriptor",
+	TagTimeShiftedService:           "time_shifted_service_descriptor",
+	TagTransportProfile:             "Transport_profile_descriptor",
+	TagTransportStream:              "transport_stream_descriptor",
+	TagVBIData:                      "VBI_data_descriptor",
+	TagVBITeletext:                  "VBI_teletext_descriptor",
+	TagVideoStream:                  "video_stream_descriptor",
+	TagVideoWindow:                  "video_window_descriptor",
+}
+
+func (t Tag) String() (s string) {
+	var ok bool
+	if s, ok = tagNames[t]; !ok {
+		s = fmt.Sprintf("0x%02x", uint8(t))
+	}
+	return
+}
+
+func (t Tag) MarshalJSON() (b []byte, err error) {
+	return json.Marshal(t.String())
+}
+
+func (t *Tag) UnmarshalJSON(b []byte) (err error) {
+	*t, err = util.UnmarshalEnum(b, tagNames)
+	return
+}
 
 // Parse parses a length-prefixed descriptor list; n is the number of bytes
 // consumed (2-byte length prefix plus the descriptors).
@@ -240,12 +364,13 @@ type Descriptor interface {
 	CalcLength() int
 	// Append appends the serialized descriptor (tag, length, body) to dst.
 	Append(dst []byte) []byte
+	Tag() Tag
 }
 
 // Header is the 2-byte tag+length prefix common to every descriptor.
 type Header struct {
-	Tag    Tag // the tag defines the structure of the contained data following the descriptor length.
-	Length uint8
+	Tag    Tag   `json:"descriptor_tag"` // the tag defines the structure of the contained data following the descriptor length.
+	Length uint8 `json:"descriptor_length"`
 }
 
 // userDefinedTagsStart is the bottom of the user-defined tag range
@@ -465,3 +590,107 @@ func (dh Header) parseDescriptor(i *bytesiter.Iterator, offsetEnd int) (d Descri
 		return newDescriptorUnknown(i, dh, offsetEnd)
 	}
 }
+
+func (*AAC) Tag() Tag                          { return TagAAC }
+func (*AC3) Tag() Tag                          { return TagAC3 }
+func (*AVCTimingAndHRD) Tag() Tag              { return TagAVCTimingAndHRD }
+func (*AVCVideo) Tag() Tag                     { return TagAVCVideo }
+func (*AdaptationFieldData) Tag() Tag          { return TagAdaptationFieldData }
+func (*AncillaryData) Tag() Tag                { return TagAncillaryData }
+func (*AnnouncementSupport) Tag() Tag          { return TagAnnouncementSupport }
+func (*AudioStream) Tag() Tag                  { return TagAudioStream }
+func (*AuxiliaryVideoStream) Tag() Tag         { return TagAuxiliaryVideoStream }
+func (*BouquetName) Tag() Tag                  { return TagBouquetName }
+func (*CA) Tag() Tag                           { return TagCA }
+func (*CAIdentifier) Tag() Tag                 { return TagCAIdentifier }
+func (*CableDeliverySystem) Tag() Tag          { return TagCableDeliverySystem }
+func (*CellFrequencyLink) Tag() Tag            { return TagCellFrequencyLink }
+func (*CellList) Tag() Tag                     { return TagCellList }
+func (*Component) Tag() Tag                    { return TagComponent }
+func (*Content) Tag() Tag                      { return TagContent }
+func (*ContentLabeling) Tag() Tag              { return TagContentLabeling }
+func (*Copyright) Tag() Tag                    { return TagCopyright }
+func (*CountryAvailability) Tag() Tag          { return TagCountryAvailability }
+func (*DSNG) Tag() Tag                         { return TagDSNG }
+func (*DTS) Tag() Tag                          { return TagDTS }
+func (*DataBroadcast) Tag() Tag                { return TagDataBroadcast }
+func (*DataBroadcastID) Tag() Tag              { return TagDataBroadcastID }
+func (*DataStreamAlignment) Tag() Tag          { return TagDataStreamAlignment }
+func (*EnhancedAC3) Tag() Tag                  { return TagEnhancedAC3 }
+func (*ExtendedEvent) Tag() Tag                { return TagExtendedEvent }
+func (*Extension) Tag() Tag                    { return TagExtension }
+func (*ExternalESID) Tag() Tag                 { return TagExternalESID }
+func (*FMC) Tag() Tag                          { return TagFMC }
+func (*FTAContentManagement) Tag() Tag         { return TagFTAContentManagement }
+func (*FlexMuxTiming) Tag() Tag                { return TagFlexMuxTiming }
+func (*FmxBufferSize) Tag() Tag                { return TagFmxBufferSize }
+func (*FrequencyList) Tag() Tag                { return TagFrequencyList }
+func (*HEVCVideo) Tag() Tag                    { return TagHEVCVideo }
+func (*Hierarchy) Tag() Tag                    { return TagHierarchy }
+func (*IBP) Tag() Tag                          { return TagIBP }
+func (*IOD) Tag() Tag                          { return TagIOD }
+func (*ISO639LanguageAndAudioType) Tag() Tag   { return TagISO639LanguageAndAudioType }
+func (*J2KVideo) Tag() Tag                     { return TagJ2KVideo }
+func (*Linkage) Tag() Tag                      { return TagLinkage }
+func (*LocalTimeOffset) Tag() Tag              { return TagLocalTimeOffset }
+func (*MPEG2AACAudio) Tag() Tag                { return TagMPEG2AACAudio }
+func (*MPEG2StereoscopicVideoFormat) Tag() Tag { return TagMPEG2StereoscopicVideoFormat }
+func (*MPEG4Audio) Tag() Tag                   { return TagMPEG4Audio }
+func (*MPEG4AudioExtension) Tag() Tag          { return TagMPEG4AudioExtension }
+func (*MPEG4Text) Tag() Tag                    { return TagMPEG4Text }
+func (*MPEG4Video) Tag() Tag                   { return TagMPEG4Video }
+func (*MPEGExtension) Tag() Tag                { return TagMPEGExtension }
+func (*MVCExtension) Tag() Tag                 { return TagMVCExtension }
+func (*MVCOperationPoint) Tag() Tag            { return TagMVCOperationPoint }
+func (*MaximumBitrate) Tag() Tag               { return TagMaximumBitrate }
+func (*Metadata) Tag() Tag                     { return TagMetadata }
+func (*MetadataPointer) Tag() Tag              { return TagMetadataPointer }
+func (*MetadataSTD) Tag() Tag                  { return TagMetadataSTD }
+func (*Mosaic) Tag() Tag                       { return TagMosaic }
+func (*MultilingualBouquetName) Tag() Tag      { return TagMultilingualBouquetName }
+func (*MultilingualComponent) Tag() Tag        { return TagMultilingualComponent }
+func (*MultilingualNetworkName) Tag() Tag      { return TagMultilingualNetworkName }
+func (*MultilingualServiceName) Tag() Tag      { return TagMultilingualServiceName }
+func (*MultiplexBuffer) Tag() Tag              { return TagMultiplexBuffer }
+func (*MultiplexBufferUtilization) Tag() Tag   { return TagMultiplexBufferUtilization }
+func (*MuxCode) Tag() Tag                      { return TagMuxCode }
+func (*NVODReference) Tag() Tag                { return TagNVODReference }
+func (*NetworkName) Tag() Tag                  { return TagNetworkName }
+func (*PDC) Tag() Tag                          { return TagPDC }
+func (*ParentalRating) Tag() Tag               { return TagParentalRating }
+func (*PartialTransportStream) Tag() Tag       { return TagPartialTransportStream }
+func (*PrivateDataIndicator) Tag() Tag         { return TagPrivateDataIndicator }
+func (*PrivateDataSpecifier) Tag() Tag         { return TagPrivateDataSpecifier }
+func (*Registration) Tag() Tag                 { return TagRegistration }
+func (*S2SatelliteDeliverySystem) Tag() Tag    { return TagS2SatelliteDeliverySystem }
+func (*SL) Tag() Tag                           { return TagSL }
+func (*STD) Tag() Tag                          { return TagSTD }
+func (*SVCExtension) Tag() Tag                 { return TagSVCExtension }
+func (*SatelliteDeliverySystem) Tag() Tag      { return TagSatelliteDeliverySystem }
+func (*Scrambling) Tag() Tag                   { return TagScrambling }
+func (*Service) Tag() Tag                      { return TagService }
+func (*ServiceAvailability) Tag() Tag          { return TagServiceAvailability }
+func (*ServiceList) Tag() Tag                  { return TagServiceList }
+func (*ServiceMove) Tag() Tag                  { return TagServiceMove }
+func (*ShortEvent) Tag() Tag                   { return TagShortEvent }
+func (*ShortSmoothingBuffer) Tag() Tag         { return TagShortSmoothingBuffer }
+func (*SmoothingBuffer) Tag() Tag              { return TagSmoothingBuffer }
+func (*StereoscopicProgramInfo) Tag() Tag      { return TagStereoscopicProgramInfo }
+func (*StereoscopicVideoInfo) Tag() Tag        { return TagStereoscopicVideoInfo }
+func (*StreamIdentifier) Tag() Tag             { return TagStreamIdentifier }
+func (*Stuffing) Tag() Tag                     { return TagStuffing }
+func (*Subtitling) Tag() Tag                   { return TagSubtitling }
+func (*SystemClock) Tag() Tag                  { return TagSystemClock }
+func (*TargetBackgroundGrid) Tag() Tag         { return TagTargetBackgroundGrid }
+func (*Telephone) Tag() Tag                    { return TagTelephone }
+func (*Teletext) Tag() Tag                     { return TagTeletext }
+func (*TerrestrialDeliverySystem) Tag() Tag    { return TagTerrestrialDeliverySystem }
+func (*TimeShiftedEvent) Tag() Tag             { return TagTimeShiftedEvent }
+func (*TimeShiftedService) Tag() Tag           { return TagTimeShiftedService }
+func (*TransportProfile) Tag() Tag             { return TagTransportProfile }
+func (*TransportStream) Tag() Tag              { return TagTransportStream }
+func (d *Unknown) Tag() Tag                    { return d.Header.Tag }
+func (d *UserDefined) Tag() Tag                { return d.Header.Tag }
+func (*VBIData) Tag() Tag                      { return TagVBIData }
+func (*VideoStream) Tag() Tag                  { return TagVideoStream }
+func (*VideoWindow) Tag() Tag                  { return TagVideoWindow }

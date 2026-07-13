@@ -8,9 +8,9 @@ import (
 
 // SmoothingBuffer is the MPEG-2 systems smoothing_buffer_descriptor (ISO/IEC 13818-1).
 type SmoothingBuffer struct {
-	SbLeakRate uint32 // In units of 400 bits/s
-	SbSize     uint32 // In bytes
-	Header     Header
+	SbLeakRate uint32 `json:"sb_leak_rate"` // In units of 400 bits/s
+	SbSize     uint32 `json:"sb_size"`      // In bytes
+	Header     Header `json:"_header"`
 }
 
 func newDescriptorSmoothingBuffer(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {

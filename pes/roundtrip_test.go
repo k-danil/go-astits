@@ -15,12 +15,12 @@ const roundtripIterations = 500
 func randOptionalHeader(r *rand.Rand) *OptionalHeader {
 	h := &OptionalHeader{
 		MarkerBits:             2,
-		ScramblingControl:      uint8(r.UintN(4)),
+		ScramblingControl:      ScramblingControl(r.UintN(4)),
 		Priority:               r.UintN(2) == 1,
 		DataAlignmentIndicator: r.UintN(2) == 1,
 		IsCopyrighted:          r.UintN(2) == 1,
 		IsOriginal:             r.UintN(2) == 1,
-		PTSDTSIndicator:        []uint8{PTSDTSIndicatorNoPTSOrDTS, PTSDTSIndicatorOnlyPTS, PTSDTSIndicatorBothPresent}[r.UintN(3)],
+		PTSDTSIndicator:        []PTSDTSIndicator{PTSDTSIndicatorNoPTSOrDTS, PTSDTSIndicatorOnlyPTS, PTSDTSIndicatorBothPresent}[r.UintN(3)],
 		HasESCR:                r.UintN(2) == 1,
 		HasESRate:              r.UintN(2) == 1,
 		HasDSMTrickMode:        r.UintN(2) == 1,
@@ -68,7 +68,7 @@ func randOptionalHeader(r *rand.Rand) *OptionalHeader {
 			e.OriginalStuffingLength = uint8(r.UintN(64))
 		}
 		if e.HasPSTDBuffer {
-			e.PSTDBufferScale = uint8(r.UintN(2))
+			e.PSTDBufferScale = PSTDBufferScale(r.UintN(2))
 			e.PSTDBufferSize = uint16(r.UintN(1 << 13))
 		}
 		if e.HasExtension2 {

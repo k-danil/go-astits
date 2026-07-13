@@ -10,9 +10,9 @@ import (
 // Registration represents a registration descriptor
 // Page: 84 | http://ecee.colorado.edu/~ecen5653/ecen5653/papers/iso13818-1.pdf
 type Registration struct {
-	AdditionalIdentificationInfo []byte
-	FormatIdentifier             uint32
-	Header                       Header
+	AdditionalIdentificationInfo []byte `json:"additional_identification_info"`
+	FormatIdentifier             uint32 `json:"format_identifier"`
+	Header                       Header `json:"_header"`
 }
 
 func newDescriptorRegistration(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {

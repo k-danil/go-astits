@@ -12,18 +12,18 @@ import (
 // required to reassemble a channel-bundled transport stream.
 // Chapter: 6.4.5.4 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type C2BundleDeliverySystem struct {
-	Entries []C2BundleEntry
+	Entries []C2BundleEntry `json:"_entries"`
 }
 
 // C2BundleEntry is one bundled PLP of a C2 bundle delivery system descriptor
 type C2BundleEntry struct {
-	C2SystemTuningFrequency     uint32
-	PLPID                       uint8
-	DataSliceID                 uint8
-	C2SystemTuningFrequencyType uint8
-	ActiveOFDMSymbolDuration    uint8
-	GuardInterval               uint8
-	MasterChannel               bool
+	C2SystemTuningFrequency     uint32 `json:"C2_System_tuning_frequency"`
+	PLPID                       uint8  `json:"plp_id"`
+	DataSliceID                 uint8  `json:"data_slice_id"`
+	C2SystemTuningFrequencyType uint8  `json:"C2_System_tuning_frequency_type"`
+	ActiveOFDMSymbolDuration    uint8  `json:"active_OFDM_symbol_duration"`
+	GuardInterval               uint8  `json:"guard_interval"`
+	MasterChannel               bool   `json:"master_channel"`
 }
 
 func parseC2BundleDeliverySystem(i *bytesiter.Iterator, offsetEnd int) (d *C2BundleDeliverySystem, err error) {

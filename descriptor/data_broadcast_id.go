@@ -11,9 +11,9 @@ import (
 // the data broadcast descriptor for the PMT component loop.
 // Chapter: 6.2.12 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type DataBroadcastID struct {
-	Selector        []byte
-	Header          Header
-	DataBroadcastID uint16
+	Selector        []byte `json:"id_selector_byte"`
+	Header          Header `json:"_header"`
+	DataBroadcastID uint16 `json:"data_broadcast_id"`
 }
 
 func newDescriptorDataBroadcastID(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {

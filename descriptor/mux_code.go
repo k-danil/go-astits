@@ -8,8 +8,8 @@ import (
 
 // MuxCode is the MPEG-2 systems Muxcode descriptor (ISO/IEC 13818-1).
 type MuxCode struct {
-	MuxCodeTableEntries []byte
-	Header              Header
+	MuxCodeTableEntries []byte `json:"MuxCodeTableEntry"`
+	Header              Header `json:"_header"`
 }
 
 func newDescriptorMuxCode(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {

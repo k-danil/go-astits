@@ -10,10 +10,10 @@ import (
 // smoothing buffer size and leak rate signalling a service's bit-rate.
 // Chapter: 6.2.38 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type ShortSmoothingBuffer struct {
-	Reserved   []byte
-	Header     Header
-	SBSize     uint8
-	SBLeakRate uint8
+	Reserved   []byte `json:"_reserved"`
+	Header     Header `json:"_header"`
+	SBSize     uint8  `json:"sb_size"`
+	SBLeakRate uint8  `json:"sb_leak_rate"`
 }
 
 func newDescriptorShortSmoothingBuffer(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {

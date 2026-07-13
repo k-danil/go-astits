@@ -11,15 +11,15 @@ import (
 // languages.
 // Chapter: 6.2.23 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type MultilingualComponent struct {
-	Items        []MultilingualComponentItem
-	Header       Header
-	ComponentTag uint8
+	Items        []MultilingualComponentItem `json:"_items"`
+	Header       Header                      `json:"_header"`
+	ComponentTag uint8                       `json:"component_tag"`
 }
 
 // MultilingualComponentItem is one language variant of a component description
 type MultilingualComponentItem struct {
-	Description []byte
-	Language    [3]byte
+	Description []byte  `json:"text_char"`
+	Language    [3]byte `json:"ISO_639_language_code"`
 }
 
 func newDescriptorMultilingualComponent(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {

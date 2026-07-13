@@ -10,18 +10,18 @@ import (
 
 // J2KVideo is the MPEG-2 systems J2K_video_descriptor (ISO/IEC 13818-1).
 type J2KVideo struct {
-	PrivateData        []byte
-	HorizontalSize     uint32
-	VerticalSize       uint32
-	MaxBitRate         uint32
-	MaxBufferSize      uint32
-	Header             Header
-	ProfileAndLevel    uint16
-	DENFrameRate       uint16
-	NUMFrameRate       uint16
-	ColorSpecification uint8
-	StillMode          bool
-	InterlacedVideo    bool
+	PrivateData        []byte `json:"private_data"`
+	HorizontalSize     uint32 `json:"horizontal_size"`
+	VerticalSize       uint32 `json:"vertical_size"`
+	MaxBitRate         uint32 `json:"max_bit_rate"`
+	MaxBufferSize      uint32 `json:"max_buffer_size"`
+	Header             Header `json:"_header"`
+	ProfileAndLevel    uint16 `json:"profile_and_level"`
+	DENFrameRate       uint16 `json:"DEN_frame_rate"`
+	NUMFrameRate       uint16 `json:"NUM_frame_rate"`
+	ColorSpecification uint8  `json:"color_specification"`
+	StillMode          bool   `json:"still_mode"`
+	InterlacedVideo    bool   `json:"interlaced_video"`
 }
 
 func newDescriptorJ2KVideo(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {

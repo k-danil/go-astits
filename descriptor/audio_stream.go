@@ -9,11 +9,11 @@ import (
 
 // AudioStream is the MPEG-2 systems audio_stream_descriptor (ISO/IEC 13818-1).
 type AudioStream struct {
-	Header                     Header
-	Layer                      uint8
-	FreeFormatFlag             bool
-	ID                         bool
-	VariableRateAudioIndicator bool
+	Header                     Header `json:"_header"`
+	Layer                      uint8  `json:"layer"`
+	FreeFormatFlag             bool   `json:"free_format_flag"`
+	ID                         bool   `json:"ID"`
+	VariableRateAudioIndicator bool   `json:"variable_rate_audio_indicator"`
 }
 
 func newDescriptorAudioStream(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {

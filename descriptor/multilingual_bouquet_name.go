@@ -8,14 +8,14 @@ import (
 // the bouquet name in text form in one or more languages.
 // Chapter: 6.2.22 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type MultilingualBouquetName struct {
-	Items  []MultilingualBouquetNameItem
-	Header Header
+	Items  []MultilingualBouquetNameItem `json:"_items"`
+	Header Header                        `json:"_header"`
 }
 
 // MultilingualBouquetNameItem is one language variant of a bouquet name
 type MultilingualBouquetNameItem struct {
-	Name     []byte
-	Language [3]byte
+	Name     []byte  `json:"bouquet_name"`
+	Language [3]byte `json:"ISO_639_language_code"`
 }
 
 func newDescriptorMultilingualBouquetName(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {

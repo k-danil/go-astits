@@ -11,14 +11,14 @@ import (
 // stream by id and type.
 // Chapter: 6.2.35 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type ServiceList struct {
-	Items  []ServiceListItem
-	Header Header
+	Items  []ServiceListItem `json:"_items"`
+	Header Header            `json:"_header"`
 }
 
 // ServiceListItem represents one entry of a service list descriptor
 type ServiceListItem struct {
-	ServiceID   uint16
-	ServiceType uint8
+	ServiceID   uint16 `json:"service_id"`
+	ServiceType uint8  `json:"service_type"`
 }
 
 func newDescriptorServiceList(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {

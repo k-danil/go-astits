@@ -9,8 +9,8 @@ import (
 
 // PrivateDataIndicator represents a private data Indicator descriptor
 type PrivateDataIndicator struct {
-	Header    Header
-	Indicator uint32
+	Header    Header `json:"_header"`
+	Indicator uint32 `json:"private_data_indicator"`
 }
 
 func newDescriptorPrivateDataIndicator(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {

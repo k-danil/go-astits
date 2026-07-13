@@ -2,6 +2,7 @@ package psi
 
 import (
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -81,43 +82,100 @@ const (
 	TableIDNull TableID = 0xff
 )
 
+const (
+	tableIDEITOtherPresentFollowing TableID = 0x4f
+	tableIDEITActualScheduleStart   TableID = 0x50
+	tableIDEITActualScheduleEnd     TableID = 0x5f
+	tableIDEITOtherScheduleStart    TableID = 0x60
+)
+
+var tableIDNames = map[TableID]string{
+	TableIDPAT:                      "program_association_section",
+	TableIDCAT:                      "conditional_access_section",
+	TableIDPMT:                      "TS_program_map_section",
+	TableIDTSDT:                     "TS_description_section",
+	TableIDISO14496Scene:            "ISO_IEC_14496_scene_description_section",
+	TableIDISO14496Object:           "ISO_IEC_14496_object_descriptor_section",
+	TableIDMetadata:                 "Metadata_section",
+	TableIDISO14496:                 "ISO_IEC_14496_section",
+	TableIDNITVariant1:              "network_information_section - actual_network",
+	TableIDNITVariant2:              "network_information_section - other_network",
+	TableIDSDTVariant1:              "service_description_section - actual_transport_stream",
+	TableIDSDTVariant2:              "service_description_section - other_transport_stream",
+	TableIDBAT:                      "bouquet_association_section",
+	TableIDEITStart:                 "event_information_section - actual_transport_stream, present/following",
+	tableIDEITOtherPresentFollowing: "event_information_section - other_transport_stream, present/following",
+	TableIDTDT:                      "time_date_section",
+	TableIDRST:                      "running_status_section",
+	TableIDST:                       "stuffing_section",
+	TableIDTOT:                      "time_offset_section",
+	TableIDDIT:                      "discontinuity_information_section",
+	TableIDSIT:                      "selection_information_section",
+	TableIDNull:                     "forbidden",
+}
+
+func (t TableID) String() (s string) {
+	var ok bool
+	if s, ok = tableIDNames[t]; ok {
+		return
+	}
+	switch {
+	case t >= tableIDEITActualScheduleStart && t <= tableIDEITActualScheduleEnd:
+		s = fmt.Sprintf("event_information_section - actual_transport_stream, schedule (0x%02x)", uint8(t))
+	case t >= tableIDEITOtherScheduleStart && t <= TableIDEITEnd:
+		s = fmt.Sprintf("event_information_section - other_transport_stream, schedule (0x%02x)", uint8(t))
+	default:
+		s = fmt.Sprintf("0x%02x", uint8(t))
+	}
+	return
+}
+
+func (t TableID) MarshalJSON() (b []byte, err error) {
+	return json.Marshal(t.String())
+}
+
+func (t *TableID) UnmarshalJSON(b []byte) (err error) {
+	*t, err = util.UnmarshalEnum(b, tableIDNames)
+	return
+}
+
 // Data represents a PSI data
 // https://en.wikipedia.org/wiki/Program-specific_information
 type Data struct {
-	PointerField int // Present at the start of the TS packet payload signaled by the payload_unit_start_indicator bit in the TS header. Used to set packet alignment bytes or content before the start of tabled payload data.
-	Sections     []Section
+	PointerField int       `json:"pointer_field"` // Present at the start of the TS packet payload signaled by the payload_unit_start_indicator bit in the TS header. Used to set packet alignment bytes or content before the start of tabled payload data.
+	Sections     []Section `json:"_sections"`
 }
 
 // Section represents a PSI section
 type Section struct {
-	Syntax *SectionSyntax
-	CRC32  uint32 // A checksum of the entire table excluding the pointer field, pointer filler bytes and the trailing CRC32.
-	Header SectionHeader
+	Syntax *SectionSyntax `json:"_syntax"`
+	CRC32  uint32         `json:"_crc32"` // A checksum of the entire table excluding the pointer field, pointer filler bytes and the trailing CRC32.
+	Header SectionHeader  `json:"_header"`
 }
 
 // SectionHeader represents a PSI section header
 type SectionHeader struct {
-	SectionLength          uint16  // The number of bytes that follow for the syntax section (with CRC value) and/or table data. These bytes must not exceed a value of 1021.
-	TableID                TableID // Table Identifier, that defines the structure of the syntax section and other contained data. As an exception, if this is the byte that immediately follow previous table section and is set to 0xFF, then it indicates that the repeat of table section end here and the rest of TS data payload shall be stuffed with 0xFF. Consequently the value 0xFF shall not be used for the Table Identifier.
-	SectionSyntaxIndicator bool    // A flag that indicates if the syntax section follows the section length. The PAT, PMT, and CAT all set this to 1.
-	PrivateBit             bool    // The PAT, PMT, and CAT all set this to 0. Other tables set this to 1.
-	RandomAccessIndicator  bool    // metadata_section only; unused for every other table
-	DecoderConfigFlag      bool    // metadata_section only; unused for every other table
+	SectionLength          uint16  `json:"section_length"`           // The number of bytes that follow for the syntax section (with CRC value) and/or table data. These bytes must not exceed a value of 1021.
+	TableID                TableID `json:"table_id"`                 // Table Identifier, that defines the structure of the syntax section and other contained data. As an exception, if this is the byte that immediately follow previous table section and is set to 0xFF, then it indicates that the repeat of table section end here and the rest of TS data payload shall be stuffed with 0xFF. Consequently the value 0xFF shall not be used for the Table Identifier.
+	SectionSyntaxIndicator bool    `json:"section_syntax_indicator"` // A flag that indicates if the syntax section follows the section length. The PAT, PMT, and CAT all set this to 1.
+	PrivateBit             bool    `json:"private_indicator"`        // The PAT, PMT, and CAT all set this to 0. Other tables set this to 1.
+	RandomAccessIndicator  bool    `json:"random_access_indicator"`  // metadata_section only; unused for every other table
+	DecoderConfigFlag      bool    `json:"decoder_config_flag"`      // metadata_section only; unused for every other table
 }
 
 // SectionSyntax represents a PSI section syntax
 type SectionSyntax struct {
-	Data   SectionSyntaxData
-	Header SectionSyntaxHeader
+	Data   SectionSyntaxData   `json:"_data"`
+	Header SectionSyntaxHeader `json:"_header"`
 }
 
 // SectionSyntaxHeader represents a PSI section syntax header
 type SectionSyntaxHeader struct {
-	CurrentNextIndicator bool   // Indicates if data is current in effect or is for future use. If the bit is flagged on, then the data is to be used at the present moment.
-	LastSectionNumber    uint8  // This indicates which table is the last table in the sequence of tables.
-	SectionNumber        uint8  // This is an index indicating which table this is in a related sequence of tables. The first table starts from 0.
-	VersionNumber        uint8  // Syntax version number. Incremented when data is changed and wrapped around on overflow for values greater than 32.
-	TableIDExtension     uint16 // Informational only identifier. The PAT uses this for the transport stream identifier and the PMT uses this for the Program number.
+	CurrentNextIndicator bool   `json:"current_next_indicator"` // Indicates if data is current in effect or is for future use. If the bit is flagged on, then the data is to be used at the present moment.
+	LastSectionNumber    uint8  `json:"last_section_number"`    // This indicates which table is the last table in the sequence of tables.
+	SectionNumber        uint8  `json:"section_number"`         // This is an index indicating which table this is in a related sequence of tables. The first table starts from 0.
+	VersionNumber        uint8  `json:"version_number"`         // Syntax version number. Incremented when data is changed and wrapped around on overflow for values greater than 32.
+	TableIDExtension     uint16 `json:"table_id_extension"`     // Informational only identifier. The PAT uses this for the transport stream identifier and the PMT uses this for the Program number.
 }
 
 // SectionSyntaxData represents a PSI section syntax data

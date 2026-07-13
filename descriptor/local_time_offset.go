@@ -12,19 +12,19 @@ import (
 // LocalTimeOffset represents a local time offset descriptor
 // Chapter: 6.2.20 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type LocalTimeOffset struct {
-	Header Header
-	Items  []LocalTimeOffsetItem
+	Header Header                `json:"_header"`
+	Items  []LocalTimeOffsetItem `json:"_items"`
 }
 
 // LocalTimeOffsetItem represents a local time offset item descriptor
 // Chapter: 6.2.20 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type LocalTimeOffsetItem struct {
-	LocalTimeOffset         time.Duration
-	NextTimeOffset          time.Duration
-	TimeOfChange            time.Time
-	CountryCode             [3]byte
-	CountryRegionID         uint8
-	LocalTimeOffsetPolarity bool
+	LocalTimeOffset         time.Duration `json:"local_time_offset"`
+	NextTimeOffset          time.Duration `json:"next_time_offset"`
+	TimeOfChange            time.Time     `json:"time_of_change"`
+	CountryCode             [3]byte       `json:"country_code"`
+	CountryRegionID         uint8         `json:"country_region_id"`
+	LocalTimeOffsetPolarity bool          `json:"local_time_offset_polarity"`
 }
 
 func newDescriptorLocalTimeOffset(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {

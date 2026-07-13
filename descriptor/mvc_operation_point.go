@@ -9,27 +9,27 @@ import (
 
 // MVCOperationPoint is the MPEG-2 systems MVC_operation_point_descriptor (ISO/IEC 13818-1).
 type MVCOperationPoint struct {
-	Levels             []MVCOperationPointLevel
-	Header             Header
-	ProfileIDC         uint8
-	AVCCompatibleFlags uint8
-	ConstraintSet0Flag bool
-	ConstraintSet1Flag bool
-	ConstraintSet2Flag bool
-	ConstraintSet3Flag bool
-	ConstraintSet4Flag bool
-	ConstraintSet5Flag bool
+	Levels             []MVCOperationPointLevel `json:"_levels"`
+	Header             Header                   `json:"_header"`
+	ProfileIDC         uint8                    `json:"profile_idc"`
+	AVCCompatibleFlags uint8                    `json:"AVC_compatible_flags"`
+	ConstraintSet0Flag bool                     `json:"constraint_set0_flag"`
+	ConstraintSet1Flag bool                     `json:"constraint_set1_flag"`
+	ConstraintSet2Flag bool                     `json:"constraint_set2_flag"`
+	ConstraintSet3Flag bool                     `json:"constraint_set3_flag"`
+	ConstraintSet4Flag bool                     `json:"constraint_set4_flag"`
+	ConstraintSet5Flag bool                     `json:"constraint_set5_flag"`
 }
 
 type MVCOperationPointLevel struct {
-	OperationPoints []MVCOperationPointEntry
-	LevelIDC        uint8
+	OperationPoints []MVCOperationPointEntry `json:"_operation_points"`
+	LevelIDC        uint8                    `json:"level_idc"`
 }
 
 type MVCOperationPointEntry struct {
-	ESReferences         []uint8
-	NumTargetOutputViews uint8
-	ApplicableTemporalID uint8
+	ESReferences         []uint8 `json:"_ES_references"`
+	NumTargetOutputViews uint8   `json:"num_target_output_views"`
+	ApplicableTemporalID uint8   `json:"applicable_temporal_id"`
 }
 
 func newDescriptorMVCOperationPoint(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {

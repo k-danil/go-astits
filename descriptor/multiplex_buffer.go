@@ -8,9 +8,9 @@ import (
 
 // MultiplexBuffer is the MPEG-2 systems MultiplexBuffer descriptor (ISO/IEC 13818-1).
 type MultiplexBuffer struct {
-	MBBufferSize uint32 // bytes
-	TBLeakRate   uint32 // units of 400 bit/s
-	Header       Header
+	MBBufferSize uint32 `json:"MB_buffer_size"` // bytes
+	TBLeakRate   uint32 `json:"TB_leak_rate"`   // units of 400 bit/s
+	Header       Header `json:"_header"`
 }
 
 func newDescriptorMultiplexBuffer(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {

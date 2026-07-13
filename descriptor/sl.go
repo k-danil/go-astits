@@ -9,8 +9,8 @@ import (
 
 // SL is the MPEG-2 systems SL_descriptor (ISO/IEC 13818-1).
 type SL struct {
-	ESID   uint16
-	Header Header
+	ESID   uint16 `json:"ES_ID"`
+	Header Header `json:"_header"`
 }
 
 func newDescriptorSL(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {

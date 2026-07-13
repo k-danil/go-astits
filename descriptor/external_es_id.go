@@ -9,8 +9,8 @@ import (
 
 // ExternalESID is the MPEG-2 systems External_ES_ID_descriptor (ISO/IEC 13818-1).
 type ExternalESID struct {
-	Header       Header
-	ExternalESID uint16
+	Header       Header `json:"_header"`
+	ExternalESID uint16 `json:"External_ES_ID"`
 }
 
 func newDescriptorExternalESID(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {

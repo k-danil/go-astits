@@ -8,8 +8,8 @@ import (
 
 // FmxBufferSize is the MPEG-2 systems FmxBufferSize_descriptor (ISO/IEC 13818-1).
 type FmxBufferSize struct {
-	Body   []byte // FlexMux buffer sub-descriptors, defined in ISO/IEC 14496-1
-	Header Header
+	Body   []byte `json:"FlexMuxBufferDescriptor"` // FlexMux buffer sub-descriptors, defined in ISO/IEC 14496-1
+	Header Header `json:"_header"`
 }
 
 func newDescriptorFmxBufferSize(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {

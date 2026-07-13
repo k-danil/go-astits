@@ -8,9 +8,9 @@ import (
 
 // TransportProfile is the MPEG-2 systems Transport_profile_descriptor (ISO/IEC 13818-1).
 type TransportProfile struct {
-	PrivateData []byte
-	Header      Header
-	Profile     uint8
+	PrivateData []byte `json:"private_data"`
+	Header      Header `json:"_header"`
+	Profile     uint8  `json:"transport_profile"`
 }
 
 func newDescriptorTransportProfile(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {

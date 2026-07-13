@@ -9,8 +9,8 @@ import (
 // Unknown holds the raw body of a standard-range descriptor whose tag this
 // package does not model.
 type Unknown struct {
-	Header  Header
-	Content []byte
+	Header  Header `json:"_header"`
+	Content []byte `json:"_content"`
 }
 
 func newDescriptorUnknown(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {

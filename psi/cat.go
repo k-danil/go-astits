@@ -11,7 +11,7 @@ import (
 // the CA systems and their EMM PIDs for the whole transport stream.
 // Chapter: 2.4.4.6 | Link: ISO/IEC 13818-1
 type CAT struct {
-	Descriptors []descriptor.Descriptor
+	Descriptors []descriptor.Descriptor `json:"_descriptors"`
 }
 
 // parseCATSection parses a CAT section. Its descriptor loop is bounded by the

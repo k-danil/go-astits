@@ -2,47 +2,302 @@ package pes
 
 import (
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
+	"strconv"
+	"strings"
 
 	"github.com/k-danil/go-astits/v2/internal/util"
 	"github.com/k-danil/go-astits/v2/ts"
 )
 
 // P-STD buffer scales
+type PSTDBufferScale uint8
+
 const (
-	PSTDBufferScale128Bytes  = 0
-	PSTDBufferScale1024Bytes = 1
+	PSTDBufferScale128Bytes  PSTDBufferScale = 0
+	PSTDBufferScale1024Bytes PSTDBufferScale = 1
 )
+
+var pstdBufferScaleNames = map[PSTDBufferScale]string{
+	PSTDBufferScale128Bytes:  "128_bytes",
+	PSTDBufferScale1024Bytes: "1024_bytes",
+}
+
+func (t PSTDBufferScale) String() (s string) {
+	var ok bool
+	if s, ok = pstdBufferScaleNames[t]; !ok {
+		s = fmt.Sprintf("0x%02x", uint8(t))
+	}
+	return
+}
+
+func (t PSTDBufferScale) MarshalJSON() (b []byte, err error) {
+	return json.Marshal(t.String())
+}
+
+func (t *PSTDBufferScale) UnmarshalJSON(b []byte) (err error) {
+	*t, err = util.UnmarshalEnum(b, pstdBufferScaleNames)
+	return
+}
 
 // PTS DTS indicator
+type PTSDTSIndicator uint8
+
 const (
-	PTSDTSIndicatorBothPresent = 3
-	PTSDTSIndicatorIsForbidden = 1
-	PTSDTSIndicatorNoPTSOrDTS  = 0
-	PTSDTSIndicatorOnlyPTS     = 2
+	PTSDTSIndicatorBothPresent PTSDTSIndicator = 3
+	PTSDTSIndicatorIsForbidden PTSDTSIndicator = 1
+	PTSDTSIndicatorNoPTSOrDTS  PTSDTSIndicator = 0
+	PTSDTSIndicatorOnlyPTS     PTSDTSIndicator = 2
 )
+
+var ptsDTSIndicatorNames = map[PTSDTSIndicator]string{
+	PTSDTSIndicatorNoPTSOrDTS:  "no_PTS_or_DTS",
+	PTSDTSIndicatorIsForbidden: "forbidden",
+	PTSDTSIndicatorOnlyPTS:     "PTS_only",
+	PTSDTSIndicatorBothPresent: "PTS_and_DTS",
+}
+
+func (t PTSDTSIndicator) String() (s string) {
+	var ok bool
+	if s, ok = ptsDTSIndicatorNames[t]; !ok {
+		s = fmt.Sprintf("0x%02x", uint8(t))
+	}
+	return
+}
+
+func (t PTSDTSIndicator) MarshalJSON() (b []byte, err error) {
+	return json.Marshal(t.String())
+}
+
+func (t *PTSDTSIndicator) UnmarshalJSON(b []byte) (err error) {
+	*t, err = util.UnmarshalEnum(b, ptsDTSIndicatorNames)
+	return
+}
 
 // Stream IDs
+type StreamID uint8
+
 const (
-	StreamIDProgramStreamMap       = 0xbc
-	StreamIDPrivateStream1         = 0xbd
-	StreamIDPaddingStream          = 0xbe
-	StreamIDPrivateStream2         = 0xbf
-	StreamIDECM                    = 0xf0
-	StreamIDEMM                    = 0xf1
-	StreamIDDSMCC                  = 0xf2
-	StreamIDH2221TypeE             = 0xf8
-	StreamIDProgramStreamDirectory = 0xff
+	StreamIDProgramStreamMap       StreamID = 0xbc
+	StreamIDPrivateStream1         StreamID = 0xbd
+	StreamIDPaddingStream          StreamID = 0xbe
+	StreamIDPrivateStream2         StreamID = 0xbf
+	StreamIDECM                    StreamID = 0xf0
+	StreamIDEMM                    StreamID = 0xf1
+	StreamIDDSMCC                  StreamID = 0xf2
+	StreamIDH2221TypeE             StreamID = 0xf8
+	StreamIDProgramStreamDirectory StreamID = 0xff
 )
 
-// Trick mode controls
 const (
-	TrickModeControlFastForward = 0
-	TrickModeControlFastReverse = 3
-	TrickModeControlFreezeFrame = 2
-	TrickModeControlSlowMotion  = 1
-	TrickModeControlSlowReverse = 4
+	streamIDAudioBase       StreamID = 0xc0
+	streamIDAudioNumberMask StreamID = 0x1f
+	streamIDVideoBase       StreamID = 0xe0
+	streamIDVideoNumberMask StreamID = 0x0f
 )
+
+const (
+	streamIDAudioPrefix = "audio_stream_"
+	streamIDVideoPrefix = "video_stream_"
+)
+
+var streamIDNames = map[StreamID]string{
+	StreamIDProgramStreamMap:       "program_stream_map",
+	StreamIDPrivateStream1:         "private_stream_1",
+	StreamIDPaddingStream:          "padding_stream",
+	StreamIDPrivateStream2:         "private_stream_2",
+	StreamIDECM:                    "ECM_stream",
+	StreamIDEMM:                    "EMM_stream",
+	StreamIDDSMCC:                  "DSMCC_stream",
+	StreamIDH2221TypeE:             "H.222.1_type_E",
+	StreamIDProgramStreamDirectory: "program_stream_directory",
+}
+
+func (t StreamID) String() (s string) {
+	var ok bool
+	if s, ok = streamIDNames[t]; ok {
+		return
+	}
+	switch {
+	case t&^streamIDAudioNumberMask == streamIDAudioBase:
+		s = fmt.Sprintf("%s%d", streamIDAudioPrefix, uint8(t&streamIDAudioNumberMask))
+	case t&^streamIDVideoNumberMask == streamIDVideoBase:
+		s = fmt.Sprintf("%s%d", streamIDVideoPrefix, uint8(t&streamIDVideoNumberMask))
+	default:
+		s = fmt.Sprintf("0x%02x", uint8(t))
+	}
+	return
+}
+
+func (t StreamID) MarshalJSON() (b []byte, err error) {
+	return json.Marshal(t.String())
+}
+
+func (t *StreamID) UnmarshalJSON(b []byte) (err error) {
+	if *t, err = util.UnmarshalEnum(b, streamIDNames); err == nil {
+		return
+	}
+	var s string
+	if json.Unmarshal(b, &s) != nil {
+		return
+	}
+	if num, ok := strings.CutPrefix(s, streamIDAudioPrefix); ok {
+		return t.fromStreamNumber(num, streamIDAudioBase, streamIDAudioNumberMask)
+	}
+	if num, ok := strings.CutPrefix(s, streamIDVideoPrefix); ok {
+		return t.fromStreamNumber(num, streamIDVideoBase, streamIDVideoNumberMask)
+	}
+	return
+}
+
+func (t *StreamID) fromStreamNumber(num string, base, mask StreamID) (err error) {
+	var n uint64
+	if n, err = strconv.ParseUint(num, 10, 8); err != nil || StreamID(n)&^mask != 0 {
+		err = fmt.Errorf("astits: invalid stream number %q", num)
+		return
+	}
+	*t = base | StreamID(n)
+	return
+}
+
+// Trick mode controls
+type TrickModeControl uint8
+
+const (
+	TrickModeControlFastForward TrickModeControl = 0
+	TrickModeControlFastReverse TrickModeControl = 3
+	TrickModeControlFreezeFrame TrickModeControl = 2
+	TrickModeControlSlowMotion  TrickModeControl = 1
+	TrickModeControlSlowReverse TrickModeControl = 4
+)
+
+var trickModeControlNames = map[TrickModeControl]string{
+	TrickModeControlFastForward: "fast_forward",
+	TrickModeControlSlowMotion:  "slow_motion",
+	TrickModeControlFreezeFrame: "freeze_frame",
+	TrickModeControlFastReverse: "fast_reverse",
+	TrickModeControlSlowReverse: "slow_reverse",
+}
+
+func (t TrickModeControl) String() (s string) {
+	var ok bool
+	if s, ok = trickModeControlNames[t]; !ok {
+		s = fmt.Sprintf("0x%02x", uint8(t))
+	}
+	return
+}
+
+func (t TrickModeControl) MarshalJSON() (b []byte, err error) {
+	return json.Marshal(t.String())
+}
+
+func (t *TrickModeControl) UnmarshalJSON(b []byte) (err error) {
+	*t, err = util.UnmarshalEnum(b, trickModeControlNames)
+	return
+}
+
+// PES scrambling controls
+type ScramblingControl uint8
+
+const (
+	ScramblingControlNotScrambled ScramblingControl = 0
+	ScramblingControlUserDefined1 ScramblingControl = 1
+	ScramblingControlUserDefined2 ScramblingControl = 2
+	ScramblingControlUserDefined3 ScramblingControl = 3
+)
+
+var scramblingControlNames = map[ScramblingControl]string{
+	ScramblingControlNotScrambled: "not_scrambled",
+	ScramblingControlUserDefined1: "user_defined_1",
+	ScramblingControlUserDefined2: "user_defined_2",
+	ScramblingControlUserDefined3: "user_defined_3",
+}
+
+func (t ScramblingControl) String() (s string) {
+	var ok bool
+	if s, ok = scramblingControlNames[t]; !ok {
+		s = fmt.Sprintf("0x%02x", uint8(t))
+	}
+	return
+}
+
+func (t ScramblingControl) MarshalJSON() (b []byte, err error) {
+	return json.Marshal(t.String())
+}
+
+func (t *ScramblingControl) UnmarshalJSON(b []byte) (err error) {
+	*t, err = util.UnmarshalEnum(b, scramblingControlNames)
+	return
+}
+
+// Field IDs
+type FieldID uint8
+
+const (
+	FieldIDTopFieldOnly    FieldID = 0
+	FieldIDBottomFieldOnly FieldID = 1
+	FieldIDCompleteFrame   FieldID = 2
+	FieldIDReserved        FieldID = 3
+)
+
+var fieldIDNames = map[FieldID]string{
+	FieldIDTopFieldOnly:    "display_from_top_field_only",
+	FieldIDBottomFieldOnly: "display_from_bottom_field_only",
+	FieldIDCompleteFrame:   "display_complete_frame",
+	FieldIDReserved:        "reserved",
+}
+
+func (t FieldID) String() (s string) {
+	var ok bool
+	if s, ok = fieldIDNames[t]; !ok {
+		s = fmt.Sprintf("0x%02x", uint8(t))
+	}
+	return
+}
+
+func (t FieldID) MarshalJSON() (b []byte, err error) {
+	return json.Marshal(t.String())
+}
+
+func (t *FieldID) UnmarshalJSON(b []byte) (err error) {
+	*t, err = util.UnmarshalEnum(b, fieldIDNames)
+	return
+}
+
+// Frequency truncations
+type FrequencyTruncation uint8
+
+const (
+	FrequencyTruncationDCCoefficientsOnly     FrequencyTruncation = 0
+	FrequencyTruncationFirstThreeCoefficients FrequencyTruncation = 1
+	FrequencyTruncationFirstSixCoefficients   FrequencyTruncation = 2
+	FrequencyTruncationAllCoefficients        FrequencyTruncation = 3
+)
+
+var frequencyTruncationNames = map[FrequencyTruncation]string{
+	FrequencyTruncationDCCoefficientsOnly:     "only_DC_coefficients_non_zero",
+	FrequencyTruncationFirstThreeCoefficients: "only_first_three_coefficients_non_zero",
+	FrequencyTruncationFirstSixCoefficients:   "only_first_six_coefficients_non_zero",
+	FrequencyTruncationAllCoefficients:        "all_coefficients_may_be_non_zero",
+}
+
+func (t FrequencyTruncation) String() (s string) {
+	var ok bool
+	if s, ok = frequencyTruncationNames[t]; !ok {
+		s = fmt.Sprintf("0x%02x", uint8(t))
+	}
+	return
+}
+
+func (t FrequencyTruncation) MarshalJSON() (b []byte, err error) {
+	return json.Marshal(t.String())
+}
+
+func (t *FrequencyTruncation) UnmarshalJSON(b []byte) (err error) {
+	*t, err = util.UnmarshalEnum(b, frequencyTruncationNames)
+	return
+}
 
 const (
 	HeaderSize         = 6
@@ -54,64 +309,64 @@ const (
 // http://dvd.sourceforge.net/dvdinfo/pes-hdr.html
 // http://happy.emu.id.au/lab/tut/dttb/dtbtut4b.htm
 type Data struct {
-	Data   []byte
-	Header Header
+	Data   []byte `json:"PES_packet_data_byte"`
+	Header Header `json:"_header"`
 }
 
 // Header represents a packet PES header
 type Header struct {
-	OptionalHeader *OptionalHeader
-	optionalHeader OptionalHeader // storage for OptionalHeader — no allocation per PES
-	PacketLength   uint16         // Specifies the number of bytes remaining in the packet after this field. Can be zero. If the PES packet length is set to zero, the PES packet can be of any length. A value of zero for the PES packet length can be used only when the PES packet payload is a video elementary stream.
-	StreamID       uint8          // Examples: Audio streams (0xC0-0xDF), Video streams (0xE0-0xEF)
+	OptionalHeader *OptionalHeader `json:"_optional_header"`
+	optionalHeader OptionalHeader  // storage for OptionalHeader — no allocation per PES
+	PacketLength   uint16          `json:"PES_packet_length"` // Specifies the number of bytes remaining in the packet after this field. Can be zero. If the PES packet length is set to zero, the PES packet can be of any length. A value of zero for the PES packet length can be used only when the PES packet payload is a video elementary stream.
+	StreamID       StreamID        `json:"stream_id"`         // Examples: Audio streams (0xC0-0xDF), Video streams (0xE0-0xEF)
 }
 
 // OptionalHeader represents a PES optional header
 type OptionalHeader struct {
-	DSMTrickMode           *DSMTrickMode
-	Extension              *OptionalHeaderExtension
-	DTS                    ts.ClockReference
-	PTS                    ts.ClockReference
-	ESCR                   ts.ClockReference
-	ESRate                 uint32
-	CRC                    uint16
-	AdditionalCopyInfo     uint8
-	DataAlignmentIndicator bool // True indicates that the PES packet header is immediately followed by the video start code or audio syncword
-	HasAdditionalCopyInfo  bool
-	HasCRC                 bool
-	HasDSMTrickMode        bool
-	HasESCR                bool
-	HasESRate              bool
-	HasExtension           bool
-	HasOptionalFields      bool
-	HeaderLength           uint8
-	IsCopyrighted          bool
-	IsOriginal             bool
-	MarkerBits             uint8
-	Priority               bool
-	PTSDTSIndicator        uint8
-	ScramblingControl      uint8
+	DSMTrickMode           *DSMTrickMode            `json:"DSM_trick_mode"`
+	Extension              *OptionalHeaderExtension `json:"_extension"`
+	DTS                    ts.ClockReference        `json:"DTS"`
+	PTS                    ts.ClockReference        `json:"PTS"`
+	ESCR                   ts.ClockReference        `json:"ESCR"`
+	ESRate                 uint32                   `json:"ES_rate"`
+	CRC                    uint16                   `json:"previous_PES_packet_CRC"`
+	AdditionalCopyInfo     uint8                    `json:"additional_copy_info"`
+	DataAlignmentIndicator bool                     `json:"data_alignment_indicator"` // True indicates that the PES packet header is immediately followed by the video start code or audio syncword
+	HasAdditionalCopyInfo  bool                     `json:"additional_copy_info_flag"`
+	HasCRC                 bool                     `json:"PES_CRC_flag"`
+	HasDSMTrickMode        bool                     `json:"DSM_trick_mode_flag"`
+	HasESCR                bool                     `json:"ESCR_flag"`
+	HasESRate              bool                     `json:"ES_rate_flag"`
+	HasExtension           bool                     `json:"PES_extension_flag"`
+	HasOptionalFields      bool                     `json:"_has_optional_fields"`
+	HeaderLength           uint8                    `json:"PES_header_data_length"`
+	IsCopyrighted          bool                     `json:"copyright"`
+	IsOriginal             bool                     `json:"original_or_copy"`
+	MarkerBits             uint8                    `json:"_marker_bits"`
+	Priority               bool                     `json:"PES_priority"`
+	PTSDTSIndicator        PTSDTSIndicator          `json:"PTS_DTS_flags"`
+	ScramblingControl      ScramblingControl        `json:"PES_scrambling_control"`
 }
 
 type OptionalHeaderExtension struct {
-	PrivateData                     []byte
-	Extension2Reserved              []byte
-	PackHeader                      []byte
-	TREF                            ts.ClockReference
-	HasPrivateData                  bool
-	HasPackHeaderField              bool
-	HasProgramPacketSequenceCounter bool
-	HasPSTDBuffer                   bool
-	HasExtension2                   bool
-	HasStreamIDExtension            bool
-	HasTREF                         bool
-	PackField                       uint8
-	PacketSequenceCounter           uint8
-	MPEG1OrMPEG2ID                  uint8
-	OriginalStuffingLength          uint8
-	PSTDBufferScale                 uint8
-	PSTDBufferSize                  uint16
-	StreamIDExtension               uint8
+	PrivateData                     []byte            `json:"PES_private_data"`
+	Extension2Reserved              []byte            `json:"_extension_2_reserved"`
+	PackHeader                      []byte            `json:"pack_header"`
+	TREF                            ts.ClockReference `json:"TREF"`
+	HasPrivateData                  bool              `json:"PES_private_data_flag"`
+	HasPackHeaderField              bool              `json:"pack_header_field_flag"`
+	HasProgramPacketSequenceCounter bool              `json:"program_packet_sequence_counter_flag"`
+	HasPSTDBuffer                   bool              `json:"P-STD_buffer_flag"`
+	HasExtension2                   bool              `json:"PES_extension_flag_2"`
+	HasStreamIDExtension            bool              `json:"stream_id_extension_flag"`
+	HasTREF                         bool              `json:"tref_extension_flag"`
+	PackField                       uint8             `json:"pack_field_length"`
+	PacketSequenceCounter           uint8             `json:"program_packet_sequence_counter"`
+	MPEG1OrMPEG2ID                  uint8             `json:"MPEG1_MPEG2_identifier"`
+	OriginalStuffingLength          uint8             `json:"original_stuff_length"`
+	PSTDBufferScale                 PSTDBufferScale   `json:"P-STD_buffer_scale"`
+	PSTDBufferSize                  uint16            `json:"P-STD_buffer_size"`
+	StreamIDExtension               uint8             `json:"stream_id_extension"`
 }
 
 // TREF shares the PTS/DTS wire layout; its top nibble is reserved, not a prefix.
@@ -121,11 +376,11 @@ const trefReservedPrefix = 0b1111
 // DSMTrickMode represents a DSM trick mode
 // https://books.google.fr/books?id=vwUrAwAAQBAJ&pg=PT501&lpg=PT501&dq=dsm+trick+mode+control&source=bl&ots=fI-9IHXMRL&sig=PWnhxrsoMWNQcl1rMCPmJGNO9Ds&hl=fr&sa=X&ved=0ahUKEwjogafD8bjXAhVQ3KQKHeHKD5oQ6AEINDAB#v=onepage&q=dsm%20trick%20mode%20control&f=false
 type DSMTrickMode struct {
-	FieldID             uint8
-	FrequencyTruncation uint8
-	IntraSliceRefresh   uint8
-	RepeatControl       uint8
-	TrickModeControl    uint8
+	FieldID             FieldID             `json:"field_id"`
+	FrequencyTruncation FrequencyTruncation `json:"frequency_truncation"`
+	IntraSliceRefresh   uint8               `json:"intra_slice_refresh"`
+	RepeatControl       uint8               `json:"rep_cntrl"`
+	TrickModeControl    TrickModeControl    `json:"trick_mode_control"`
 }
 
 func (h *Header) IsVideoStream() bool {
@@ -157,7 +412,7 @@ func (d *Data) Parse(bs []byte) (err error) {
 
 // hasPESOptionalHeader reports whether the PES packet carries the optional
 // header. Per H.222.0 Table 2-21 it is absent for these stream_ids only.
-func hasPESOptionalHeader(streamID uint8) bool {
+func hasPESOptionalHeader(streamID StreamID) bool {
 	switch streamID {
 	case StreamIDProgramStreamMap, StreamIDPaddingStream, StreamIDPrivateStream2,
 		StreamIDECM, StreamIDEMM, StreamIDDSMCC, StreamIDH2221TypeE, StreamIDProgramStreamDirectory:
@@ -172,7 +427,7 @@ func (h *Header) parseBytes(bs []byte, o int) (dataStart, dataEnd int, err error
 		return 0, 0, ts.ErrShortPacket
 	}
 
-	h.StreamID = bs[o]
+	h.StreamID = StreamID(bs[o])
 	h.PacketLength = binary.BigEndian.Uint16(bs[o+1 : o+3])
 	o += 3
 
@@ -203,13 +458,13 @@ func (h *OptionalHeader) parseBytes(bs []byte, o int) (dataStart int, err error)
 
 	b := bs[o]
 	h.MarkerBits = b >> 6
-	h.ScramblingControl = b >> 4 & 0x3
+	h.ScramblingControl = ScramblingControl(b >> 4 & 0x3)
 	h.Priority = b&0x8 > 0
 	h.DataAlignmentIndicator = b&0x4 > 0
 	h.IsCopyrighted = b&0x2 > 0
 	h.IsOriginal = b&0x1 > 0
 	b = bs[o+1]
-	h.PTSDTSIndicator = b >> 6 & 0x3
+	h.PTSDTSIndicator = PTSDTSIndicator(b >> 6 & 0x3)
 
 	h.HasESCR = b&0x20 > 0
 	h.HasESRate = b&0x10 > 0
@@ -341,7 +596,7 @@ func (h *OptionalHeaderExtension) parseBytes(bs []byte, o int) (err error) {
 		if o+2 > len(bs) {
 			return ts.ErrShortPacket
 		}
-		h.PSTDBufferScale = bs[o] >> 5 & 0x1
+		h.PSTDBufferScale = PSTDBufferScale(bs[o] >> 5 & 0x1)
 		h.PSTDBufferSize = binary.BigEndian.Uint16(bs[o:]) & 0x1fff
 		o += 2
 	}
@@ -379,14 +634,14 @@ func (h *OptionalHeaderExtension) parseBytes(bs []byte, o int) (err error) {
 // parseDSMTrickMode parses a DSM trick mode
 func parseDSMTrickMode(i byte) (m *DSMTrickMode) {
 	m = &DSMTrickMode{}
-	m.TrickModeControl = i >> 5
+	m.TrickModeControl = TrickModeControl(i >> 5)
 	switch m.TrickModeControl {
 	case TrickModeControlFastForward, TrickModeControlFastReverse:
-		m.FieldID = i >> 3 & 0x3
+		m.FieldID = FieldID(i >> 3 & 0x3)
 		m.IntraSliceRefresh = i >> 2 & 0x1
-		m.FrequencyTruncation = i & 0x3
+		m.FrequencyTruncation = FrequencyTruncation(i & 0x3)
 	case TrickModeControlFreezeFrame:
-		m.FieldID = i >> 3 & 0x3
+		m.FieldID = FieldID(i >> 3 & 0x3)
 	case TrickModeControlSlowMotion, TrickModeControlSlowReverse:
 		m.RepeatControl = i & 0x1f
 	}
@@ -521,13 +776,13 @@ func (h *OptionalHeader) putBytes(bs []byte) (n int) {
 	}
 
 	b := uint8(0b10) << 6
-	b |= h.ScramblingControl << 4
+	b |= uint8(h.ScramblingControl) << 4
 	b |= util.B2U(h.Priority) << 3
 	b |= util.B2U(h.DataAlignmentIndicator) << 2
 	b |= util.B2U(h.IsCopyrighted) << 1
 	b |= util.B2U(h.IsOriginal)
 	bs[0] = b
-	b = h.PTSDTSIndicator << 6
+	b = uint8(h.PTSDTSIndicator) << 6
 	b |= util.B2U(h.HasESCR) << 5
 	b |= util.B2U(h.HasESRate) << 4
 	b |= util.B2U(h.HasDSMTrickMode) << 3
@@ -612,7 +867,7 @@ func (h *OptionalHeaderExtension) putBytes(bs []byte) (n int) {
 	}
 
 	if h.HasPSTDBuffer {
-		bs[n] = 0x40 | h.PSTDBufferScale<<5 | uint8(h.PSTDBufferSize>>8)
+		bs[n] = 0x40 | uint8(h.PSTDBufferScale)<<5 | uint8(h.PSTDBufferSize>>8)
 		bs[n+1] = uint8(h.PSTDBufferSize)
 		n += 2
 	}
@@ -640,13 +895,13 @@ func (h *OptionalHeaderExtension) putBytes(bs []byte) (n int) {
 }
 
 func (m *DSMTrickMode) putBytes(bs []byte) int {
-	b := m.TrickModeControl << 5
+	b := uint8(m.TrickModeControl) << 5
 
 	switch m.TrickModeControl {
 	case TrickModeControlFastForward, TrickModeControlFastReverse:
-		b |= m.FieldID<<3 | m.IntraSliceRefresh<<2 | m.FrequencyTruncation
+		b |= uint8(m.FieldID)<<3 | m.IntraSliceRefresh<<2 | uint8(m.FrequencyTruncation)
 	case TrickModeControlFreezeFrame:
-		b |= m.FieldID<<3 | 7
+		b |= uint8(m.FieldID)<<3 | 7
 	case TrickModeControlSlowMotion, TrickModeControlSlowReverse:
 		b |= m.RepeatControl
 	default:

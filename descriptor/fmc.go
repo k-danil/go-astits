@@ -9,13 +9,13 @@ import (
 
 // FMC is the MPEG-2 systems FMC_descriptor (ISO/IEC 13818-1).
 type FMC struct {
-	Entries []FMCEntry
-	Header  Header
+	Entries []FMCEntry `json:"_entries"`
+	Header  Header     `json:"_header"`
 }
 
 type FMCEntry struct {
-	ESID           uint16
-	FlexMuxChannel uint8
+	ESID           uint16 `json:"ES_ID"`
+	FlexMuxChannel uint8  `json:"FlexMuxChannel"`
 }
 
 func newDescriptorFMC(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {

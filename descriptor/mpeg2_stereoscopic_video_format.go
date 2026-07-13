@@ -8,9 +8,9 @@ import (
 
 // MPEG2StereoscopicVideoFormat is the MPEG-2 systems MPEG2_stereoscopic_video_format_descriptor (ISO/IEC 13818-1).
 type MPEG2StereoscopicVideoFormat struct {
-	Header             Header
-	ArrangementType    uint8
-	HasArrangementType bool
+	Header             Header `json:"_header"`
+	ArrangementType    uint8  `json:"arrangement_type"`
+	HasArrangementType bool   `json:"stereo_video_arrangement_type_present"`
 }
 
 func newDescriptorMPEG2StereoscopicVideoFormat(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {

@@ -13,41 +13,41 @@ import (
 // (ModulationType 1) and optionally an interleaver block.
 // Chapter: 6.4.5.2 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type SHDeliverySystem struct {
-	Modulations   []SHModulation
-	DiversityMode uint8
+	Modulations   []SHModulation `json:"_modulations"`
+	DiversityMode uint8          `json:"diversity_mode"`
 }
 
 // SHModulation is one modulation element of an SH delivery system descriptor.
 // Which of the TDM / OFDM fields are meaningful is selected by ModulationType;
 // the interleaver fields are present only when InterleaverPresence.
 type SHModulation struct {
-	ModulationType      uint8
-	InterleaverPresence bool
-	InterleaverType     bool
+	ModulationType      uint8 `json:"modulation_type"`
+	InterleaverPresence bool  `json:"interleaver_presence"`
+	InterleaverType     bool  `json:"interleaver_type"`
 
 	// TDM (ModulationType == 0)
-	Polarization   uint8
-	RollOff        uint8
-	ModulationMode uint8
-	SymbolRate     uint8
+	Polarization   uint8 `json:"polarization"`
+	RollOff        uint8 `json:"roll_off"`
+	ModulationMode uint8 `json:"modulation_mode"`
+	SymbolRate     uint8 `json:"symbol_rate"`
 
 	// OFDM (ModulationType == 1)
-	Bandwidth                 uint8
-	ConstellationAndHierarchy uint8
-	GuardInterval             uint8
-	TransmissionMode          uint8
-	Priority                  bool
-	CommonFrequency           bool
+	Bandwidth                 uint8 `json:"bandwidth"`
+	ConstellationAndHierarchy uint8 `json:"constellation_and_hierarchy"`
+	GuardInterval             uint8 `json:"guard_interval"`
+	TransmissionMode          uint8 `json:"transmission_mode"`
+	Priority                  bool  `json:"priority"`
+	CommonFrequency           bool  `json:"common_frequency"`
 
 	// TDM and OFDM
-	CodeRate uint8
+	CodeRate uint8 `json:"code_rate"`
 
 	// interleaver (InterleaverPresence)
-	CommonMultiplier  uint8
-	NofLateTaps       uint8
-	NofSlices         uint8
-	SliceDistance     uint8
-	NonLateIncrements uint8
+	CommonMultiplier  uint8 `json:"common_multiplier"`
+	NofLateTaps       uint8 `json:"nof_late_taps"`
+	NofSlices         uint8 `json:"nof_slices"`
+	SliceDistance     uint8 `json:"slice_distance"`
+	NonLateIncrements uint8 `json:"non_late_increments"`
 }
 
 func parseSHDeliverySystem(i *bytesiter.Iterator, offsetEnd int) (d *SHDeliverySystem, err error) {

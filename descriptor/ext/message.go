@@ -10,9 +10,9 @@ import (
 // (in a given language) a receiver may display to the user.
 // Chapter: 6.4.7 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type Message struct {
-	Text      []byte
-	MessageID uint8
-	Language  [3]byte
+	Text      []byte  `json:"text_char"`
+	MessageID uint8   `json:"message_id"`
+	Language  [3]byte `json:"ISO_639_language_code"`
 }
 
 func parseMessage(i *bytesiter.Iterator, offsetEnd int) (d *Message, err error) {

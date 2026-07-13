@@ -2,43 +2,73 @@ package descriptor
 
 import (
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 
 	"github.com/k-danil/go-astits/v2/internal/bytesiter"
+	"github.com/k-danil/go-astits/v2/internal/util"
 )
+
+type MosaicCellLinkage uint8
 
 // cell_linkage_info values (EN 300 468 Table 73)
 const (
-	MosaicCellLinkageBouquet     = 0x01
-	MosaicCellLinkageService     = 0x02
-	MosaicCellLinkageOtherMosaic = 0x03
-	MosaicCellLinkageEvent       = 0x04
+	MosaicCellLinkageUndefined   MosaicCellLinkage = 0x00
+	MosaicCellLinkageBouquet     MosaicCellLinkage = 0x01
+	MosaicCellLinkageService     MosaicCellLinkage = 0x02
+	MosaicCellLinkageOtherMosaic MosaicCellLinkage = 0x03
+	MosaicCellLinkageEvent       MosaicCellLinkage = 0x04
 )
+
+var mosaicCellLinkageNames = map[MosaicCellLinkage]string{
+	MosaicCellLinkageUndefined:   "undefined",
+	MosaicCellLinkageBouquet:     "bouquet_related",
+	MosaicCellLinkageService:     "service_related",
+	MosaicCellLinkageOtherMosaic: "other_mosaic_related",
+	MosaicCellLinkageEvent:       "event_related",
+}
+
+func (t MosaicCellLinkage) String() (s string) {
+	var ok bool
+	if s, ok = mosaicCellLinkageNames[t]; !ok {
+		s = fmt.Sprintf("0x%02x", uint8(t))
+	}
+	return
+}
+
+func (t MosaicCellLinkage) MarshalJSON() (b []byte, err error) {
+	return json.Marshal(t.String())
+}
+
+func (t *MosaicCellLinkage) UnmarshalJSON(b []byte) (err error) {
+	*t, err = util.UnmarshalEnum(b, mosaicCellLinkageNames)
+	return
+}
 
 // Mosaic represents a mosaic descriptor: how a mosaic video component is
 // partitioned into cells and what each logical cell links to (bouquet, service,
 // event, …) keyed by CellLinkageInfo.
 // Chapter: 6.2.21 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type Mosaic struct {
-	Cells                             []MosaicCell
-	Header                            Header
-	NumberOfHorizontalElementaryCells uint8
-	NumberOfVerticalElementaryCells   uint8
-	MosaicEntryPoint                  bool
+	Cells                             []MosaicCell `json:"_cells"`
+	Header                            Header       `json:"_header"`
+	NumberOfHorizontalElementaryCells uint8        `json:"number_of_horizontal_elementary_cells"`
+	NumberOfVerticalElementaryCells   uint8        `json:"number_of_vertical_elementary_cells"`
+	MosaicEntryPoint                  bool         `json:"mosaic_entry_point"`
 }
 
 // MosaicCell is one logical cell of a mosaic descriptor. The linkage ids are
 // present according to CellLinkageInfo (1: bouquet; 2/3: service; 4: event).
 type MosaicCell struct {
-	ElementaryCellIDs           []uint8
-	OriginalNetworkID           uint16
-	TransportStreamID           uint16
-	ServiceID                   uint16
-	EventID                     uint16
-	BouquetID                   uint16
-	LogicalCellID               uint8
-	LogicalCellPresentationInfo uint8
-	CellLinkageInfo             uint8
+	ElementaryCellIDs           []uint8           `json:"elementary_cell_ids"`
+	OriginalNetworkID           uint16            `json:"original_network_id"`
+	TransportStreamID           uint16            `json:"transport_stream_id"`
+	ServiceID                   uint16            `json:"service_id"`
+	EventID                     uint16            `json:"event_id"`
+	BouquetID                   uint16            `json:"bouquet_id"`
+	LogicalCellID               uint8             `json:"logical_cell_id"`
+	LogicalCellPresentationInfo uint8             `json:"logical_cell_presentation_info"`
+	CellLinkageInfo             MosaicCellLinkage `json:"cell_linkage_info"`
 }
 
 func newDescriptorMosaic(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
@@ -79,10 +109,11 @@ func newDescriptorMosaic(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Des
 			cell.ElementaryCellIDs[idx] = b & 0x3f
 		}
 
-		if cell.CellLinkageInfo, err = i.NextByte(); err != nil {
+		if b, err = i.NextByte(); err != nil {
 			err = fmt.Errorf("astits: fetching next byte failed: %w", err)
 			return
 		}
+		cell.CellLinkageInfo = MosaicCellLinkage(b)
 		if err = readMosaicLinkage(i, &cell); err != nil {
 			return
 		}
@@ -117,7 +148,7 @@ func readMosaicLinkage(i *bytesiter.Iterator, cell *MosaicCell) (err error) {
 	return
 }
 
-func mosaicLinkageLength(cellLinkageInfo uint8) int {
+func mosaicLinkageLength(cellLinkageInfo MosaicCellLinkage) int {
 	switch cellLinkageInfo {
 	case MosaicCellLinkageBouquet:
 		return 2
@@ -151,7 +182,7 @@ func (d *Mosaic) Append(dst []byte) []byte {
 		for _, id := range cell.ElementaryCellIDs {
 			dst = append(dst, 0xc0|id&0x3f)
 		}
-		dst = append(dst, cell.CellLinkageInfo)
+		dst = append(dst, uint8(cell.CellLinkageInfo))
 		switch cell.CellLinkageInfo {
 		case MosaicCellLinkageBouquet:
 			dst = append(dst, byte(cell.BouquetID>>8), byte(cell.BouquetID))

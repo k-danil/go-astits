@@ -108,7 +108,7 @@ var roundtripGenerators = map[string]func(r *rand.Rand) Descriptor{
 		return d
 	},
 	"DataStreamAlignment": func(r *rand.Rand) Descriptor {
-		return &DataStreamAlignment{Header: Header{Tag: TagDataStreamAlignment}, Type: uint8(r.UintN(256))}
+		return &DataStreamAlignment{Header: Header{Tag: TagDataStreamAlignment}, Type: AlignmentType(r.UintN(256))}
 	},
 	"ExtendedEvent": func(r *rand.Rand) Descriptor {
 		d := &ExtendedEvent{Header: Header{Tag: TagExtendedEvent},
@@ -135,7 +135,7 @@ var roundtripGenerators = map[string]func(r *rand.Rand) Descriptor{
 	"ISO639": func(r *rand.Rand) Descriptor {
 		d := &ISO639LanguageAndAudioType{Header: Header{Tag: TagISO639LanguageAndAudioType}}
 		for i := uint(0); i < 1+r.UintN(4); i++ {
-			d.Items = append(d.Items, ISO639Item{Language: randLang(r), Type: uint8(r.UintN(256))})
+			d.Items = append(d.Items, ISO639Item{Language: randLang(r), Type: AudioType(r.UintN(256))})
 		}
 		return d
 	},
@@ -176,7 +176,7 @@ var roundtripGenerators = map[string]func(r *rand.Rand) Descriptor{
 			FormatIdentifier: r.Uint32(), AdditionalIdentificationInfo: randBytes(r, int(r.UintN(10)))}
 	},
 	"Service": func(r *rand.Rand) Descriptor {
-		return &Service{Header: Header{Tag: TagService}, Type: uint8(r.UintN(256)),
+		return &Service{Header: Header{Tag: TagService}, Type: ServiceType(r.UintN(256)),
 			Provider: randBytes(r, int(r.UintN(16))), Name: randBytes(r, int(r.UintN(16)))}
 	},
 	"ShortEvent": func(r *rand.Rand) Descriptor {
@@ -197,7 +197,7 @@ var roundtripGenerators = map[string]func(r *rand.Rand) Descriptor{
 	"Teletext": func(r *rand.Rand) Descriptor {
 		d := &Teletext{Header: Header{Tag: TagTeletext}}
 		for i := uint(0); i < 1+r.UintN(4); i++ {
-			d.Items = append(d.Items, TeletextItem{Language: randLang(r), Type: uint8(r.UintN(32)),
+			d.Items = append(d.Items, TeletextItem{Language: randLang(r), Type: TeletextType(r.UintN(32)),
 				Magazine: uint8(r.UintN(8)), Page: uint8(r.UintN(256))})
 		}
 		return d
@@ -213,7 +213,7 @@ var roundtripGenerators = map[string]func(r *rand.Rand) Descriptor{
 		for i := uint(0); i < 1+r.UintN(3); i++ {
 			if r.UintN(2) == 0 { // reserved service: opaque payload
 				d.Services = append(d.Services, VBIDataService{
-					DataServiceID: uint8(0x08 + r.UintN(0xf8)), Reserved: randBytes(r, int(r.UintN(8)))})
+					DataServiceID: VBIDataServiceID(0x08 + r.UintN(0xf8)), Reserved: randBytes(r, int(r.UintN(8)))})
 				continue
 			}
 			svc := VBIDataService{DataServiceID: VBIDataServiceIDEBUTeletext}
@@ -326,7 +326,7 @@ var roundtripGenerators = map[string]func(r *rand.Rand) Descriptor{
 	"Linkage": func(r *rand.Rand) Descriptor {
 		return &Linkage{Header: Header{Tag: TagLinkage},
 			TransportStreamID: uint16(r.UintN(1 << 16)), OriginalNetworkID: uint16(r.UintN(1 << 16)),
-			ServiceID: uint16(r.UintN(1 << 16)), LinkageType: uint8(r.UintN(256)),
+			ServiceID: uint16(r.UintN(1 << 16)), LinkageType: LinkageType(r.UintN(256)),
 			Data: randBytes(r, int(r.UintN(12)))}
 	},
 	"FrequencyList": func(r *rand.Rand) Descriptor {
@@ -383,7 +383,7 @@ var roundtripGenerators = map[string]func(r *rand.Rand) Descriptor{
 		d := &AnnouncementSupport{Header: Header{Tag: TagAnnouncementSupport}, SupportIndicator: uint16(r.UintN(1 << 16))}
 		for i := uint(0); i < 1+r.UintN(4); i++ {
 			d.Announcements = append(d.Announcements, AnnouncementSupportItem{
-				AnnouncementType: uint8(r.UintN(16)), ReferenceType: uint8(r.UintN(8)),
+				AnnouncementType: AnnouncementType(r.UintN(16)), ReferenceType: AnnouncementReference(r.UintN(8)),
 				OriginalNetworkID: uint16(r.UintN(1 << 16)), TransportStreamID: uint16(r.UintN(1 << 16)),
 				ServiceID: uint16(r.UintN(1 << 16)), ComponentTag: uint8(r.UintN(256))})
 		}
@@ -529,7 +529,7 @@ var roundtripGenerators = map[string]func(r *rand.Rand) Descriptor{
 			ii.DescriptorNumber = uint8(1 + r.UintN(15))
 			ii.IconData = randBytes(r, int(r.UintN(20)))
 		} else {
-			ii.IconTransportMode = uint8(r.UintN(2))
+			ii.IconTransportMode = ext.ImageIconTransportMode(r.UintN(2))
 			ii.PositionFlag = r.UintN(2) == 1
 			ii.CoordinateSystem = uint8(r.UintN(8))
 			ii.IconHorizontalOrigin = uint16(r.UintN(1 << 12))
@@ -564,7 +564,7 @@ var roundtripGenerators = map[string]func(r *rand.Rand) Descriptor{
 			PCRISCRCommonClockFlag: r.UintN(2) == 1, Reserved: randBytes(r, int(r.UintN(4)))}}
 	},
 	"ext.URILinkage": func(r *rand.Rand) Descriptor {
-		ul := &ext.URILinkage{URILinkageType: uint8(r.UintN(4)), URI: randBytes(r, int(r.UintN(16))),
+		ul := &ext.URILinkage{URILinkageType: ext.URILinkageType(r.UintN(4)), URI: randBytes(r, int(r.UintN(16))),
 			PrivateData: randBytes(r, int(r.UintN(8)))}
 		if ul.URILinkageType == 0 || ul.URILinkageType == 1 {
 			ul.MinPollingInterval = uint16(r.UintN(1 << 16))
@@ -574,7 +574,7 @@ var roundtripGenerators = map[string]func(r *rand.Rand) Descriptor{
 	"ext.VideoDepthRange": func(r *rand.Rand) Descriptor {
 		vd := &ext.VideoDepthRange{}
 		for i := uint(0); i < 1+r.UintN(3); i++ {
-			rng := ext.DepthRange{RangeType: uint8(r.UintN(4))}
+			rng := ext.DepthRange{RangeType: ext.VideoDepthRangeType(r.UintN(4))}
 			switch rng.RangeType {
 			case 0:
 				rng.VideoMaxDisparityHint = uint16(r.UintN(1 << 12))
@@ -660,7 +660,7 @@ var roundtripGenerators = map[string]func(r *rand.Rand) Descriptor{
 		for i := uint(0); i < 1+r.UintN(3); i++ {
 			cell := MosaicCell{
 				LogicalCellID: uint8(r.UintN(64)), LogicalCellPresentationInfo: uint8(r.UintN(8)),
-				CellLinkageInfo: uint8(r.UintN(5)),
+				CellLinkageInfo: MosaicCellLinkage(r.UintN(5)),
 				BouquetID:       uint16(r.UintN(1 << 16)), OriginalNetworkID: uint16(r.UintN(1 << 16)),
 				TransportStreamID: uint16(r.UintN(1 << 16)), ServiceID: uint16(r.UintN(1 << 16)),
 				EventID: uint16(r.UintN(1 << 16))}
@@ -695,7 +695,7 @@ var roundtripGenerators = map[string]func(r *rand.Rand) Descriptor{
 	"Hierarchy": func(r *rand.Rand) Descriptor {
 		return &Hierarchy{
 			Header:                      Header{Tag: TagHierarchy},
-			HierarchyType:               uint8(r.UintN(16)),
+			HierarchyType:               HierarchyType(r.UintN(16)),
 			HierarchyLayerIndex:         uint8(r.UintN(64)),
 			HierarchyEmbeddedLayerIndex: uint8(r.UintN(64)),
 			HierarchyChannel:            uint8(r.UintN(64)),

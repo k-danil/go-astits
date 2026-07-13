@@ -8,10 +8,10 @@ import (
 
 // TargetBackgroundGrid is the MPEG-2 systems target_background_grid_descriptor (ISO/IEC 13818-1).
 type TargetBackgroundGrid struct {
-	Header                 Header
-	HorizontalSize         uint16
-	VerticalSize           uint16
-	AspectRatioInformation uint8
+	Header                 Header `json:"_header"`
+	HorizontalSize         uint16 `json:"horizontal_size"`
+	VerticalSize           uint16 `json:"vertical_size"`
+	AspectRatioInformation uint8  `json:"aspect_ratio_information"`
 }
 
 func newDescriptorTargetBackgroundGrid(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {

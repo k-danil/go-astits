@@ -13,19 +13,19 @@ import (
 // rates, guard interval, transmission mode).
 // Chapter: 6.2.13.4 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type TerrestrialDeliverySystem struct {
-	Header               Header
-	CentreFrequency      uint32
-	Bandwidth            uint8
-	Constellation        uint8
-	HierarchyInformation uint8
-	CodeRateHPStream     uint8
-	CodeRateLPStream     uint8
-	GuardInterval        uint8
-	TransmissionMode     uint8
-	Priority             bool
-	TimeSlicingIndicator bool
-	MPEFECIndicator      bool
-	OtherFrequencyFlag   bool
+	Header               Header `json:"_header"`
+	CentreFrequency      uint32 `json:"centre_frequency"`
+	Bandwidth            uint8  `json:"bandwidth"`
+	Constellation        uint8  `json:"constellation"`
+	HierarchyInformation uint8  `json:"hierarchy_information"`
+	CodeRateHPStream     uint8  `json:"code_rate-HP_stream"`
+	CodeRateLPStream     uint8  `json:"code_rate-LP_stream"`
+	GuardInterval        uint8  `json:"guard_interval"`
+	TransmissionMode     uint8  `json:"transmission_mode"`
+	Priority             bool   `json:"priority"`
+	TimeSlicingIndicator bool   `json:"Time_Slicing_indicator"`
+	MPEFECIndicator      bool   `json:"MPE-FEC_indicator"`
+	OtherFrequencyFlag   bool   `json:"other_frequency_flag"`
 }
 
 func newDescriptorTerrestrialDeliverySystem(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {

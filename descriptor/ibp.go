@@ -9,10 +9,10 @@ import (
 
 // IBP is the MPEG-2 systems IBP_descriptor (ISO/IEC 13818-1).
 type IBP struct {
-	Header           Header
-	MaxGOPLength     uint16
-	ClosedGOPFlag    bool
-	IdenticalGOPFlag bool
+	Header           Header `json:"_header"`
+	MaxGOPLength     uint16 `json:"max_gop_length"`
+	ClosedGOPFlag    bool   `json:"closed_gop_flag"`
+	IdenticalGOPFlag bool   `json:"identical_gop_flag"`
 }
 
 func newDescriptorIBP(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {

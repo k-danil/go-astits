@@ -15,16 +15,16 @@ const rstEventBytesSize = 9
 // running status of events. It has neither a syntax header nor a CRC.
 // Page: 38 | Chapter: 5.2.6 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type RST struct {
-	Events []RSTEvent
+	Events []RSTEvent `json:"_events"`
 }
 
 // RSTEvent represents one running-status entry of an RST
 type RSTEvent struct {
-	TransportStreamID uint16
-	OriginalNetworkID uint16
-	ServiceID         uint16
-	EventID           uint16
-	RunningStatus     uint8
+	TransportStreamID uint16        `json:"transport_stream_id"`
+	OriginalNetworkID uint16        `json:"original_network_id"`
+	ServiceID         uint16        `json:"service_id"`
+	EventID           uint16        `json:"event_id"`
+	RunningStatus     RunningStatus `json:"running_status"`
 }
 
 // parseRSTSection parses an RST section
@@ -49,7 +49,7 @@ func parseRSTSection(i *bytesiter.Iterator, offsetSectionsEnd int) (d *RST, err 
 			err = fmt.Errorf("astits: fetching next byte failed: %w", err)
 			return
 		}
-		e.RunningStatus = b & 0x7
+		e.RunningStatus = RunningStatus(b & 0x7)
 
 		d.Events = append(d.Events, e)
 	}
@@ -65,7 +65,7 @@ func (d *RST) appendSection(dst []byte) []byte {
 			byte(e.OriginalNetworkID>>8), byte(e.OriginalNetworkID),
 			byte(e.ServiceID>>8), byte(e.ServiceID),
 			byte(e.EventID>>8), byte(e.EventID),
-			0xf8|e.RunningStatus&0x7) // reserved_future_use (5 bits, 1) + running_status
+			0xf8|byte(e.RunningStatus)&0x7) // reserved_future_use (5 bits, 1) + running_status
 	}
 	return dst
 }

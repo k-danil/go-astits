@@ -15,14 +15,14 @@ const (
 // PAT represents a PAT data
 // https://en.wikipedia.org/wiki/Program-specific_information
 type PAT struct {
-	Programs          []PATProgram
-	TransportStreamID uint16
+	Programs          []PATProgram `json:"_programs"`
+	TransportStreamID uint16       `json:"transport_stream_id"`
 }
 
 // PATProgram represents a PAT program
 type PATProgram struct {
-	ProgramMapID  uint16 // The packet identifier that contains the associated PMT
-	ProgramNumber uint16 // Relates to the Table ID extension in the associated PMT. A value of 0 is reserved for a NIT packet identifier.
+	ProgramMapID  uint16 `json:"program_map_PID"` // The packet identifier that contains the associated PMT
+	ProgramNumber uint16 `json:"program_number"`  // Relates to the Table ID extension in the associated PMT. A value of 0 is reserved for a NIT packet identifier.
 }
 
 // parsePATSection parses a PAT section

@@ -11,29 +11,29 @@ import (
 // descriptor: scheduled network-change events, grouped by cell.
 // Chapter: 6.4.8 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type NetworkChangeNotify struct {
-	Cells []NetworkChangeCell
+	Cells []NetworkChangeCell `json:"_cells"`
 }
 
 // NetworkChangeCell groups the network changes signalled for one cell
 type NetworkChangeCell struct {
-	Changes []NetworkChange
-	CellID  uint16
+	Changes []NetworkChange `json:"_changes"`
+	CellID  uint16          `json:"cell_id"`
 }
 
 // NetworkChange is one scheduled network-change event. StartTimeOfChange
 // (40-bit MJD+BCD) and ChangeDuration (24-bit BCD) keep their raw values; the
 // invariant-TS ids are present only when InvariantTSPresent.
 type NetworkChange struct {
-	StartTimeOfChange    uint64
-	ChangeDuration       uint32
-	InvariantTSTSID      uint16
-	InvariantTSONID      uint16
-	NetworkChangeID      uint8
-	NetworkChangeVersion uint8
-	ReceiverCategory     uint8
-	ChangeType           uint8
-	MessageID            uint8
-	InvariantTSPresent   bool
+	StartTimeOfChange    uint64 `json:"start_time_of_change"`
+	ChangeDuration       uint32 `json:"change_duration"`
+	InvariantTSTSID      uint16 `json:"invariant_ts_tsid"`
+	InvariantTSONID      uint16 `json:"invariant_ts_onid"`
+	NetworkChangeID      uint8  `json:"network_change_id"`
+	NetworkChangeVersion uint8  `json:"network_change_version"`
+	ReceiverCategory     uint8  `json:"receiver_category"`
+	ChangeType           uint8  `json:"change_type"`
+	MessageID            uint8  `json:"message_id"`
+	InvariantTSPresent   bool   `json:"invariant_ts_present"`
 }
 
 func parseNetworkChangeNotify(i *bytesiter.Iterator, offsetEnd int) (d *NetworkChangeNotify, err error) {

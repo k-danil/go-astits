@@ -2,10 +2,13 @@ package psi
 
 import (
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 
 	"github.com/k-danil/go-astits/v2/descriptor"
 	"github.com/k-danil/go-astits/v2/internal/bytesiter"
+	"github.com/k-danil/go-astits/v2/internal/util"
+	"github.com/k-danil/go-astits/v2/pes"
 )
 
 // StreamType is a PMT elementary-stream type (a video, audio or data codec).
@@ -42,17 +45,17 @@ const (
 // PMT represents a PMT data
 // https://en.wikipedia.org/wiki/Program-specific_information
 type PMT struct {
-	ElementaryStreams  []ElementaryStream
-	ProgramDescriptors []descriptor.Descriptor // Program descriptors
-	ProgramNumber      uint16
-	PCRPID             uint16 // The packet identifier that contains the program clock reference used to improve the random access accuracy of the stream's timing that is derived from the program timestamp. If this is unused. then it is set to 0x1FFF (all bits on).
+	ElementaryStreams  []ElementaryStream      `json:"_elementary_streams"`
+	ProgramDescriptors []descriptor.Descriptor `json:"_program_descriptors"` // Program descriptors
+	ProgramNumber      uint16                  `json:"program_number"`
+	PCRPID             uint16                  `json:"PCR_PID"` // The packet identifier that contains the program clock reference used to improve the random access accuracy of the stream's timing that is derived from the program timestamp. If this is unused. then it is set to 0x1FFF (all bits on).
 }
 
 // ElementaryStream represents a PMT elementary stream
 type ElementaryStream struct {
-	ElementaryStreamDescriptors []descriptor.Descriptor // Elementary stream descriptors
-	ElementaryPID               uint16                  // The packet identifier that contains the stream type data.
-	StreamType                  StreamType              // This defines the structure of the data contained within the elementary packet identifier.
+	ElementaryStreamDescriptors []descriptor.Descriptor `json:"_elementary_stream_descriptors"` // Elementary stream descriptors
+	ElementaryPID               uint16                  `json:"elementary_PID"`                 // The packet identifier that contains the stream type data.
+	StreamType                  StreamType              `json:"stream_type"`                    // This defines the structure of the data contained within the elementary packet identifier.
 }
 
 // parsePMTSection parses a PMT section
@@ -158,53 +161,47 @@ func (t StreamType) IsAudio() bool {
 	return false
 }
 
-func (t StreamType) String() string {
-	switch t {
-	case StreamTypeMPEG1Video:
-		return "MPEG1 Video"
-	case StreamTypeMPEG2Video:
-		return "MPEG2 Video"
-	case StreamTypeMPEG1Audio:
-		return "MPEG1 Audio"
-	case StreamTypeMPEG2Audio:
-		return "MPEG2 Audio"
-	case StreamTypePrivateSection:
-		return "Private Section"
-	case StreamTypePrivateData:
-		return "Private Data"
-	case StreamTypeAACAudio:
-		return "AAC Audio"
-	case StreamTypeMPEG4Video:
-		return "MPEG4 Video"
-	case StreamTypeAACLATMAudio:
-		return "AAC LATM Audio"
-	case StreamTypeMetadata:
-		return "Metadata"
-	case StreamTypeH264Video:
-		return "H264 Video"
-	case StreamTypeH265Video:
-		return "H265 Video"
-	case StreamTypeCAVSVideo:
-		return "CAVS Video"
-	case StreamTypeVC1Video:
-		return "VC1 Video"
-	case StreamTypeDIRACVideo:
-		return "DIRAC Video"
-	case StreamTypeAC3Audio:
-		return "AC3 Audio"
-	case StreamTypeDTSAudio:
-		return "DTS Audio"
-	case StreamTypeTRUEHDAudio:
-		return "TRUEHD Audio"
-	case StreamTypeSCTE35:
-		return "SCTE 35"
-	case StreamTypeEAC3Audio:
-		return "EAC3 Audio"
-	}
-	return "Unknown"
+var streamTypeNames = map[StreamType]string{
+	StreamTypeMPEG1Video:     "MPEG-1 video",
+	StreamTypeMPEG2Video:     "MPEG-2 video",
+	StreamTypeMPEG1Audio:     "MPEG-1 audio",
+	StreamTypeMPEG2Audio:     "MPEG-2 audio",
+	StreamTypePrivateSection: "private_sections",
+	StreamTypePrivateData:    "PES private data",
+	StreamTypeAACAudio:       "MPEG-2 AAC (ADTS)",
+	StreamTypeMPEG4Video:     "MPEG-4 video",
+	StreamTypeAACLATMAudio:   "MPEG-4 AAC (LATM)",
+	StreamTypeMetadata:       "metadata in PES",
+	StreamTypeH264Video:      "AVC video",
+	StreamTypeH265Video:      "HEVC video",
+	StreamTypeCAVSVideo:      "CAVS video",
+	StreamTypeVC1Video:       "VC-1 video",
+	StreamTypeDIRACVideo:     "Dirac video",
+	StreamTypeAC3Audio:       "AC-3 audio (ATSC)",
+	StreamTypeDTSAudio:       "DTS audio",
+	StreamTypeTRUEHDAudio:    "TrueHD audio",
+	StreamTypeSCTE35:         "SCTE-35 splice_info_section",
+	StreamTypeEAC3Audio:      "E-AC-3 audio (ATSC)",
 }
 
-func (t StreamType) ToPESStreamID() uint8 {
+func (t StreamType) String() (s string) {
+	var ok bool
+	if s, ok = streamTypeNames[t]; !ok {
+		s = fmt.Sprintf("0x%02x", uint8(t))
+	}
+	return
+}
+
+func (t StreamType) MarshalJSON() (b []byte, err error) {
+	return json.Marshal(t.String())
+}
+
+func (t *StreamType) UnmarshalJSON(b []byte) (err error) {
+	*t, err = util.UnmarshalEnum(b, streamTypeNames)
+	return
+}
+
+func (t StreamType) ToPESStreamID() pes.StreamID {
 	switch t {
 	case StreamTypeMPEG1Video, StreamTypeMPEG2Video, StreamTypeMPEG4Video, StreamTypeH264Video,
 		StreamTypeH265Video, StreamTypeCAVSVideo, StreamTypeVC1Video:

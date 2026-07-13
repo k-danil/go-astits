@@ -13,15 +13,15 @@ import (
 // descriptors followed by a per-service loop with running status.
 // Page: 40 | Chapter: 5.2.10 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type SIT struct {
-	TransmissionInfoDescriptors []descriptor.Descriptor
-	Services                    []SITService
+	TransmissionInfoDescriptors []descriptor.Descriptor `json:"_transmission_info_descriptors"`
+	Services                    []SITService            `json:"_services"`
 }
 
 // SITService represents one service entry of a SIT
 type SITService struct {
-	Descriptors   []descriptor.Descriptor
-	ServiceID     uint16
-	RunningStatus uint8
+	Descriptors   []descriptor.Descriptor `json:"_descriptors"`
+	ServiceID     uint16                  `json:"service_id"`
+	RunningStatus RunningStatus           `json:"running_status"`
 }
 
 // parseSITSection parses a SIT section
@@ -49,7 +49,7 @@ func parseSITSection(i *bytesiter.Iterator, offsetSectionsEnd int) (d *SIT, err 
 			err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 			return
 		}
-		s.RunningStatus = uint8(binary.BigEndian.Uint16(bs) >> 12 & 0x7)
+		s.RunningStatus = RunningStatus(binary.BigEndian.Uint16(bs) >> 12 & 0x7)
 
 		// The 2 bytes just read pack running_status over the descriptor-loop
 		// length; rewind so descriptor.Parse consumes them as its prefix.
@@ -79,7 +79,7 @@ func (d *SIT) appendSection(dst []byte) []byte {
 		loopLen := descriptor.CalcLength(s.Descriptors)
 		dst = append(dst,
 			byte(s.ServiceID>>8), byte(s.ServiceID),
-			0x80|s.RunningStatus<<4|byte(loopLen>>8)&0xf, // reserved(1) + running_status(3) + service_loop_length(12)
+			0x80|byte(s.RunningStatus)<<4|byte(loopLen>>8)&0xf, // reserved(1) + running_status(3) + service_loop_length(12)
 			byte(loopLen))
 		dst = descriptor.Append(dst, s.Descriptors)
 	}

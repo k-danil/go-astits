@@ -33,7 +33,7 @@ func TestRoundtripPacketHeader(t *testing.T) {
 			PID:                        uint16(r.UintN(1 << 13)),
 			TransportErrorIndicator:    r.UintN(2) == 1,
 			TransportPriority:          r.UintN(2) == 1,
-			TransportScramblingControl: uint8(r.UintN(4)),
+			TransportScramblingControl: ScramblingControl(r.UintN(4)),
 		}
 		var b1, b2 [HeaderSize]byte
 		h.Put(b1[:])

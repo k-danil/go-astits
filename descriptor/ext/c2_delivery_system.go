@@ -12,12 +12,12 @@ import (
 // PLP.
 // Chapter: 6.4.5.1 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type C2DeliverySystem struct {
-	C2SystemTuningFrequency     uint32
-	PLPID                       uint8
-	DataSliceID                 uint8
-	C2SystemTuningFrequencyType uint8
-	ActiveOFDMSymbolDuration    uint8
-	GuardInterval               uint8
+	C2SystemTuningFrequency     uint32 `json:"C2_System_tuning_frequency"`
+	PLPID                       uint8  `json:"plp_id"`
+	DataSliceID                 uint8  `json:"data_slice_id"`
+	C2SystemTuningFrequencyType uint8  `json:"C2_System_tuning_frequency_type"`
+	ActiveOFDMSymbolDuration    uint8  `json:"active_OFDM_symbol_duration"`
+	GuardInterval               uint8  `json:"guard_interval"`
 }
 
 func parseC2DeliverySystem(i *bytesiter.Iterator, _ int) (d *C2DeliverySystem, err error) {

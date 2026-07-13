@@ -12,30 +12,30 @@ import (
 // PLP. The block after T2SystemID is present only when HasExtension.
 // Chapter: 6.4.5.3 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type T2DeliverySystem struct {
-	Cells              []T2Cell
-	T2SystemID         uint16
-	PLPID              uint8
-	SISOMISO           uint8
-	Bandwidth          uint8
-	GuardInterval      uint8
-	TransmissionMode   uint8
-	OtherFrequencyFlag bool
-	TFSFlag            bool
-	HasExtension       bool
+	Cells              []T2Cell `json:"_cells"`
+	T2SystemID         uint16   `json:"T2_system_id"`
+	PLPID              uint8    `json:"plp_id"`
+	SISOMISO           uint8    `json:"SISO/MISO"`
+	Bandwidth          uint8    `json:"bandwidth"`
+	GuardInterval      uint8    `json:"guard_interval"`
+	TransmissionMode   uint8    `json:"transmission_mode"`
+	OtherFrequencyFlag bool     `json:"other_frequency_flag"`
+	TFSFlag            bool     `json:"tfs_flag"`
+	HasExtension       bool     `json:"_has_extension"`
 }
 
 // T2Cell is one cell of a T2 delivery system descriptor. CentreFrequencies
 // holds one frequency, or several when the descriptor's TFSFlag is set.
 type T2Cell struct {
-	CentreFrequencies []uint32
-	Subcells          []T2Subcell
-	CellID            uint16
+	CentreFrequencies []uint32    `json:"_centre_frequencies"`
+	Subcells          []T2Subcell `json:"_subcells"`
+	CellID            uint16      `json:"cell_id"`
 }
 
 // T2Subcell is one subcell of a T2 cell
 type T2Subcell struct {
-	CellIDExtension     uint8
-	TransposerFrequency uint32
+	CellIDExtension     uint8  `json:"cell_id_extension"`
+	TransposerFrequency uint32 `json:"transposer_frequency"`
 }
 
 func parseT2DeliverySystem(i *bytesiter.Iterator, offsetEnd int) (d *T2DeliverySystem, err error) {

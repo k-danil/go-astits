@@ -14,16 +14,16 @@ import (
 // network.
 // Page: 32 | Chapter: 5.2.2 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type BAT struct {
-	BouquetDescriptors []descriptor.Descriptor
-	TransportStreams   []BATTransportStream
-	BouquetID          uint16
+	BouquetDescriptors []descriptor.Descriptor `json:"_bouquet_descriptors"`
+	TransportStreams   []BATTransportStream    `json:"_transport_streams"`
+	BouquetID          uint16                  `json:"bouquet_id"`
 }
 
 // BATTransportStream represents a transport stream of a BAT
 type BATTransportStream struct {
-	TransportDescriptors []descriptor.Descriptor
-	TransportStreamID    uint16
-	OriginalNetworkID    uint16
+	TransportDescriptors []descriptor.Descriptor `json:"_transport_descriptors"`
+	TransportStreamID    uint16                  `json:"transport_stream_id"`
+	OriginalNetworkID    uint16                  `json:"original_network_id"`
 }
 
 // parseBATSection parses a BAT section

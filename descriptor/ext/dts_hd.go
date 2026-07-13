@@ -11,35 +11,35 @@ import (
 // DTSHDSubstream. A nil substream pointer means that substream is absent.
 // Chapter: G.3 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type DTSHD struct {
-	AdditionalInfo []byte
-	CoreSubstream  *DTSHDSubstream
-	Substream0     *DTSHDSubstream
-	Substream1     *DTSHDSubstream
-	Substream2     *DTSHDSubstream
-	Substream3     *DTSHDSubstream
+	AdditionalInfo []byte          `json:"additional_info"`
+	CoreSubstream  *DTSHDSubstream `json:"substream_core"`
+	Substream0     *DTSHDSubstream `json:"substream_0"`
+	Substream1     *DTSHDSubstream `json:"substream_1"`
+	Substream2     *DTSHDSubstream `json:"substream_2"`
+	Substream3     *DTSHDSubstream `json:"substream_3"`
 }
 
 // DTSHDSubstream is one substream of a DTS-HD descriptor
 type DTSHDSubstream struct {
-	Assets            []DTSHDAsset
-	ChannelCount      uint8
-	SamplingFrequency uint8
-	LFEFlag           bool
-	SampleResolution  bool
+	Assets            []DTSHDAsset `json:"_assets"`
+	ChannelCount      uint8        `json:"channel_count"`
+	SamplingFrequency uint8        `json:"sampling_frequency"`
+	LFEFlag           bool         `json:"lfe_flag"`
+	SampleResolution  bool         `json:"sample_resolution"`
 }
 
 // DTSHDAsset is one audio asset of a DTS-HD substream. BitRate carries either
 // bit_rate or bit_rate_scaled per PostEncodeBRScalingFlag; ComponentType and
 // Language are present per their flags.
 type DTSHDAsset struct {
-	Language                [3]byte
-	BitRate                 uint16
-	AssetConstruction       uint8
-	ComponentType           uint8
-	VBRFlag                 bool
-	PostEncodeBRScalingFlag bool
-	ComponentTypeFlag       bool
-	LanguageCodeFlag        bool
+	Language                [3]byte `json:"ISO_639_language_code"`
+	BitRate                 uint16  `json:"bit_rate"`
+	AssetConstruction       uint8   `json:"asset_construction"`
+	ComponentType           uint8   `json:"component_type"`
+	VBRFlag                 bool    `json:"vbr_flag"`
+	PostEncodeBRScalingFlag bool    `json:"post_encode_br_scaling_flag"`
+	ComponentTypeFlag       bool    `json:"component_type_flag"`
+	LanguageCodeFlag        bool    `json:"language_code_flag"`
 }
 
 func parseDTSHD(i *bytesiter.Iterator, offsetEnd int) (d *DTSHD, err error) {

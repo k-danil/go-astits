@@ -12,13 +12,13 @@ import (
 )
 
 func TestHasPESOptionalHeader(t *testing.T) {
-	var a []int
+	var a []StreamID
 	for i := 0; i <= 255; i++ {
-		if !hasPESOptionalHeader(uint8(i)) {
-			a = append(a, i)
+		if !hasPESOptionalHeader(StreamID(i)) {
+			a = append(a, StreamID(i))
 		}
 	}
-	assert.Equal(t, []int{
+	assert.Equal(t, []StreamID{
 		StreamIDProgramStreamMap, StreamIDPaddingStream, StreamIDPrivateStream2,
 		StreamIDECM, StreamIDEMM, StreamIDDSMCC, StreamIDH2221TypeE, StreamIDProgramStreamDirectory,
 	}, a)
@@ -522,7 +522,7 @@ func TestParseOptionalHeaderPackHeader(t *testing.T) {
 	assert.Equal(t, uint8(4), h.Extension.PackField)
 	assert.Equal(t, []byte{0xde, 0xad, 0xbe, 0xef}, h.Extension.PackHeader)
 	assert.True(t, h.Extension.HasPSTDBuffer)
-	assert.Equal(t, uint8(1), h.Extension.PSTDBufferScale)
+	assert.Equal(t, PSTDBufferScale1024Bytes, h.Extension.PSTDBufferScale)
 	assert.Equal(t, uint16(0x1555), h.Extension.PSTDBufferSize)
 }
 

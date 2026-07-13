@@ -10,19 +10,19 @@ import (
 
 // MetadataPointer is the MPEG-2 systems metadata_pointer_descriptor (ISO/IEC 13818-1).
 type MetadataPointer struct {
-	MetadataLocatorRecord               []byte
-	PrivateData                         []byte
-	MetadataApplicationFormatIdentifier uint32
-	MetadataFormatIdentifier            uint32
-	Header                              Header
-	MetadataApplicationFormat           uint16
-	ProgramNumber                       uint16
-	TransportStreamLocation             uint16
-	TransportStreamID                   uint16
-	MPEGCarriageFlags                   uint8
-	MetadataFormat                      uint8
-	MetadataServiceID                   uint8
-	MetadataLocatorRecordFlag           bool
+	MetadataLocatorRecord               []byte `json:"metadata_locator_record"`
+	PrivateData                         []byte `json:"private_data"`
+	MetadataApplicationFormatIdentifier uint32 `json:"metadata_application_format_identifier"`
+	MetadataFormatIdentifier            uint32 `json:"metadata_format_identifier"`
+	Header                              Header `json:"_header"`
+	MetadataApplicationFormat           uint16 `json:"metadata_application_format"`
+	ProgramNumber                       uint16 `json:"program_number"`
+	TransportStreamLocation             uint16 `json:"transport_stream_location"`
+	TransportStreamID                   uint16 `json:"transport_stream_id"`
+	MPEGCarriageFlags                   uint8  `json:"MPEG_carriage_flags"`
+	MetadataFormat                      uint8  `json:"metadata_format"`
+	MetadataServiceID                   uint8  `json:"metadata_service_id"`
+	MetadataLocatorRecordFlag           bool   `json:"metadata_locator_record_flag"`
 }
 
 const (

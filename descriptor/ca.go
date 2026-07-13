@@ -12,10 +12,10 @@ import (
 // CAT, ECM when it sits in a PMT.
 // Chapter: 2.6.16 | Link: ISO/IEC 13818-1
 type CA struct {
-	Private  []byte
-	Header   Header
-	SystemID uint16
-	PID      uint16
+	Private  []byte `json:"private_data_byte"`
+	Header   Header `json:"_header"`
+	SystemID uint16 `json:"CA_system_ID"`
+	PID      uint16 `json:"CA_PID"`
 }
 
 func newDescriptorCA(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
