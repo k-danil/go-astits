@@ -43,7 +43,7 @@ func TestParsePacket204(t *testing.T) {
 	b204 := append(ts, bytes.Repeat([]byte{0xaa}, RSPacketSize-PacketSize)...)
 
 	p := new(Packet)
-	_, err := p.parse(b204, EmptySkipper)
+	_, err := p.parse(b204, EmptySkipper, nil)
 	assert.NoError(t, err)
 	assert.True(t, p.Header.PayloadUnitStartIndicator)
 	assert.Nil(t, p.Prefix)
@@ -68,20 +68,20 @@ func TestParsePacket(t *testing.T) {
 	bs := make([]byte, PacketSize)
 	bs[1] = 1 // Invalid sync byte, not zero-stuffed
 	p := new(Packet)
-	_, err := p.parse(bs, EmptySkipper)
+	_, err := p.parse(bs, EmptySkipper, nil)
 	assert.EqualError(t, err, ErrPacketMustStartWithASyncByte.Error())
 
 	// Valid
 	b, ep := packet(packetHeader, packetAdaptationField, []byte("payload"), true)
 	p = new(Packet)
-	_, err = p.parse(b, EmptySkipper)
+	_, err = p.parse(b, EmptySkipper, nil)
 	assert.NoError(t, err)
 	assert.Equal(t, p, ep)
 
 	// Skip
 	p = new(Packet)
 	var skip bool
-	skip, err = p.parse(b, func(_ *Packet) (skip bool) { return true })
+	skip, err = p.parse(b, func(_ *Packet) (skip bool) { return true }, nil)
 	assert.NoError(t, err)
 	assert.Equal(t, skip, true)
 }
@@ -126,7 +126,7 @@ func TestWritePacket_HeaderOnly(t *testing.T) {
 	// we can't just compare bytes returned by packetShort since they're not completely correct,
 	//  so we just cross-check writePacket with parsePacket
 	p := new(Packet)
-	_, err = p.parse(buf.Bytes(), EmptySkipper)
+	_, err = p.parse(buf.Bytes(), EmptySkipper, nil)
 	assert.NoError(t, err)
 	assert.Equal(t, ep, p)
 }
@@ -318,7 +318,7 @@ func BenchmarkParsePacket(b *testing.B) {
 	b.Run("ParsePacket", func(b *testing.B) {
 		b.ReportAllocs()
 		for i := 0; i < b.N; i++ {
-			_, _ = p.parse(bs, EmptySkipper)
+			_, _ = p.parse(bs, EmptySkipper, nil)
 		}
 		p.Reset()
 	})

@@ -208,7 +208,7 @@ func (p *Packet) Reset() {
 
 // parse parses a packet from bs. Direct slice parsing: no BytesIterator on the hot
 // per-packet path — its per-field call overhead was a significant share of the cost.
-func (p *Packet) parse(bs []byte, s PacketSkipper) (skip bool, err error) {
+func (p *Packet) parse(bs []byte, s PacketSkipper, keep *PIDSet) (skip bool, err error) {
 	if len(bs) < PacketSize {
 		return false, ErrShortPacket
 	}
@@ -238,6 +238,10 @@ func (p *Packet) parse(bs []byte, s PacketSkipper) (skip bool, err error) {
 	end := prefixLen + PacketSize // TS content ends here; a trailing RS suffix is excluded
 	p.Header.parseBytes(h)
 
+	// Inline PID allow-list: cheaper than a PacketSkipper call in the hot path.
+	if keep != nil && !keep.Has(p.Header.PID) {
+		return true, nil
+	}
 	if s != nil && s(p) {
 		return true, nil
 	}

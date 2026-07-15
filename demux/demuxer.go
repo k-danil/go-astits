@@ -54,6 +54,7 @@ type Demuxer struct {
 	optSkipErrLimit  uint
 	optResyncLimit   uint
 	optPacketSkipper ts.PacketSkipper
+	optKeepPIDs      *ts.PIDSet
 	optZeroCopyBatch uint
 	optSyncLock      bool
 	optDVBTables     bool
@@ -143,6 +144,25 @@ func WithPacketSkipper(s ts.PacketSkipper) func(*Demuxer) {
 			d.optPacketSkipper = s
 		}
 	}
+}
+
+// WithKeepPIDs sets an inline PID allow-list checked in the packet parse hot
+// path (cheaper than a PacketSkipper call). nil keeps all PIDs.
+//
+// Filtered packets never reach PSI processing, so include PID 0 (PAT) and the
+// PMT PID(s) whenever program or table info is still needed — otherwise the
+// demuxer cannot resolve the program map.
+func WithKeepPIDs(keep *ts.PIDSet) func(*Demuxer) {
+	return func(d *Demuxer) {
+		d.optKeepPIDs = keep
+	}
+}
+
+// SetKeepPIDs installs the inline PID allow-list after construction (see
+// WithKeepPIDs for the PAT/PMT caveat). It takes effect on the next packet
+// buffer, so set it before the pass that should filter (e.g. after Rewind).
+func (dmx *Demuxer) SetKeepPIDs(keep *ts.PIDSet) {
+	dmx.optKeepPIDs = keep
 }
 
 // WithSkipErrLimit returns the option to set the tolerated sync-loss streak
@@ -237,6 +257,7 @@ func (dmx *Demuxer) nextPacket(p *ts.Packet) (err error) {
 			PacketSize:    dmx.optPacketSize,
 			SkipErrLimit:  dmx.optSkipErrLimit,
 			Skipper:       dmx.optPacketSkipper,
+			KeepPIDs:      dmx.optKeepPIDs,
 			ZeroCopyBatch: dmx.optZeroCopyBatch,
 			SyncLock:      dmx.optSyncLock,
 			ResyncLimit:   dmx.optResyncLimit,

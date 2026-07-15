@@ -94,6 +94,10 @@ How:
   peeking ahead through a `ts.Peeker` (a raw reader is wrapped in bufio). Off by default so
   aligned files stay on the zero-wrap fast path; `WithResyncLimit` bounds recovery.
 - **`ts.PacketSkipper`** — header-level filtering before any payload work.
+- **`demux.WithKeepPIDs`** — inline PID allow-list (`ts.PIDSet`, a 13-bit bit set) checked in
+  the parse hot path with a single bit test, cheaper than a `PacketSkipper` call. Filtered
+  packets never reach PSI processing, so keep PID 0 (PAT) and the PMT PID(s) when program
+  info is still needed. `SetKeepPIDs` swaps the list in for a later pass (e.g. after `Rewind`).
 - **`Packet.Offset`** — a byte map of the stream, correct even with a skipper installed.
 - **`demux.WithPacketHook`** — a callback run on every raw packet as it is read (after the
   skipper, before unit assembly), so one `Next` traversal can serve both packet-level work

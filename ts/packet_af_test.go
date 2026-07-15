@@ -8,7 +8,7 @@ import (
 )
 
 func parseInto(t *testing.T, p *Packet, bs []byte) {
-	skip, err := p.parse(bs, EmptySkipper)
+	skip, err := p.parse(bs, EmptySkipper, nil)
 	require.NoError(t, err)
 	require.False(t, skip)
 }

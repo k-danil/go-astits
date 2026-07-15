@@ -15,7 +15,7 @@ func FuzzPacketParse(f *testing.F) {
 	f.Fuzz(func(t *testing.T, bs []byte) {
 		p := NewPacket()
 		defer p.Close()
-		_, _ = p.parse(bs, EmptySkipper)
+		_, _ = p.parse(bs, EmptySkipper, nil)
 	})
 }
 

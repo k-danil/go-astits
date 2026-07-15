@@ -113,6 +113,7 @@ type PacketBufferConfig struct {
 	PacketSize    uint
 	SkipErrLimit  uint
 	Skipper       PacketSkipper
+	KeepPIDs      *PIDSet // inline PID allow-list; nil = keep all
 	ZeroCopyBatch uint
 	SyncLock      bool
 	ResyncLimit   uint
@@ -127,6 +128,7 @@ type PacketBuffer struct {
 	packetSize     uint
 	prefixLen      int // M2TS TP_extra_header ahead of the sync byte; 0 otherwise
 	s              PacketSkipper
+	keepPIDs       *PIDSet
 	r              io.Reader
 	peeker         Peeker // non-nil ⇒ sync-lock mode
 	pos            int64
@@ -144,6 +146,7 @@ func NewPacketBuffer(r io.Reader, cfg PacketBufferConfig) (pb *PacketBuffer, err
 	pb = &PacketBuffer{
 		packetSize:   cfg.PacketSize,
 		s:            cfg.Skipper,
+		keepPIDs:     cfg.KeepPIDs,
 		r:            r,
 		zeroCopy:     cfg.ZeroCopyBatch > 0,
 		skipErrLimit: cfg.SkipErrLimit,
@@ -419,7 +422,7 @@ func (pb *PacketBuffer) Next(p *Packet) (err error) {
 		p.raw = bs
 
 		var skip bool
-		if skip, err = p.parse(bs, pb.s); err != nil {
+		if skip, err = p.parse(bs, pb.s, pb.keepPIDs); err != nil {
 			if skip && pb.skipErrCounter < pb.skipErrLimit {
 				pb.skipErrCounter++
 				if pb.onRecover != nil {
@@ -472,7 +475,7 @@ func (pb *PacketBuffer) nextSync(p *Packet) (err error) {
 
 		p.Offset = pb.pos
 		var skip bool
-		if skip, err = p.parse(pkt, pb.s); err != nil {
+		if skip, err = p.parse(pkt, pb.s, pb.keepPIDs); err != nil {
 			// Sync was present, so scanning won't help: drop the damaged packet.
 			if pb.onRecover != nil {
 				pb.onRecover(RecoverableError{Kind: ErrorKindPacketDrop, PID: PIDUnset, Offset: p.Offset, Err: err})
