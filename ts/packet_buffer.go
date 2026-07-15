@@ -15,7 +15,7 @@ type packetBatch struct {
 	off int
 
 	// When peeker is set, bs is a view into the reader's own buffer rather than
-	// an owned copy: a bufio-backed source already holds the bytes, so there is
+	// an owned copy: a Peeker-backed source already holds the bytes, so there is
 	// no reason to copy them into a second batch. pending is the previous
 	// window's consumed bytes, dropped before the next peek.
 	peeker  Peeker
@@ -92,16 +92,18 @@ var EmptySkipper = func(_ *Packet) (skip bool) { return }
 
 // Peeker is a reader that can look ahead without consuming and drop bytes it has
 // looked at; *bufio.Reader satisfies it. A reader that provides its own (e.g. a
-// UDP datagram reassembler) is used directly under sync lock; any other reader
-// is wrapped in bufio.
+// UDP datagram reassembler) is used directly; any other reader is wrapped in
+// bufio.
 //
 // The contract, matching *bufio.Reader: Peek returns up to n bytes without
 // consuming (fewer, with a non-nil error such as io.EOF, only at end of input),
-// and must accept n up to a few hundred bytes (a boundary scan window); Discard
-// drops exactly n bytes, where n never exceeds what a preceding Peek returned.
+// and must accept n up to Size(); Discard drops exactly n bytes, where n never
+// exceeds what a preceding Peek returned; Size reports that peek ceiling, which
+// must cover one boundary-scan window (a few hundred bytes).
 type Peeker interface {
 	Peek(n int) ([]byte, error)
 	Discard(n int) (discarded int, err error)
+	Size() int
 }
 
 // PacketBufferConfig configures NewPacketBuffer. PacketSize 0 autodetects.
@@ -160,7 +162,7 @@ func NewPacketBuffer(r io.Reader, cfg PacketBufferConfig) (pb *PacketBuffer, err
 		// autodetect would consume (and drop) the packets it inspects and skew
 		// Packet.Offset. Buffer it so the peek costs nothing.
 		if _, seekable := r.(io.Seeker); !seekable {
-			if _, buffered := r.(*bufio.Reader); !buffered {
+			if _, peekable := r.(Peeker); !peekable {
 				pb.r = bufio.NewReader(r)
 			}
 		}
@@ -176,12 +178,12 @@ func NewPacketBuffer(r io.Reader, cfg PacketBufferConfig) (pb *PacketBuffer, err
 	return
 }
 
-// newBatch picks the view buffer. A *bufio.Reader already holds the stream in its
-// own buffer, so peek views straight into it rather than copying it into a second
+// newBatch picks the view buffer. A Peeker already holds the stream in its own
+// buffer, so peek views straight into it rather than copying it into a second
 // batch of our own; any other reader gets an owned batch it is read (copied) into.
 func (pb *PacketBuffer) newBatch(batchPackets uint) *packetBatch {
-	if br, ok := pb.r.(*bufio.Reader); ok && br.Size() >= int(pb.packetSize) {
-		return newPeekBatch(br, br.Size())
+	if p, ok := pb.r.(Peeker); ok && p.Size() >= int(pb.packetSize) {
+		return newPeekBatch(p, p.Size())
 	}
 	return newPacketBatch(pb.packetSize, batchPackets)
 }
@@ -342,14 +344,14 @@ func hasLeadingSync(bs []byte) bool {
 	return (len(bs) > 0 && bs[0] == syncByte) || (len(bs) > m && bs[m] == syncByte)
 }
 
-// peek fills b from r and reports how many bytes it got. A *bufio.Reader is
-// peeked (not consumed, so shouldRewind is false); any other reader is read and
-// must be rewound or synced past the consumed bytes afterwards. A short stream
-// is not an error here — the caller decides whether it held enough to detect.
+// peek fills b from r and reports how many bytes it got. A Peeker is peeked (not
+// consumed, so shouldRewind is false); any other reader is read and must be
+// rewound or synced past the consumed bytes afterwards. A short stream is not an
+// error here — the caller decides whether it held enough to detect.
 func peek(r io.Reader, b []byte) (n int, shouldRewind bool, err error) {
-	if br, ok := r.(*bufio.Reader); ok {
+	if p, ok := r.(Peeker); ok {
 		var bs []byte
-		bs, err = br.Peek(len(b))
+		bs, err = p.Peek(len(b))
 		if err == io.EOF || errors.Is(err, bufio.ErrBufferFull) {
 			err = nil
 		}
