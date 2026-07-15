@@ -484,27 +484,32 @@ func (m *Muxer) generatePAT() (err error) {
 		}
 
 		m.pmUpdated = false
+
+		m.patBytes.Reset()
+		l := len(m.patData)
+		for i := 0; i <= l/packetMaxPayload; i++ {
+			start := i * packetMaxPayload
+			stop := min(start+packetMaxPayload, l)
+			pkt := ts.Packet{
+				Header: ts.PacketHeader{
+					HasPayload:                true,
+					PayloadUnitStartIndicator: i == 0,
+					PID:                       ts.PIDPAT,
+				},
+				Payload: m.patData[start:stop],
+			}
+			if _, err = pkt.Put(m.pkt); err != nil {
+				return
+			}
+			m.patBytes.Write(m.pkt)
+		}
 	}
 
-	m.patBytes.Reset()
-
-	l := len(m.patData)
-	for i := 0; i <= l/packetMaxPayload; i++ {
-		start := i * packetMaxPayload
-		stop := min(start+packetMaxPayload, l)
-		pkt := ts.Packet{
-			Header: ts.PacketHeader{
-				HasPayload:                true,
-				PayloadUnitStartIndicator: i == 0,
-				PID:                       ts.PIDPAT,
-				ContinuityCounter:         uint8(m.patCC.inc()),
-			},
-			Payload: m.patData[start:stop],
-		}
-		if _, err = pkt.Put(m.pkt); err != nil {
-			return
-		}
-		m.patBytes.Write(m.pkt)
+	// Only the continuity counter changes between emissions: patch it in place
+	// instead of repacketizing (mirrors the PES fast path).
+	b := m.patBytes.Bytes()
+	for off := 0; off < len(b); off += ts.PacketSize {
+		ts.SetContinuityCounter(b[off:], uint8(m.patCC.inc()))
 	}
 
 	return
@@ -550,27 +555,32 @@ func (m *Muxer) generatePMT() (err error) {
 		}
 
 		m.pmtUpdated = false
+
+		m.pmtBytes.Reset()
+		l := len(m.pmtData)
+		for i := 0; i <= l/packetMaxPayload; i++ {
+			start := i * packetMaxPayload
+			stop := min(start+packetMaxPayload, l)
+			pkt := ts.Packet{
+				Header: ts.PacketHeader{
+					HasPayload:                true,
+					PayloadUnitStartIndicator: i == 0,
+					PID:                       pmtStartPID, // FIXME multiple programs support
+				},
+				Payload: m.pmtData[start:stop],
+			}
+			if _, err = pkt.Put(m.pkt); err != nil {
+				return
+			}
+			m.pmtBytes.Write(m.pkt)
+		}
 	}
 
-	m.pmtBytes.Reset()
-
-	l := len(m.pmtData)
-	for i := 0; i <= l/packetMaxPayload; i++ {
-		start := i * packetMaxPayload
-		stop := min(start+packetMaxPayload, l)
-		pkt := ts.Packet{
-			Header: ts.PacketHeader{
-				HasPayload:                true,
-				PayloadUnitStartIndicator: i == 0,
-				PID:                       pmtStartPID, // FIXME multiple programs support
-				ContinuityCounter:         uint8(m.pmtCC.inc()),
-			},
-			Payload: m.pmtData[start:stop],
-		}
-		if _, err = pkt.Put(m.pkt); err != nil {
-			return
-		}
-		m.pmtBytes.Write(m.pkt)
+	// Only the continuity counter changes between emissions: patch it in place
+	// instead of repacketizing (mirrors the PES fast path).
+	b := m.pmtBytes.Bytes()
+	for off := 0; off < len(b); off += ts.PacketSize {
+		ts.SetContinuityCounter(b[off:], uint8(m.pmtCC.inc()))
 	}
 
 	return
