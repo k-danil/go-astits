@@ -7,9 +7,16 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/k-danil/go-astits/v2/internal/errclass"
 	"github.com/k-danil/go-astits/v2/internal/util"
 	"github.com/k-danil/go-astits/v2/ts"
 )
+
+// The two bits leading a PES optional header are fixed at '10' by the spec, so
+// anything else means the header is misaligned or corrupt, not merely odd.
+const optionalHeaderMarker = 0b10
+
+var ErrInvalidMarkerBits = errclass.New("astits: invalid PES optional header marker bits", ts.ErrInvalidData)
 
 // P-STD buffer scales
 type PSTDBufferScale uint8
@@ -338,11 +345,9 @@ type OptionalHeader struct {
 	HasESCR                bool                     `json:"ESCR_flag"`
 	HasESRate              bool                     `json:"ES_rate_flag"`
 	HasExtension           bool                     `json:"PES_extension_flag"`
-	HasOptionalFields      bool                     `json:"_has_optional_fields"`
 	HeaderLength           uint8                    `json:"PES_header_data_length"`
 	IsCopyrighted          bool                     `json:"copyright"`
 	IsOriginal             bool                     `json:"original_or_copy"`
-	MarkerBits             uint8                    `json:"_marker_bits"`
 	Priority               bool                     `json:"PES_priority"`
 	PTSDTSIndicator        PTSDTSIndicator          `json:"PTS_DTS_flags"`
 	ScramblingControl      ScramblingControl        `json:"PES_scrambling_control"`
@@ -457,7 +462,9 @@ func (h *OptionalHeader) parseBytes(bs []byte, o int) (dataStart int, err error)
 	}
 
 	b := bs[o]
-	h.MarkerBits = b >> 6
+	if b>>6 != optionalHeaderMarker {
+		return 0, ErrInvalidMarkerBits
+	}
 	h.ScramblingControl = ScramblingControl(b >> 4 & 0x3)
 	h.Priority = b&0x8 > 0
 	h.DataAlignmentIndicator = b&0x4 > 0
@@ -775,7 +782,7 @@ func (h *OptionalHeader) putBytes(bs []byte) (n int) {
 		return 0
 	}
 
-	b := uint8(0b10) << 6
+	b := uint8(optionalHeaderMarker) << 6
 	b |= uint8(h.ScramblingControl) << 4
 	b |= util.B2U(h.Priority) << 3
 	b |= util.B2U(h.DataAlignmentIndicator) << 2

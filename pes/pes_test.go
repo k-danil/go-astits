@@ -321,7 +321,6 @@ var pesTestCases = []pesTestCase{
 					HeaderLength:           60,
 					IsCopyrighted:          true,
 					IsOriginal:             true,
-					MarkerBits:             2,
 					//PackField:                       5,
 					Priority:          true,
 					PTSDTSIndicator:   3,
@@ -528,7 +527,6 @@ func TestParseOptionalHeaderPackHeader(t *testing.T) {
 
 func TestWriteOptionalHeaderCRCAndPackHeader(t *testing.T) {
 	orig := &OptionalHeader{
-		MarkerBits:   2,
 		HasCRC:       true,
 		CRC:          0x1234,
 		HasExtension: true,

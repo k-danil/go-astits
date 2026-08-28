@@ -14,7 +14,6 @@ const roundtripIterations = 500
 
 func randOptionalHeader(r *rand.Rand) *OptionalHeader {
 	h := &OptionalHeader{
-		MarkerBits:             2,
 		ScramblingControl:      ScramblingControl(r.UintN(4)),
 		Priority:               r.UintN(2) == 1,
 		DataAlignmentIndicator: r.UintN(2) == 1,
