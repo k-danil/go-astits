@@ -5,9 +5,9 @@ import (
 )
 
 func FuzzPacketParse(f *testing.F) {
-	b, _ := packet(packetHeader, packetAdaptationField, []byte("payload"), false)
+	b, _ := packet([]byte("payload"), false)
 	f.Add(b)
-	b, _ = packet(packetHeader, packetAdaptationField, []byte("payload"), true)
+	b, _ = packet([]byte("payload"), true)
 	f.Add(b)
 	b, _ = packetShort(PacketHeader{HasPayload: true, PID: 0x100}, []byte{0xde})
 	f.Add(b[:PacketSize])
@@ -15,12 +15,12 @@ func FuzzPacketParse(f *testing.F) {
 	f.Fuzz(func(t *testing.T, bs []byte) {
 		p := NewPacket()
 		defer p.Close()
-		_, _ = p.parse(bs, EmptySkipper, nil)
+		_, _ = p.parse(bs, nil, nil)
 	})
 }
 
 func FuzzAdaptationFieldParse(f *testing.F) {
-	f.Add(packetAdaptationFieldBytes(packetAdaptationField))
+	f.Add(packetAdaptationFieldBytes())
 	f.Add([]byte{0x00})
 	f.Add([]byte{0x01, 0x40})
 	f.Fuzz(func(t *testing.T, bs []byte) {

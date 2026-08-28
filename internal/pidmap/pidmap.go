@@ -37,6 +37,12 @@ func (m *Map[V]) GetOrAdd(key uint16) *V {
 	return &m.Vals[len(m.Vals)-1]
 }
 
+// Swap invalidates pointers returned by Get.
+func (m *Map[V]) Swap(i, j int) {
+	m.Keys[i], m.Keys[j] = m.Keys[j], m.Keys[i]
+	m.Vals[i], m.Vals[j] = m.Vals[j], m.Vals[i]
+}
+
 func (m *Map[V]) Remove(key uint16) {
 	for i, k := range m.Keys {
 		if k == key {

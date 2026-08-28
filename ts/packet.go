@@ -48,6 +48,8 @@ const (
 	M2TSPacketSize = 192 // 4-byte TP_extra_header prefix + 188
 	RSPacketSize   = 204 // 188 + 16-byte Reed-Solomon parity suffix
 	HeaderSize     = 4
+
+	m2tsPrefixSize = M2TSPacketSize - PacketSize
 )
 
 const syncByte byte = '\x47'
@@ -62,13 +64,13 @@ var poolOfPacket = sync.Pool{
 // https://en.wikipedia.org/wiki/MPEG_transport_stream
 type Packet struct {
 	bs  [RSPacketSize]byte
-	raw []byte                // the on-wire bytes: a subslice of bs in copy mode, a batch view in zero-copy mode
-	af  PacketAdaptationField // AdaptationField points here — no per-packet allocation
+	raw []byte // the on-wire bytes: a subslice of bs in copy mode, a batch view in zero-copy mode
 
-	Header          PacketHeader           `json:"_header"`
-	AdaptationField *PacketAdaptationField `json:"adaptation_field"`
-	Payload         []byte                 `json:"data_byte"` // This is only the payload content
-	Prefix          []byte                 `json:"_prefix"`   // the 192-byte M2TS TP_extra_header (4 bytes); empty otherwise. See ArrivalTimeStamp.
+	Header          PacketHeader          `json:"_header"`
+	PrefixLen       uint8                 `json:"_prefix_len"`      // 4 for M2TS, 0 otherwise; the sync byte starts at this offset in Raw.
+	Prefix          uint32                `json:"_prefix"`          // the 192-byte M2TS TP_extra_header; meaningful only when PrefixLen is 4. See ArrivalTimeStamp.
+	AdaptationField PacketAdaptationField `json:"adaptation_field"` // meaningful only when Header.HasAdaptationField
+	Payload         []byte                `json:"data_byte"`        // This is only the payload content
 
 	// Offset is the byte offset of the raw packet start (including any M2TS prefix)
 	// within the demuxed stream, counted from the Demuxer's first packet. Packets
@@ -83,7 +85,7 @@ func (p *Packet) UpdateHeader() {
 	if bs == nil {
 		bs = p.bs[:]
 	}
-	p.Header.Put(bs[len(p.Prefix):])
+	p.Header.Put(bs[p.PrefixLen:])
 }
 
 // PacketHeader represents a packet header
@@ -173,21 +175,21 @@ func (p *Packet) Raw() []byte {
 // a 2-bit copy_permission_indicator and a 30-bit 27 MHz arrival_time_stamp. ok
 // is false when the packet has no such prefix.
 func (p *Packet) ArrivalTimeStamp() (copyPermission uint8, ats uint32, ok bool) {
-	if len(p.Prefix) < 4 {
+	if p.PrefixLen < m2tsPrefixSize {
 		return
 	}
-	v := binary.BigEndian.Uint32(p.Prefix)
+	v := p.Prefix
 	return uint8(v >> 30), v & 0x3fffffff, true
 }
 
 // SetAdaptationField stores an owned copy in the packet's embedded field,
 // mirroring post-parse state.
 func (p *Packet) SetAdaptationField(src *PacketAdaptationField) {
+	p.Header.HasAdaptationField = src != nil
 	if src == nil {
 		return
 	}
-	p.af.CopyFrom(src)
-	p.AdaptationField = &p.af
+	p.AdaptationField.CopyFrom(src)
 }
 
 // Close returns the packet to the pool. Do not use the packet afterwards.
@@ -200,9 +202,10 @@ func (p *Packet) Close() {
 func (p *Packet) Reset() {
 	p.raw = nil
 	p.Header = PacketHeader{}
-	p.AdaptationField = nil
+	p.AdaptationField.Reset()
 	p.Payload = nil
-	p.Prefix = nil
+	p.Prefix = 0
+	p.PrefixLen = 0
 	p.Offset = 0
 }
 
@@ -218,11 +221,11 @@ func (p *Packet) parse(bs []byte, s PacketSkipper, keep *PIDSet) (skip bool, err
 	// Any other extra bytes (e.g. the 204-byte Reed-Solomon parity) are a
 	// trailing suffix and the TS packet starts at bs[0].
 	prefixLen := 0
-	p.Prefix = nil
 	if len(bs) == M2TSPacketSize {
-		prefixLen = M2TSPacketSize - PacketSize
-		p.Prefix = bs[:prefixLen]
+		prefixLen = m2tsPrefixSize
+		p.Prefix = binary.BigEndian.Uint32(bs[:m2tsPrefixSize])
 	}
+	p.PrefixLen = uint8(prefixLen)
 
 	// One big-endian 32-bit load covers the sync byte (top) and the 3 header bytes.
 	h := binary.BigEndian.Uint32(bs[prefixLen:])
@@ -234,8 +237,6 @@ func (p *Packet) parse(bs []byte, s PacketSkipper, keep *PIDSet) (skip bool, err
 		return
 	}
 
-	hdr := prefixLen + 1
-	end := prefixLen + PacketSize // TS content ends here; a trailing RS suffix is excluded
 	p.Header.parseBytes(h)
 
 	// Inline PID allow-list: cheaper than a PacketSkipper call in the hot path.
@@ -246,28 +247,24 @@ func (p *Packet) parse(bs []byte, s PacketSkipper, keep *PIDSet) (skip bool, err
 		return true, nil
 	}
 
-	// A reused packet must not leak the previous packet's fields into one
-	// that has no adaptation field / payload of its own.
-	p.AdaptationField = nil
-	p.Payload = nil
+	payloadAt := prefixLen + 1 + 3
+	end := prefixLen + PacketSize // TS content ends here; a trailing RS suffix is excluded
 
 	if p.Header.HasAdaptationField {
-		p.af.Reset()
-		p.AdaptationField = &p.af
-		if _, err = p.af.Parse(bs[hdr+3 : end]); err != nil {
+		p.AdaptationField.Reset()
+		var an int
+		if an, err = p.AdaptationField.Parse(bs[payloadAt:end]); err != nil {
 			return
 		}
+		payloadAt += an
 	}
 
+	// The else is load-bearing: packets come from a pool, so a Payload left
+	// unwritten keeps the previous packet's bytes.
 	if p.Header.HasPayload {
-		payloadAt := hdr + 3
-		if p.Header.HasAdaptationField {
-			payloadAt += 1 + int(p.af.Length)
-		}
-		if payloadAt > end {
-			return false, ErrShortPacket
-		}
 		p.Payload = bs[payloadAt:end]
+	} else {
+		p.Payload = nil
 	}
 	return
 }

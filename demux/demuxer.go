@@ -45,10 +45,7 @@ const (
 // http://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.13.01_40/en_300468v011301o.pdf
 type Demuxer struct {
 	ctx context.Context
-	// done is ctx.Done() cached: nil for a non-cancellable context lets the
-	// per-packet cancel check skip the select entirely.
-	done <-chan struct{}
-	r    io.Reader
+	r   io.Reader
 
 	optPacketSize    uint
 	optSkipErrLimit  uint
@@ -95,9 +92,8 @@ type Demuxer struct {
 // New creates a new transport stream demuxer based on a reader
 func New(ctx context.Context, r io.Reader, opts ...func(*Demuxer)) (d *Demuxer) {
 	d = &Demuxer{
-		ctx:  ctx,
-		done: ctx.Done(),
-		r:    r,
+		ctx: ctx,
+		r:   r,
 	}
 	d.programMap = pidmap.Map[uint16]{Keys: d.pmKeysArr[:0], Vals: d.pmValsArr[:0]}
 	d.psiPrev = pidmap.Map[psiCache]{Keys: d.psiKeysArr[:0], Vals: d.psiValsArr[:0]}
@@ -247,13 +243,17 @@ func (dmx *Demuxer) reportRecoverable(e ts.RecoverableError) {
 	dmx.pendingErrs = append(dmx.pendingErrs, &e)
 }
 
+func isCancel(err error) bool {
+	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
+}
+
 func (dmx *Demuxer) nextPacket(p *ts.Packet) (err error) {
 	if dmx.packetBuffer == nil {
 		var onRecover func(ts.RecoverableError)
 		if dmx.optRecoverable {
 			onRecover = dmx.reportRecoverable
 		}
-		if dmx.packetBuffer, err = ts.NewPacketBuffer(dmx.r, ts.PacketBufferConfig{
+		if dmx.packetBuffer, err = ts.NewPacketBuffer(dmx.ctx, dmx.r, ts.PacketBufferConfig{
 			PacketSize:    dmx.optPacketSize,
 			SkipErrLimit:  dmx.optSkipErrLimit,
 			Skipper:       dmx.optPacketSkipper,
@@ -269,7 +269,7 @@ func (dmx *Demuxer) nextPacket(p *ts.Packet) (err error) {
 	}
 
 	if err = dmx.packetBuffer.Next(p); err != nil {
-		if !errors.Is(err, ts.ErrNoMorePackets) {
+		if !errors.Is(err, ts.ErrNoMorePackets) && !isCancel(err) {
 			err = fmt.Errorf("astits: fetching next packet from buffer failed: %w", err)
 		}
 		return
@@ -284,18 +284,9 @@ func (dmx *Demuxer) nextPacket(p *ts.Packet) (err error) {
 func (dmx *Demuxer) NextPacket() (p *ts.Packet, err error) {
 	p = ts.NewPacket()
 
-	if dmx.done != nil {
-		select {
-		case <-dmx.done:
-			p.Close()
-			return nil, dmx.ctx.Err()
-		default:
-		}
-	}
-
-	if err = dmx.nextPacket(p); err != nil {
+	if err = dmx.NextPacketTo(p); err != nil {
 		p.Close()
-		return nil, err
+		p = nil
 	}
 
 	return
@@ -303,13 +294,6 @@ func (dmx *Demuxer) NextPacket() (p *ts.Packet, err error) {
 
 // NextPacketTo unpack packet to provided p.
 func (dmx *Demuxer) NextPacketTo(p *ts.Packet) (err error) {
-	if dmx.done != nil {
-		select {
-		case <-dmx.done:
-			return dmx.ctx.Err()
-		default:
-		}
-	}
 	return dmx.nextPacket(p)
 }
 
@@ -318,14 +302,6 @@ func (dmx *Demuxer) NextPacketTo(p *ts.Packet) (err error) {
 // see Section() and the PAT()/PMT() state. EOF is ts.ErrNoMorePackets; the
 // unfinished unit tails are emitted before it in ascending PID order.
 func (dmx *Demuxer) Next() (ev Event, err error) {
-	if dmx.done != nil {
-		select {
-		case <-dmx.done:
-			return 0, dmx.ctx.Err()
-		default:
-		}
-	}
-
 	// Release an unclaimed unit of the previous event
 	if dmx.pending != nil {
 		if !dmx.claimed {
@@ -365,6 +341,9 @@ func (dmx *Demuxer) Next() (ev Event, err error) {
 
 		var units []unit
 		if err = dmx.nextPacket(&dmx.pkt); err != nil {
+			if isCancel(err) {
+				return 0, err
+			}
 			if !errors.Is(err, ts.ErrNoMorePackets) {
 				werr := fmt.Errorf("astits: fetching next packet failed: %w", err)
 				// Flush recoverable errors reported during this failed read before

@@ -2,6 +2,7 @@ package ts
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
 	"testing"
 
@@ -10,7 +11,9 @@ import (
 	"github.com/k-danil/go-astits/v2/internal/bitstest"
 )
 
-func packet(h PacketHeader, a *PacketAdaptationField, i []byte, packet192bytes bool) ([]byte, *Packet) {
+// Both sides of the pair read the same globals, so bytes and expectation cannot
+// drift apart; do not add parameters that reach only one of them.
+func packet(i []byte, packet192bytes bool) ([]byte, *Packet) {
 	buf := &bytes.Buffer{}
 	w := bitstest.NewWriter(buf)
 	var prefix []byte
@@ -19,17 +22,20 @@ func packet(h PacketHeader, a *PacketAdaptationField, i []byte, packet192bytes b
 		_ = w.Write(prefix)
 	}
 	_ = w.Write(syncByte)                                           // Sync byte
-	_ = w.Write(packetHeaderBytes(h, "11"))                         // Header
-	_ = w.Write(packetAdaptationFieldBytes(a))                      // Adaptation field
+	_ = w.Write(packetHeaderBytes(packetHeader, "11"))              // Header
+	_ = w.Write(packetAdaptationFieldBytes())                       // Adaptation field
 	var payload = append(i, bytes.Repeat([]byte{0}, 147-len(i))...) // Payload
 	_ = w.Write(payload)
 	pk := &Packet{
 		Header:  packetHeader,
 		Payload: payload,
-		Prefix:  prefix,
 	}
-	pk.af = *packetAdaptationField
-	pk.AdaptationField = &pk.af
+	if len(prefix) > 0 {
+		pk.Prefix = binary.BigEndian.Uint32(prefix)
+		pk.PrefixLen = uint8(len(prefix))
+	}
+	pk.AdaptationField = *packetAdaptationField
+	pk.Header.HasAdaptationField = true
 	return buf.Bytes(), pk
 }
 
@@ -43,10 +49,10 @@ func TestParsePacket204(t *testing.T) {
 	b204 := append(ts, bytes.Repeat([]byte{0xaa}, RSPacketSize-PacketSize)...)
 
 	p := new(Packet)
-	_, err := p.parse(b204, EmptySkipper, nil)
+	_, err := p.parse(b204, nil, nil)
 	assert.NoError(t, err)
 	assert.True(t, p.Header.PayloadUnitStartIndicator)
-	assert.Nil(t, p.Prefix)
+	assert.Zero(t, p.PrefixLen)
 	assert.Len(t, p.Payload, PacketSize-HeaderSize) // 184; the 16 RS parity bytes are excluded
 }
 
@@ -68,13 +74,13 @@ func TestParsePacket(t *testing.T) {
 	bs := make([]byte, PacketSize)
 	bs[1] = 1 // Invalid sync byte, not zero-stuffed
 	p := new(Packet)
-	_, err := p.parse(bs, EmptySkipper, nil)
+	_, err := p.parse(bs, nil, nil)
 	assert.EqualError(t, err, ErrPacketMustStartWithASyncByte.Error())
 
 	// Valid
-	b, ep := packet(packetHeader, packetAdaptationField, []byte("payload"), true)
+	b, ep := packet([]byte("payload"), true)
 	p = new(Packet)
-	_, err = p.parse(b, EmptySkipper, nil)
+	_, err = p.parse(b, nil, nil)
 	assert.NoError(t, err)
 	assert.Equal(t, p, ep)
 
@@ -92,7 +98,7 @@ func TestParsePacket(t *testing.T) {
 //}
 
 func TestWritePacket(t *testing.T) {
-	eb, ep := packet(packetHeader, packetAdaptationField, []byte("payload"), false)
+	eb, ep := packet([]byte("payload"), false)
 	scratch := make([]byte, PacketSize)
 	n, err := ep.Put(scratch)
 	assert.NoError(t, err)
@@ -102,7 +108,7 @@ func TestWritePacket(t *testing.T) {
 }
 
 func BenchmarkWritePacket(b *testing.B) {
-	_, ep := packet(packetHeader, packetAdaptationField, []byte("payload"), false)
+	_, ep := packet([]byte("payload"), false)
 	scratch := make([]byte, PacketSize)
 
 	b.ReportAllocs()
@@ -126,7 +132,7 @@ func TestWritePacket_HeaderOnly(t *testing.T) {
 	// we can't just compare bytes returned by packetShort since they're not completely correct,
 	//  so we just cross-check writePacket with parsePacket
 	p := new(Packet)
-	_, err = p.parse(buf.Bytes(), EmptySkipper, nil)
+	_, err = p.parse(buf.Bytes(), nil, nil)
 	assert.NoError(t, err)
 	assert.Equal(t, ep, p)
 }
@@ -208,46 +214,46 @@ var packetAdaptationField = &PacketAdaptationField{
 	StuffingLength:                    5,
 }
 
-func packetAdaptationFieldBytes(a *PacketAdaptationField) []byte {
+func packetAdaptationFieldBytes() []byte {
 	buf := &bytes.Buffer{}
 	w := bitstest.NewWriter(buf)
-	_ = w.Write(uint8(36))                // Length
-	_ = w.Write(a.DiscontinuityIndicator) // Discontinuity indicator
-	_ = w.Write("1")                      // Random access indicator
-	_ = w.Write("1")                      // Elementary stream priority indicator
-	_ = w.Write("1")                      // PCR flag
-	_ = w.Write("1")                      // OPCR flag
-	_ = w.Write("1")                      // Splicing point flag
-	_ = w.Write("1")                      // Transport data flag
-	_ = w.Write("1")                      // Adaptation field extension flag
-	_ = w.Write(pcrBytes())               // PCR
-	_ = w.Write(pcrBytes())               // OPCR
-	_ = w.Write(uint8(2))                 // Splice countdown
-	_ = w.Write(uint8(4))                 // Transport private data length
-	_ = w.Write([]byte("test"))           // Transport private data
-	_ = w.Write(uint8(11))                // Adaptation extension length
-	_ = w.Write("1")                      // LTW flag
-	_ = w.Write("1")                      // Piecewise rate flag
-	_ = w.Write("1")                      // Seamless splice flag
-	_ = w.Write("11111")                  // Reserved
-	_ = w.Write("1")                      // LTW valid flag
-	_ = w.Write("010101010101010")        // LTW offset
-	_ = w.Write("11")                     // Piecewise rate reserved
-	_ = w.Write("1010101010101010101010") // Piecewise rate
-	_ = w.Write(dtsBytes("0010"))         // Splice type + DTS next access unit
-	_ = w.WriteN(^uint64(0), 40)          // Stuffing bytes
+	_ = w.Write(uint8(36))                                    // Length
+	_ = w.Write(packetAdaptationField.DiscontinuityIndicator) // Discontinuity indicator
+	_ = w.Write("1")                                          // Random access indicator
+	_ = w.Write("1")                                          // Elementary stream priority indicator
+	_ = w.Write("1")                                          // PCR flag
+	_ = w.Write("1")                                          // OPCR flag
+	_ = w.Write("1")                                          // Splicing point flag
+	_ = w.Write("1")                                          // Transport data flag
+	_ = w.Write("1")                                          // Adaptation field extension flag
+	_ = w.Write(pcrBytes())                                   // PCR
+	_ = w.Write(pcrBytes())                                   // OPCR
+	_ = w.Write(uint8(2))                                     // Splice countdown
+	_ = w.Write(uint8(4))                                     // Transport private data length
+	_ = w.Write([]byte("test"))                               // Transport private data
+	_ = w.Write(uint8(11))                                    // Adaptation extension length
+	_ = w.Write("1")                                          // LTW flag
+	_ = w.Write("1")                                          // Piecewise rate flag
+	_ = w.Write("1")                                          // Seamless splice flag
+	_ = w.Write("11111")                                      // Reserved
+	_ = w.Write("1")                                          // LTW valid flag
+	_ = w.Write("010101010101010")                            // LTW offset
+	_ = w.Write("11")                                         // Piecewise rate reserved
+	_ = w.Write("1010101010101010101010")                     // Piecewise rate
+	_ = w.Write(dtsBytes("0010"))                             // Splice type + DTS next access unit
+	_ = w.WriteN(^uint64(0), 40)                              // Stuffing bytes
 	return buf.Bytes()
 }
 
 func TestParsePacketAdaptationField(t *testing.T) {
 	af := &PacketAdaptationField{}
-	_, err := af.Parse(packetAdaptationFieldBytes(packetAdaptationField))
+	_, err := af.Parse(packetAdaptationFieldBytes())
 	assert.Equal(t, packetAdaptationField, af)
 	assert.NoError(t, err)
 }
 
 func TestWritePacketAdaptationField(t *testing.T) {
-	eb := packetAdaptationFieldBytes(packetAdaptationField)
+	eb := packetAdaptationFieldBytes()
 	bs := make([]byte, PacketSize)
 	bytesWritten, err := packetAdaptationField.Put(bs)
 	assert.NoError(t, err)
@@ -312,13 +318,13 @@ func BenchmarkWritePCR(b *testing.B) {
 }
 
 func BenchmarkParsePacket(b *testing.B) {
-	bs, _ := packet(packetHeader, packetAdaptationField, []byte("payload"), true)
+	bs, _ := packet([]byte("payload"), true)
 
 	p := NewPacket()
 	b.Run("ParsePacket", func(b *testing.B) {
 		b.ReportAllocs()
 		for i := 0; i < b.N; i++ {
-			_, _ = p.parse(bs, EmptySkipper, nil)
+			_, _ = p.parse(bs, nil, nil)
 		}
 		p.Reset()
 	})

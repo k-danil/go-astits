@@ -133,6 +133,9 @@ How:
   retaining it (an unclaimed unit is released by the next `Next`); a demuxer abandoned before
   EOF must be released via `Demuxer.Close()` — otherwise held resources go to the GC instead
   of the pools.
+- **Context cancellation is polled, not immediate**: the packet reader checks `ctx` once per
+  1024 packets, so a cancel is observed within that window rather than at the next call
+  boundary — the per-packet path stays free of a `select`.
 - **View mode**: packet memory is valid only until the next batch refill. The event API is
   unaffected (the accumulator copies out), but a `Packet` held from `NextPacketTo` is not.
 - **PSI dedup changes emission semantics** by default: a repeated section with identical

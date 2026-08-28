@@ -2,6 +2,7 @@ package demux
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
 
 	"github.com/k-danil/go-astits/v2/internal/bitstest"
@@ -10,26 +11,48 @@ import (
 
 const syncByte byte = '\x47'
 
-func packet(h ts.PacketHeader, a *ts.PacketAdaptationField, i []byte, packet192bytes bool) ([]byte, *ts.Packet) {
+// M2TS TP_extra_header ahead of the sync byte
+var m2tsPrefix = []byte("test")
+
+func padPayload(i []byte) []byte {
+	return append(i, bytes.Repeat([]byte{0}, 147-len(i))...)
+}
+
+// Bytes only: an expected *Packet built here could not honour a caller-supplied
+// header without duplicating the parser. Use packet for the fixture pair.
+func packetBytes(h ts.PacketHeader, i []byte, packet192bytes bool) []byte {
+	return renderPacket(h, i, packet192bytes, false)
+}
+
+// discontinuity is the only adaptation-field bit that ever varies between
+// callers; the rest of the field is fixture-constant.
+func renderPacket(h ts.PacketHeader, i []byte, packet192bytes, discontinuity bool) []byte {
 	buf := &bytes.Buffer{}
 	w := bitstest.NewWriter(buf)
-	var prefix []byte
 	if packet192bytes {
-		prefix = []byte("test") // M2TS TP_extra_header prefix (4 bytes) before the sync byte
-		_ = w.Write(prefix)
+		_ = w.Write(m2tsPrefix)
 	}
-	_ = w.Write(syncByte)                                           // Sync byte
-	_ = w.Write(packetHeaderBytes(h, "11"))                         // Header
-	_ = w.Write(packetAdaptationFieldBytes(a))                      // Adaptation field
-	var payload = append(i, bytes.Repeat([]byte{0}, 147-len(i))...) // Payload
-	_ = w.Write(payload)
+	_ = w.Write(syncByte)                                  // Sync byte
+	_ = w.Write(packetHeaderBytes(h, "11"))                // Header
+	_ = w.Write(packetAdaptationFieldBytes(discontinuity)) // Adaptation field
+	_ = w.Write(padPayload(i))                             // Payload
+	return buf.Bytes()
+}
+
+// Both sides of the pair read the same globals, so bytes and expectation cannot
+// drift apart; do not add parameters that reach only one of them.
+func packet(i []byte, packet192bytes bool) ([]byte, *ts.Packet) {
+	payload := padPayload(i)
 	pk := &ts.Packet{
 		Header:  packetHeader,
 		Payload: payload,
-		Prefix:  prefix,
+	}
+	if packet192bytes {
+		pk.Prefix = binary.BigEndian.Uint32(m2tsPrefix)
+		pk.PrefixLen = uint8(len(m2tsPrefix))
 	}
 	pk.SetAdaptationField(packetAdaptationField)
-	return buf.Bytes(), pk
+	return renderPacket(packetHeader, payload, packet192bytes, packetAdaptationField.DiscontinuityIndicator), pk
 }
 
 func packetShort(h ts.PacketHeader, payload []byte) ([]byte, *ts.Packet) {
@@ -98,11 +121,11 @@ var packetAdaptationField = &ts.PacketAdaptationField{
 	StuffingLength:                    5,
 }
 
-func packetAdaptationFieldBytes(a *ts.PacketAdaptationField) []byte {
+func packetAdaptationFieldBytes(discontinuity bool) []byte {
 	buf := &bytes.Buffer{}
 	w := bitstest.NewWriter(buf)
 	_ = w.Write(uint8(36))                // Length
-	_ = w.Write(a.DiscontinuityIndicator) // Discontinuity indicator
+	_ = w.Write(discontinuity)            // Discontinuity indicator
 	_ = w.Write("1")                      // Random access indicator
 	_ = w.Write("1")                      // Elementary stream priority indicator
 	_ = w.Write("1")                      // PCR flag

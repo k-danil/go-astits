@@ -3,6 +3,7 @@ package ts
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"io"
 	"testing"
 
@@ -31,7 +32,7 @@ func syncPackets(n int) []byte {
 // byte offsets and the terminating error.
 func drainSync(t *testing.T, r *bytes.Reader, cfg PacketBufferConfig) (offsets []int64, err error) {
 	t.Helper()
-	pb, nerr := NewPacketBuffer(r, cfg)
+	pb, nerr := NewPacketBuffer(context.Background(), r, cfg)
 	require.NoError(t, nerr)
 	p := NewPacket()
 	for {
@@ -107,7 +108,7 @@ func TestSyncLockOffThenOffsetFails(t *testing.T) {
 	stream := append(make([]byte, junk), syncPackets(5)...)
 
 	// Without sync lock an offset stream must not silently pass detection.
-	_, err := NewPacketBuffer(bytes.NewReader(stream), PacketBufferConfig{})
+	_, err := NewPacketBuffer(context.Background(), bytes.NewReader(stream), PacketBufferConfig{})
 	require.ErrorIs(t, err, ErrPacketMustStartWithASyncByte)
 }
 
@@ -145,7 +146,7 @@ func (n nonSeekableReader) Read(p []byte) (int, error) { return n.r.Read(p) }
 
 func TestAutoDetectNonSeekableNoOffsetSkew(t *testing.T) {
 	stream := syncPackets(5)
-	pb, err := NewPacketBuffer(nonSeekableReader{bytes.NewReader(stream)}, PacketBufferConfig{})
+	pb, err := NewPacketBuffer(context.Background(), nonSeekableReader{bytes.NewReader(stream)}, PacketBufferConfig{})
 	require.NoError(t, err)
 	require.Equal(t, uint(PacketSize), pb.PacketSize())
 
@@ -168,7 +169,7 @@ func FuzzSyncLock(f *testing.F) {
 	f.Add(append(make([]byte, 12), syncPackets(3)...))
 	f.Add(append(syncPackets(2), make([]byte, 500)...))
 	f.Fuzz(func(t *testing.T, b []byte) {
-		pb, err := NewPacketBuffer(bytes.NewReader(b), PacketBufferConfig{SyncLock: true, ResyncLimit: 4})
+		pb, err := NewPacketBuffer(context.Background(), bytes.NewReader(b), PacketBufferConfig{SyncLock: true, ResyncLimit: 4})
 		if err != nil {
 			return
 		}

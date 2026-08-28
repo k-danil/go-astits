@@ -2,6 +2,7 @@ package ts
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -88,8 +89,6 @@ func (b *packetBatch) next(packetSize int) (bs []byte) {
 // Use this option if you need to filter out unwanted packets from your pipeline. NextPacket() will return the next unskipped packet if any.
 type PacketSkipper func(p *Packet) (skip bool)
 
-var EmptySkipper = func(_ *Packet) (skip bool) { return }
-
 // Peeker is a reader that can look ahead without consuming and drop bytes it has
 // looked at; *bufio.Reader satisfies it. A reader that provides its own (e.g. a
 // UDP datagram reassembler) is used directly; any other reader is wrapped in
@@ -139,11 +138,50 @@ type PacketBuffer struct {
 	resyncCounter  uint
 	resyncLimit    uint // 0 = unlimited
 	onRecover      func(RecoverableError)
+
+	// Cancellation lives here rather than in the caller: both loops below can
+	// run unboundedly on a live source (an absent PID skips forever, resync with
+	// no limit likewise), and a check outside Next cannot reach either.
+	ctx        context.Context
+	done       <-chan struct{}
+	cancelPoll uint
 }
 
-// NewPacketBuffer creates a new packet buffer
-func NewPacketBuffer(r io.Reader, cfg PacketBufferConfig) (pb *PacketBuffer, err error) {
+// cancelPollPackets must be a power of two: the check is a mask, not a modulo.
+// A non-blocking select is a call into runtime.selectnbrecv — far too costly to
+// run per packet — so it is checked on the first pass and every 1024th after.
+const cancelPollPackets = 1024
+
+// shouldPollCancel keeps the per-packet path free of calls: it is inlined into
+// the read loops, and only the rare true result reaches the select below.
+func (pb *PacketBuffer) shouldPollCancel() bool {
+	if pb.done == nil {
+		return false
+	}
+	poll := pb.cancelPoll
+	pb.cancelPoll++
+	return poll&(cancelPollPackets-1) == 0
+}
+
+// The pragma keeps the select out of the read loops: inlined, it would sit in
+// the loop body on every packet to run once per cancelPollPackets.
+//
+//go:noinline
+func (pb *PacketBuffer) pollCancel() error {
+	select {
+	case <-pb.done:
+		return pb.ctx.Err()
+	default:
+		return nil
+	}
+}
+
+// NewPacketBuffer creates a new packet buffer. ctx cancels the read loops; pass
+// context.Background() for a buffer that runs to the end of the reader.
+func NewPacketBuffer(ctx context.Context, r io.Reader, cfg PacketBufferConfig) (pb *PacketBuffer, err error) {
 	pb = &PacketBuffer{
+		ctx:          ctx,
+		done:         ctx.Done(),
 		packetSize:   cfg.PacketSize,
 		s:            cfg.Skipper,
 		keepPIDs:     cfg.KeepPIDs,
@@ -399,6 +437,11 @@ func (pb *PacketBuffer) Next(p *Packet) (err error) {
 
 	ps := int(pb.packetSize)
 	for {
+		if pb.shouldPollCancel() {
+			if err = pb.pollCancel(); err != nil {
+				return
+			}
+		}
 		var bs []byte
 		if pb.batch != nil {
 			if pb.batch.empty() {
@@ -448,6 +491,11 @@ func (pb *PacketBuffer) Next(p *Packet) (err error) {
 func (pb *PacketBuffer) nextSync(p *Packet) (err error) {
 	ps := int(pb.packetSize)
 	for {
+		if pb.shouldPollCancel() {
+			if err = pb.pollCancel(); err != nil {
+				return
+			}
+		}
 		var buf []byte
 		if buf, err = peekUpTo(pb.peeker, ps); err != nil {
 			return fmt.Errorf("astits: reading %d bytes failed: %w", ps, err)

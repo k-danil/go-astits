@@ -2,6 +2,7 @@ package ts
 
 import (
 	"bytes"
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -21,11 +22,11 @@ func TestPacketResetKeepsParseCorrect(t *testing.T) {
 	assert.Nil(t, p.raw)
 	assert.Equal(t, int64(0), p.Offset)
 	assert.Equal(t, PacketHeader{}, p.Header)
-	assert.Nil(t, p.AdaptationField)
+	assert.Equal(t, PacketAdaptationField{}, p.AdaptationField)
 	assert.Nil(t, p.Payload)
 
 	b, _ := packetShort(PacketHeader{HasPayload: true, PID: 0x100}, []byte{0xde, 0xad, 0xbe, 0xef})
-	pb, err := NewPacketBuffer(bytes.NewReader(b[:PacketSize]), PacketBufferConfig{PacketSize: PacketSize, Skipper: EmptySkipper})
+	pb, err := NewPacketBuffer(context.Background(), bytes.NewReader(b[:PacketSize]), PacketBufferConfig{PacketSize: PacketSize})
 	require.NoError(t, err)
 	require.NoError(t, pb.Next(p))
 	assert.Equal(t, uint16(0x100), p.Header.PID)

@@ -46,17 +46,32 @@ type accumulator struct {
 	slots      pidmap.Map[pidSlot]
 	programMap *pidmap.Map[uint16]
 	dvbTables  bool
+	units      uint32
 
 	keysArr [packetPoolPreallocPIDs]uint16
 	valsArr [packetPoolPreallocPIDs]pidSlot
 }
 
-const packetPoolPreallocPIDs = 8
+const (
+	packetPoolPreallocPIDs = 8
+	slotReorderPeriod      = 64
+)
 
 func (a *accumulator) init(programMap *pidmap.Map[uint16], dvbTables bool) {
 	a.slots = pidmap.Map[pidSlot]{Keys: a.keysArr[:0], Vals: a.valsArr[:0]}
 	a.programMap = programMap
 	a.dvbTables = dvbTables
+	a.units = 0
+}
+
+// reorderSlots keeps the hottest PIDs at the front of the linear scan in
+// pidmap.Get.
+func (a *accumulator) reorderSlots() {
+	for i := 1; i < len(a.slots.Keys); i++ {
+		for j := i; j > 0 && a.slots.Vals[j].stats > a.slots.Vals[j-1].stats; j-- {
+			a.slots.Swap(j, j-1)
+		}
+	}
 }
 
 // unit is a flushed payload unit handed to the parse stage. buf ownership
@@ -79,6 +94,15 @@ func (a *accumulator) isPSIPID(pid uint16) bool {
 // or — for a torn PSI flushed by the same packet that completes the next
 // section — two) to out. Buffer ownership moves with the units.
 func (a *accumulator) add(p *ts.Packet, out []unit) []unit {
+	// Must run before the slot lookup: reordering moves Vals, invalidating the
+	// slot pointer and the unit.af taken from it.
+	if p.Header.PayloadUnitStartIndicator {
+		a.units++
+		if a.units&(slotReorderPeriod-1) == 0 {
+			a.reorderSlots()
+		}
+	}
+
 	if p.Header.TransportErrorIndicator || !p.Header.HasPayload {
 		return out
 	}
@@ -112,7 +136,10 @@ func (a *accumulator) add(p *ts.Packet, out []unit) []unit {
 		slot.start(p, a.isPSIPID(p.Header.PID))
 	}
 
-	slot.append(p.Payload)
+	if need := len(slot.buf.bs) + len(p.Payload); need > cap(slot.buf.bs) {
+		slot.grow(need)
+	}
+	slot.buf.bs = append(slot.buf.bs, p.Payload...)
 
 	// A PSI unit completes by section lengths, without waiting for the next
 	// PayloadUnitStartIndicator
@@ -141,7 +168,7 @@ func (s *pidSlot) start(p *ts.Packet, isPSI bool) {
 	s.cc = p.Header.ContinuityCounter
 	if p.Header.HasAdaptationField {
 		s.afIdx ^= 1
-		s.af[s.afIdx].CopyFrom(p.AdaptationField)
+		s.af[s.afIdx].CopyFrom(&p.AdaptationField)
 		s.hasAF = true
 	} else {
 		s.hasAF = false
@@ -169,17 +196,12 @@ func (s *pidSlot) classFor(payload []byte, isPSI bool) uint8 {
 	return maxClass(s.sticky, defaultFloorClass)
 }
 
-// append copies the payload into the unit buffer, growing by size classes.
-func (s *pidSlot) append(payload []byte) {
-	need := len(s.buf.bs) + len(payload)
-	if need > cap(s.buf.bs) {
-		grown := poolOfPayload.getClass(classOf(need))
-		grown.bs = grown.bs[:len(s.buf.bs)]
-		copy(grown.bs, s.buf.bs)
-		poolOfPayload.put(s.buf)
-		s.buf = grown
-	}
-	s.buf.bs = append(s.buf.bs, payload...)
+func (s *pidSlot) grow(need int) {
+	grown := poolOfPayload.getClass(classOf(need))
+	grown.bs = grown.bs[:len(s.buf.bs)]
+	copy(grown.bs, s.buf.bs)
+	poolOfPayload.put(s.buf)
+	s.buf = grown
 }
 
 // flush hands the accumulated unit over; the slot remembers the size class

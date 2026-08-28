@@ -19,10 +19,10 @@ func TestPSIDedup(t *testing.T) {
 	b := psiBytes()
 	cc := uint8(0)
 	writePSI := func() {
-		b1, _ := packet(ts.PacketHeader{ContinuityCounter: cc, PayloadUnitStartIndicator: true, PID: ts.PIDPAT}, &ts.PacketAdaptationField{}, b[:147], true)
+		b1 := packetBytes(ts.PacketHeader{ContinuityCounter: cc, PayloadUnitStartIndicator: true, PID: ts.PIDPAT}, b[:147], true)
 		_ = w.Write(b1)
 		cc++
-		b2, _ := packet(ts.PacketHeader{ContinuityCounter: cc, PID: ts.PIDPAT}, &ts.PacketAdaptationField{}, b[147:], true)
+		b2 := packetBytes(ts.PacketHeader{ContinuityCounter: cc, PID: ts.PIDPAT}, b[147:], true)
 		_ = w.Write(b2)
 		cc++
 	}

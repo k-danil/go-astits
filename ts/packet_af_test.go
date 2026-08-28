@@ -8,7 +8,7 @@ import (
 )
 
 func parseInto(t *testing.T, p *Packet, bs []byte) {
-	skip, err := p.parse(bs, EmptySkipper, nil)
+	skip, err := p.parse(bs, nil, nil)
 	require.NoError(t, err)
 	require.False(t, skip)
 }
@@ -18,17 +18,16 @@ func TestPacketEmbeddedAFReuse(t *testing.T) {
 	defer p.Close()
 
 	// Full AF (fixture: PCR/OPCR/private/extension)
-	bs1, _ := packet(packetHeader, packetAdaptationField, []byte("payload"), false)
+	bs1, _ := packet([]byte("payload"), false)
 	parseInto(t, p, bs1[:PacketSize])
-	require.NotNil(t, p.AdaptationField)
-	assert.Same(t, &p.af, p.AdaptationField)
+	require.True(t, p.Header.HasAdaptationField)
 	assert.Equal(t, []byte("test"), p.AdaptationField.TransportPrivateData)
 	assert.NotNil(t, p.AdaptationField.AdaptationExtensionField)
 
 	// Packet without AF: the pointer must be reset to nil
 	bs2, _ := packetShort(PacketHeader{HasPayload: true, PID: 0x100}, []byte{0xde})
 	parseInto(t, p, bs2[:PacketSize])
-	assert.Nil(t, p.AdaptationField)
+	assert.False(t, p.Header.HasAdaptationField)
 
 	// Minimal AF (RAI only): stale private/extension from the first parse
 	// must not leak through
@@ -40,7 +39,7 @@ func TestPacketEmbeddedAFReuse(t *testing.T) {
 	minimalAF[4] = 0x01 // AF length
 	minimalAF[5] = 0x40 // RAI only
 	parseInto(t, p, minimalAF)
-	require.NotNil(t, p.AdaptationField)
+	require.True(t, p.Header.HasAdaptationField)
 	assert.True(t, p.AdaptationField.RandomAccessIndicator)
 	assert.False(t, p.AdaptationField.HasTransportPrivateData)
 	assert.Nil(t, p.AdaptationField.TransportPrivateData)
@@ -57,7 +56,7 @@ func TestPacketEmbeddedAFReuse(t *testing.T) {
 	zeroLenAF[3] = 0x30 // AF+payload, CC=0
 	zeroLenAF[4] = 0x00 // AF length = 0
 	parseInto(t, p, zeroLenAF)
-	require.NotNil(t, p.AdaptationField)
+	require.True(t, p.Header.HasAdaptationField)
 	assert.False(t, p.AdaptationField.HasPCR)
 	assert.False(t, p.AdaptationField.RandomAccessIndicator)
 }

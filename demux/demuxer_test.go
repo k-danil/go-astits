@@ -54,9 +54,9 @@ func TestDemuxerNextPacket(t *testing.T) {
 	// Valid
 	buf := &bytes.Buffer{}
 	w := bitstest.NewWriter(buf)
-	b1, p1 := packet(packetHeader, packetAdaptationField, []byte("1"), true)
+	b1, p1 := packet([]byte("1"), true)
 	_ = w.Write(b1)
-	b2, p2 := packet(packetHeader, packetAdaptationField, []byte("2"), true)
+	b2, p2 := packet([]byte("2"), true)
 	p2.Offset = int64(len(b1))
 	_ = w.Write(b2)
 	dmx = New(context.Background(), bytes.NewReader(buf.Bytes()))
@@ -123,9 +123,9 @@ func TestDemuxerNextTables(t *testing.T) {
 	buf := &bytes.Buffer{}
 	w := bitstest.NewWriter(buf)
 	b := psiBytes()
-	b1, _ := packet(ts.PacketHeader{ContinuityCounter: uint8(0), PayloadUnitStartIndicator: true, PID: ts.PIDPAT}, &ts.PacketAdaptationField{}, b[:147], true)
+	b1 := packetBytes(ts.PacketHeader{ContinuityCounter: uint8(0), PayloadUnitStartIndicator: true, PID: ts.PIDPAT}, b[:147], true)
 	_ = w.Write(b1)
-	b2, _ := packet(ts.PacketHeader{ContinuityCounter: uint8(1), PID: ts.PIDPAT}, &ts.PacketAdaptationField{}, b[147:], true)
+	b2 := packetBytes(ts.PacketHeader{ContinuityCounter: uint8(1), PID: ts.PIDPAT}, b[147:], true)
 	_ = w.Write(b2)
 	dmx := New(context.Background(), bytes.NewReader(buf.Bytes()))
 
@@ -166,12 +166,12 @@ func TestDemuxerNextUnknownDataPackets(t *testing.T) {
 	bufWriter := bitstest.NewWriter(buf)
 
 	// ts.Packet that isn't a data packet (PSI or PES)
-	b1, _ := packet(ts.PacketHeader{
+	b1 := packetBytes(ts.PacketHeader{
 		ContinuityCounter:         uint8(0),
 		PID:                       256,
 		PayloadUnitStartIndicator: true,
 		HasPayload:                true,
-	}, &ts.PacketAdaptationField{}, []byte{0x01, 0x02, 0x03, 0x04}, false)
+	}, []byte{0x01, 0x02, 0x03, 0x04}, false)
 	_ = bufWriter.Write(b1)
 
 	dmx := New(context.Background(), bytes.NewReader(buf.Bytes()),
@@ -287,9 +287,9 @@ func TestDemuxerRewind(t *testing.T) {
 	buf := &bytes.Buffer{}
 	w := bitstest.NewWriter(buf)
 	b := psiBytes()
-	b1, _ := packet(ts.PacketHeader{ContinuityCounter: uint8(0), PayloadUnitStartIndicator: true, PID: ts.PIDPAT}, &ts.PacketAdaptationField{}, b[:147], true)
+	b1 := packetBytes(ts.PacketHeader{ContinuityCounter: uint8(0), PayloadUnitStartIndicator: true, PID: ts.PIDPAT}, b[:147], true)
 	_ = w.Write(b1)
-	b2, _ := packet(ts.PacketHeader{ContinuityCounter: uint8(1), PID: ts.PIDPAT}, &ts.PacketAdaptationField{}, b[147:], true)
+	b2 := packetBytes(ts.PacketHeader{ContinuityCounter: uint8(1), PID: ts.PIDPAT}, b[147:], true)
 	_ = w.Write(b2)
 	r := bytes.NewReader(buf.Bytes())
 	dmx := New(context.Background(), r)
@@ -325,9 +325,9 @@ func BenchmarkDemuxer_Next(b *testing.B) {
 	buf := &bytes.Buffer{}
 	w := bitstest.NewWriter(buf)
 	bs := psiBytes()
-	b1, _ := packet(ts.PacketHeader{ContinuityCounter: uint8(0), PayloadUnitStartIndicator: true, PID: ts.PIDPAT}, &ts.PacketAdaptationField{}, bs[:147], true)
+	b1 := packetBytes(ts.PacketHeader{ContinuityCounter: uint8(0), PayloadUnitStartIndicator: true, PID: ts.PIDPAT}, bs[:147], true)
 	_ = w.Write(b1)
-	b2, _ := packet(ts.PacketHeader{ContinuityCounter: uint8(1), PID: ts.PIDPAT}, &ts.PacketAdaptationField{}, bs[147:], true)
+	b2 := packetBytes(ts.PacketHeader{ContinuityCounter: uint8(1), PID: ts.PIDPAT}, bs[147:], true)
 	_ = w.Write(b2)
 
 	r := bytes.NewReader(buf.Bytes())
@@ -347,9 +347,9 @@ func fuzzSeedStream() []byte {
 	buf := &bytes.Buffer{}
 	w := bitstest.NewWriter(buf)
 	bs := psiBytes()
-	b1, _ := packet(ts.PacketHeader{ContinuityCounter: uint8(0), PayloadUnitStartIndicator: true, PID: ts.PIDPAT}, &ts.PacketAdaptationField{}, bs[:147], true)
+	b1 := packetBytes(ts.PacketHeader{ContinuityCounter: uint8(0), PayloadUnitStartIndicator: true, PID: ts.PIDPAT}, bs[:147], true)
 	_ = w.Write(b1)
-	b2, _ := packet(ts.PacketHeader{ContinuityCounter: uint8(1), PID: ts.PIDPAT}, &ts.PacketAdaptationField{}, bs[147:], true)
+	b2 := packetBytes(ts.PacketHeader{ContinuityCounter: uint8(1), PID: ts.PIDPAT}, bs[147:], true)
 	_ = w.Write(b2)
 	return buf.Bytes()
 }
@@ -394,10 +394,10 @@ func TestDemuxerPSIRepeats(t *testing.T) {
 	b := psiBytes()
 	cc := uint8(0)
 	writePSI := func() {
-		b1, _ := packet(ts.PacketHeader{ContinuityCounter: cc, PayloadUnitStartIndicator: true, PID: ts.PIDPAT}, &ts.PacketAdaptationField{}, b[:147], true)
+		b1 := packetBytes(ts.PacketHeader{ContinuityCounter: cc, PayloadUnitStartIndicator: true, PID: ts.PIDPAT}, b[:147], true)
 		_ = w.Write(b1)
 		cc++
-		b2, _ := packet(ts.PacketHeader{ContinuityCounter: cc, PID: ts.PIDPAT}, &ts.PacketAdaptationField{}, b[147:], true)
+		b2 := packetBytes(ts.PacketHeader{ContinuityCounter: cc, PID: ts.PIDPAT}, b[147:], true)
 		_ = w.Write(b2)
 		cc++
 	}

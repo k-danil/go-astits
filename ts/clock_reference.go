@@ -56,15 +56,14 @@ func (cr *ClockReference) PutPCR(bs []byte) (n int) {
 	return PCRSize
 }
 
-func parsePTSOrDTSValue(bs []byte) ClockReference {
-	return NewClockReference(uint64(bs[0])>>1&0x7<<30|uint64(bs[1])<<22|uint64(bs[2])>>1&0x7f<<15|uint64(bs[3])<<7|uint64(bs[4])>>1&0x7f, 0)
-}
-
 func (cr *ClockReference) ParsePTSDTS(bs []byte) (n int, err error) {
 	if len(bs) < PTSDTSSize {
 		return 0, ErrShortPacket
 	}
-	*cr = parsePTSOrDTSValue(bs)
+	// PTS is three fields split by marker bits — [32:30], [29:15], [14:0] — and
+	// the last two straddle byte boundaries, hence the word.
+	v := uint64(binary.BigEndian.Uint32(bs[:4]))<<8 | uint64(bs[4])
+	*cr = NewClockReference(v>>33&0x7<<30|v>>17&0x7fff<<15|v>>1&0x7fff, 0)
 	return PTSDTSSize, nil
 }
 
