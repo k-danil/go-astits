@@ -1,6 +1,7 @@
 package descriptor
 
 import (
+	"github.com/k-danil/go-astits/v2/dvbtext"
 	"github.com/k-danil/go-astits/v2/internal/bytesiter"
 )
 
@@ -14,8 +15,8 @@ type MultilingualBouquetName struct {
 
 // MultilingualBouquetNameItem is one language variant of a bouquet name
 type MultilingualBouquetNameItem struct {
-	Name     []byte  `json:"bouquet_name"`
-	Language [3]byte `json:"ISO_639_language_code"`
+	Name     dvbtext.Text `json:"bouquet_name"`
+	Language dvbtext.Code `json:"ISO_639_language_code"`
 }
 
 func newDescriptorMultilingualBouquetName(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
@@ -26,7 +27,7 @@ func newDescriptorMultilingualBouquetName(i *bytesiter.Iterator, h Header, offse
 
 	for i.Offset() < offsetEnd {
 		var item MultilingualBouquetNameItem
-		if err = readLangText(i, item.Language[:], &item.Name); err != nil {
+		if err = readLangText(i, &item.Language, &item.Name); err != nil {
 			return
 		}
 		d.Items = append(d.Items, item)

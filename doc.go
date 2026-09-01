@@ -7,12 +7,13 @@
 //	pes         PES packets
 //	psi         PSI tables (PAT/PMT/EIT/NIT/SDT/TOT)
 //	descriptor  DVB/MPEG descriptors
+//	dvbtext     DVB SI text fields and ISO 639/3166 codes
 //	demux       the event-based demuxer
 //	mux         the muxer
 //
 // The API and semantics have diverged from upstream on purpose; this module is
-// not a drop-in replacement. It has no dependencies outside the standard
-// library and uses no unsafe.
+// not a drop-in replacement. Outside the standard library it depends only on
+// golang.org/x/text for the DVB text codecs, and uses no unsafe.
 //
 // # Contracts and safety
 //

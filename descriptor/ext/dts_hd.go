@@ -3,6 +3,7 @@ package ext
 import (
 	"fmt"
 
+	"github.com/k-danil/go-astits/v2/dvbtext"
 	"github.com/k-danil/go-astits/v2/internal/bytesiter"
 )
 
@@ -28,18 +29,18 @@ type DTSHDSubstream struct {
 	SampleResolution  bool         `json:"sample_resolution"`
 }
 
-// DTSHDAsset is one audio asset of a DTS-HD substream. BitRate carries either
-// bit_rate or bit_rate_scaled per PostEncodeBRScalingFlag; ComponentType and
-// Language are present per their flags.
+// DTSHDAsset carries bit_rate or bit_rate_scaled in BitRate per
+// PostEncodeBRScalingFlag; ComponentType and Language are present per their
+// flags.
 type DTSHDAsset struct {
-	Language                [3]byte `json:"ISO_639_language_code"`
-	BitRate                 uint16  `json:"bit_rate"`
-	AssetConstruction       uint8   `json:"asset_construction"`
-	ComponentType           uint8   `json:"component_type"`
-	VBRFlag                 bool    `json:"vbr_flag"`
-	PostEncodeBRScalingFlag bool    `json:"post_encode_br_scaling_flag"`
-	ComponentTypeFlag       bool    `json:"component_type_flag"`
-	LanguageCodeFlag        bool    `json:"language_code_flag"`
+	Language                dvbtext.Code `json:"ISO_639_language_code"`
+	BitRate                 uint16       `json:"bit_rate"`
+	AssetConstruction       uint8        `json:"asset_construction"`
+	ComponentType           uint8        `json:"component_type"`
+	VBRFlag                 bool         `json:"vbr_flag"`
+	PostEncodeBRScalingFlag bool         `json:"post_encode_br_scaling_flag"`
+	ComponentTypeFlag       bool         `json:"component_type_flag"`
+	LanguageCodeFlag        bool         `json:"language_code_flag"`
 }
 
 func parseDTSHD(i *bytesiter.Iterator, offsetEnd int) (d *DTSHD, err error) {

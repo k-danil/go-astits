@@ -1,6 +1,7 @@
 package descriptor
 
 import (
+	"github.com/k-danil/go-astits/v2/dvbtext"
 	"github.com/k-danil/go-astits/v2/internal/bytesiter"
 )
 
@@ -14,8 +15,8 @@ type MultilingualNetworkName struct {
 
 // MultilingualNetworkNameItem is one language variant of a network name
 type MultilingualNetworkNameItem struct {
-	Name     []byte  `json:"network_name"`
-	Language [3]byte `json:"ISO_639_language_code"`
+	Name     dvbtext.Text `json:"network_name"`
+	Language dvbtext.Code `json:"ISO_639_language_code"`
 }
 
 func newDescriptorMultilingualNetworkName(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
@@ -26,7 +27,7 @@ func newDescriptorMultilingualNetworkName(i *bytesiter.Iterator, h Header, offse
 
 	for i.Offset() < offsetEnd {
 		var item MultilingualNetworkNameItem
-		if err = readLangText(i, item.Language[:], &item.Name); err != nil {
+		if err = readLangText(i, &item.Language, &item.Name); err != nil {
 			return
 		}
 		d.Items = append(d.Items, item)

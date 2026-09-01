@@ -3,6 +3,7 @@ package descriptor
 import (
 	"fmt"
 
+	"github.com/k-danil/go-astits/v2/dvbtext"
 	"github.com/k-danil/go-astits/v2/internal/bytesiter"
 )
 
@@ -18,8 +19,8 @@ type MultilingualComponent struct {
 
 // MultilingualComponentItem is one language variant of a component description
 type MultilingualComponentItem struct {
-	Description []byte  `json:"text_char"`
-	Language    [3]byte `json:"ISO_639_language_code"`
+	Description dvbtext.Text `json:"text_char"`
+	Language    dvbtext.Code `json:"ISO_639_language_code"`
 }
 
 func newDescriptorMultilingualComponent(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
@@ -35,7 +36,7 @@ func newDescriptorMultilingualComponent(i *bytesiter.Iterator, h Header, offsetE
 
 	for i.Offset() < offsetEnd {
 		var item MultilingualComponentItem
-		if err = readLangText(i, item.Language[:], &item.Description); err != nil {
+		if err = readLangText(i, &item.Language, &item.Description); err != nil {
 			return
 		}
 		d.Items = append(d.Items, item)

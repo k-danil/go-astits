@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/k-danil/go-astits/v2/dvbtext"
 	"github.com/k-danil/go-astits/v2/internal/bytesiter"
 	"github.com/k-danil/go-astits/v2/internal/util"
 )
@@ -52,8 +53,8 @@ type ISO639LanguageAndAudioType struct {
 
 // ISO639Item is one language + audio-type entry of an ISO 639 descriptor.
 type ISO639Item struct {
-	Language [3]byte   `json:"ISO_639_language_code"`
-	Type     AudioType `json:"audio_type"`
+	Language dvbtext.Code `json:"ISO_639_language_code"`
+	Type     AudioType    `json:"audio_type"`
 }
 
 func newDescriptorISO639LanguageAndAudioType(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {

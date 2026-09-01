@@ -3,16 +3,17 @@ package descriptor
 import (
 	"fmt"
 
+	"github.com/k-danil/go-astits/v2/dvbtext"
 	"github.com/k-danil/go-astits/v2/internal/bytesiter"
 )
 
 // ShortEvent represents a short event descriptor
 // Chapter: 6.2.37 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type ShortEvent struct {
-	EventName []byte  `json:"event_name"`
-	Text      []byte  `json:"text_char"`
-	Header    Header  `json:"_header"`
-	Language  [3]byte `json:"ISO_639_language_code"`
+	EventName dvbtext.Text `json:"event_name"`
+	Text      dvbtext.Text `json:"text_char"`
+	Header    Header       `json:"_header"`
+	Language  dvbtext.Code `json:"ISO_639_language_code"`
 }
 
 func newDescriptorShortEvent(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {

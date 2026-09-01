@@ -3,6 +3,7 @@ package descriptor
 import (
 	"fmt"
 
+	"github.com/k-danil/go-astits/v2/dvbtext"
 	"github.com/k-danil/go-astits/v2/internal/bytesiter"
 )
 
@@ -10,9 +11,9 @@ import (
 // service is intended to be available (or not) in the listed countries.
 // Chapter: 6.2.10 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type CountryAvailability struct {
-	Countries        [][3]byte `json:"country_code"`
-	Header           Header    `json:"_header"`
-	AvailabilityFlag bool      `json:"country_availability_flag"`
+	Countries        []dvbtext.Code `json:"country_code"`
+	Header           Header         `json:"_header"`
+	AvailabilityFlag bool           `json:"country_availability_flag"`
 }
 
 func newDescriptorCountryAvailability(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
@@ -28,7 +29,7 @@ func newDescriptorCountryAvailability(i *bytesiter.Iterator, h Header, offsetEnd
 	}
 	d.AvailabilityFlag = b&0x80 > 0
 
-	d.Countries = make([][3]byte, (offsetEnd-i.Offset())/3)
+	d.Countries = make([]dvbtext.Code, (offsetEnd-i.Offset())/3)
 	for idx := range d.Countries {
 		var bs []byte
 		if bs, err = i.NextBytesNoCopy(3); err != nil || len(bs) < 3 {

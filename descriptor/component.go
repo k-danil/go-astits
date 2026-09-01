@@ -3,19 +3,20 @@ package descriptor
 import (
 	"fmt"
 
+	"github.com/k-danil/go-astits/v2/dvbtext"
 	"github.com/k-danil/go-astits/v2/internal/bytesiter"
 )
 
 // Component represents a component descriptor
 // Chapter: 6.2.8 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type Component struct {
-	Header             Header  `json:"_header"`
-	ISO639LanguageCode [3]byte `json:"ISO_639_language_code"`
-	Text               []byte  `json:"text_char"`
-	ComponentTag       uint8   `json:"component_tag"`
-	ComponentType      uint8   `json:"component_type"`
-	StreamContent      uint8   `json:"stream_content"`
-	StreamContentExt   uint8   `json:"stream_content_ext"`
+	Header             Header       `json:"_header"`
+	ISO639LanguageCode dvbtext.Code `json:"ISO_639_language_code"`
+	Text               dvbtext.Text `json:"text_char"`
+	ComponentTag       uint8        `json:"component_tag"`
+	ComponentType      uint8        `json:"component_type"`
+	StreamContent      uint8        `json:"stream_content"`
+	StreamContentExt   uint8        `json:"stream_content_ext"`
 }
 
 func newDescriptorComponent(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {

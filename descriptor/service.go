@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/k-danil/go-astits/v2/dvbtext"
 	"github.com/k-danil/go-astits/v2/internal/bytesiter"
 	"github.com/k-danil/go-astits/v2/internal/util"
 )
@@ -90,10 +91,10 @@ func (t *ServiceType) UnmarshalJSON(b []byte) (err error) {
 // Service represents a service descriptor
 // Chapter: 6.2.33 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type Service struct {
-	Name     []byte      `json:"service_name"`
-	Provider []byte      `json:"service_provider_name"`
-	Header   Header      `json:"_header"`
-	Type     ServiceType `json:"service_type"`
+	Name     dvbtext.Text `json:"service_name"`
+	Provider dvbtext.Text `json:"service_provider_name"`
+	Header   Header       `json:"_header"`
+	Type     ServiceType  `json:"service_type"`
 }
 
 func newDescriptorService(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {

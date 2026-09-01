@@ -3,6 +3,7 @@ package descriptor
 import (
 	"fmt"
 
+	"github.com/k-danil/go-astits/v2/dvbtext"
 	"github.com/k-danil/go-astits/v2/internal/bytesiter"
 )
 
@@ -16,9 +17,9 @@ type MultilingualServiceName struct {
 
 // MultilingualServiceNameItem is one language variant of a service name
 type MultilingualServiceNameItem struct {
-	Provider []byte  `json:"service_provider_name"`
-	Name     []byte  `json:"service_name"`
-	Language [3]byte `json:"ISO_639_language_code"`
+	Provider dvbtext.Text `json:"service_provider_name"`
+	Name     dvbtext.Text `json:"service_name"`
+	Language dvbtext.Code `json:"ISO_639_language_code"`
 }
 
 func newDescriptorMultilingualServiceName(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
@@ -29,7 +30,7 @@ func newDescriptorMultilingualServiceName(i *bytesiter.Iterator, h Header, offse
 
 	for i.Offset() < offsetEnd {
 		var item MultilingualServiceNameItem
-		if err = readLangText(i, item.Language[:], &item.Provider); err != nil {
+		if err = readLangText(i, &item.Language, &item.Provider); err != nil {
 			return
 		}
 		var b byte

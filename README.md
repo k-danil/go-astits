@@ -17,15 +17,17 @@ Dependency arrows point strictly downwards, no cycles:
 | `pes`        | PES packets: parse + serialization, full optional header (PTS/DTS, ESCR, ES rate, DSM trick mode, CRC, pack_header, extension)                                  |
 | `psi`        | PSI/SI tables — MPEG-2 Systems + DVB-SI: parse and serialize, every table, byte-exact round-trip                                                                |
 | `descriptor` | MPEG-2 Systems (ISO/IEC 13818-1, Table 2-45) + DVB (EN 300 468 §6) descriptors: parse + serialize, one file per descriptor; DVB extension descriptors in `descriptor/ext`; tags defined outside these two specs degrade to `Unknown` |
+| `dvbtext`    | DVB SI text fields (EN 300 468 annex A): character table selection, decoding to UTF-8 and encoding back; the text and ISO 639/3166 code types carried by the descriptors |
 | `demux`      | demuxer: per-PID byte accumulator, event-based `Next`/`Events`, PSI table state, PSI dedup                                                                     |
 | `mux`        | muxer: PES packetization, table generation and retransmission, raw passthrough                                                                                 |
 
 API conventions: `Parse(bs []byte) (n int, err error)` on slices; `Put(bs []byte)` for
 fixed-size serialization (panics on short buffer, like `binary.BigEndian`); `Append(dst
 []byte) []byte` for variable-size; `CalcLength() int` everywhere; constructors `demux.New` /
-`mux.New`; functional options `WithX`. No dependencies outside the standard
-library (`testify` in tests) and no `unsafe`: direct slice parsing and byte appending throughout, bit-level
-test fixtures are built with an internal ~80-line bit writer.
+`mux.New`; functional options `WithX`. Outside the standard library it depends only on
+`golang.org/x/text` for the DVB text codecs (`testify` in tests), and uses no `unsafe`:
+direct slice parsing and byte appending throughout, bit-level test fixtures are built with an
+internal ~80-line bit writer.
 
 ## Pros
 
@@ -147,6 +149,11 @@ How:
   `Next`/`Events` is terminal (as before). With it, a `*ts.RecoverableError` is non-terminal —
   distinguish with `ts.IsRecoverable(err)` and keep iterating; only a genuine fatal (or
   `ts.ErrNoMorePackets`) ends the stream.
+- **`dvbtext.Text` marshals to JSON as the decoded string**, not as the wire bytes:
+  unmarshalling re-encodes into the default table or UTF-8, so a JSON round-trip preserves the
+  text, not the bytes — control codes other than the line break, and unassigned positions, are
+  dropped along the way. `dvbtext.Code` likewise marshals as `"eng"` (or `"0x000000"` when the
+  bytes are not printable) rather than as the byte array Go emits for `[3]byte`.
 - Requires **Go ≥ 1.26**.
 
 ## Roadmap

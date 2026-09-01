@@ -2,6 +2,7 @@ package descriptor
 
 import (
 	"fmt"
+	"github.com/k-danil/go-astits/v2/dvbtext"
 
 	"github.com/k-danil/go-astits/v2/internal/bytesiter"
 )
@@ -16,8 +17,8 @@ type ParentalRating struct {
 // ParentalRatingItem represents a parental rating item descriptor
 // Chapter: 6.2.28 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type ParentalRatingItem struct {
-	CountryCode [3]byte `json:"country_code"`
-	Rating      uint8   `json:"rating"`
+	CountryCode dvbtext.Code `json:"country_code"`
+	Rating      uint8        `json:"rating"`
 }
 
 // MinimumAge returns the minimum age for the parental rating

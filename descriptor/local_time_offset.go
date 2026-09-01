@@ -2,6 +2,7 @@ package descriptor
 
 import (
 	"fmt"
+	"github.com/k-danil/go-astits/v2/dvbtext"
 	"time"
 
 	"github.com/k-danil/go-astits/v2/internal/bytesiter"
@@ -22,7 +23,7 @@ type LocalTimeOffsetItem struct {
 	LocalTimeOffset         time.Duration `json:"local_time_offset"`
 	NextTimeOffset          time.Duration `json:"next_time_offset"`
 	TimeOfChange            time.Time     `json:"time_of_change"`
-	CountryCode             [3]byte       `json:"country_code"`
+	CountryCode             dvbtext.Code  `json:"country_code"`
 	CountryRegionID         uint8         `json:"country_region_id"`
 	LocalTimeOffsetPolarity bool          `json:"local_time_offset_polarity"`
 }

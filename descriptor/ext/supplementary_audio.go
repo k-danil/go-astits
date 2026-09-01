@@ -2,6 +2,7 @@ package ext
 
 import (
 	"fmt"
+	"github.com/k-danil/go-astits/v2/dvbtext"
 
 	"github.com/k-danil/go-astits/v2/internal/bytesiter"
 	"github.com/k-danil/go-astits/v2/internal/util"
@@ -10,11 +11,11 @@ import (
 // SupplementaryAudio represents a supplementary audio extension descriptor
 // Chapter: 6.4.10 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type SupplementaryAudio struct {
-	PrivateData             []byte  `json:"private_data"`
-	LanguageCode            [3]byte `json:"language_code"`
-	EditorialClassification uint8   `json:"editorial_classification"`
-	HasLanguageCode         bool    `json:"language_code_present"`
-	MixType                 bool    `json:"mix_type"`
+	PrivateData             []byte       `json:"private_data"`
+	LanguageCode            dvbtext.Code `json:"language_code"`
+	EditorialClassification uint8        `json:"editorial_classification"`
+	HasLanguageCode         bool         `json:"language_code_present"`
+	MixType                 bool         `json:"mix_type"`
 }
 
 func parseSupplementaryAudio(i *bytesiter.Iterator, offsetEnd int) (d *SupplementaryAudio, err error) {

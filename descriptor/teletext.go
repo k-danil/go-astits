@@ -3,6 +3,7 @@ package descriptor
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/k-danil/go-astits/v2/dvbtext"
 
 	"github.com/k-danil/go-astits/v2/internal/bytesiter"
 	"github.com/k-danil/go-astits/v2/internal/util"
@@ -55,7 +56,7 @@ type Teletext struct {
 // TeletextItem represents a teletext descriptor item
 // Chapter: 6.2.43 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type TeletextItem struct {
-	Language [3]byte      `json:"ISO_639_language_code"`
+	Language dvbtext.Code `json:"ISO_639_language_code"`
 	Magazine uint8        `json:"teletext_magazine_number"`
 	Page     uint8        `json:"teletext_page_number"`
 	Type     TeletextType `json:"teletext_type"`
