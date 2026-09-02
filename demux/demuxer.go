@@ -48,8 +48,8 @@ type Demuxer struct {
 	r   io.Reader
 
 	optPacketSize    uint
-	optSkipErrLimit  uint
-	optResyncLimit   uint
+	optSkipErrLimit  int
+	optResyncLimit   int
 	optPacketSkipper ts.PacketSkipper
 	optKeepPIDs      *ts.PIDSet
 	optZeroCopyBatch uint
@@ -58,6 +58,8 @@ type Demuxer struct {
 	optPSIRepeats    bool
 	optRecoverable   bool
 	optPacketHook    func(*ts.Packet)
+	optMaxPES        int
+	optMaxPSI        int
 
 	packetBuffer *ts.PacketBuffer
 	acc          accumulator
@@ -67,14 +69,18 @@ type Demuxer struct {
 	// Result of the last Next
 	pat         *psi.PAT
 	pmt         *psi.PMT
+	patVersion  uint8
+	patSeen     bool
 	cur         tableEvent // section + changed flag behind the last table event
 	tblQueue    []tableEvent
 	pendingErrs []*ts.RecoverableError
 	// pendingFatal holds a fatal read error until the recoverable errors queued
 	// during that same read are flushed, so a lossy tail is not lost to the fatal.
 	pendingFatal error
-	pending      *PES
-	claimed      bool
+	// pending is the unit behind the last EventPES; claimed once PES() handed
+	// it out, so the next Next releases it only while unclaimed.
+	pending *PES
+	claimed bool
 
 	pkt ts.Packet
 
@@ -89,11 +95,21 @@ type Demuxer struct {
 	psiValsArr [8]psiCache             // psiPrev vals
 }
 
+// Unit size limits (WithMaxUnitSize): a 4K intra frame at 50 Mbit/s is 2-4 MB
+// of unbounded PES; a legal PSI section is at most 4 KB, so 64 KB holds any
+// chain of sections up to its stuffing with room to spare.
+const (
+	defaultMaxPESUnit = 16 << 20
+	defaultMaxPSIUnit = 64 << 10
+)
+
 // New creates a new transport stream demuxer based on a reader
 func New(ctx context.Context, r io.Reader, opts ...func(*Demuxer)) (d *Demuxer) {
 	d = &Demuxer{
-		ctx: ctx,
-		r:   r,
+		ctx:       ctx,
+		r:         r,
+		optMaxPES: defaultMaxPESUnit,
+		optMaxPSI: defaultMaxPSIUnit,
 	}
 	d.programMap = pidmap.Map[uint16]{Keys: d.pmKeysArr[:0], Vals: d.pmValsArr[:0]}
 	d.psiPrev = pidmap.Map[psiCache]{Keys: d.psiKeysArr[:0], Vals: d.psiValsArr[:0]}
@@ -104,25 +120,22 @@ func New(ctx context.Context, r io.Reader, opts ...func(*Demuxer)) (d *Demuxer) 
 		opt(d)
 	}
 
-	d.acc.init(&d.programMap, d.optDVBTables)
+	d.acc.init(&d.programMap, d.optDVBTables, d.recoverHook(), d.optMaxPES, d.optMaxPSI)
 
 	return
 }
 
-// GetStats returns the number of stream bytes seen per PID, keyed by PID.
-func (dmx *Demuxer) GetStats() (ret map[uint64]uint) {
-	var packetSize uint
-	if dmx.packetBuffer != nil {
-		packetSize = dmx.packetBuffer.PacketSize()
-	}
-
-	ret = make(map[uint64]uint, len(dmx.acc.slots.Vals))
+// PacketCounts returns the number of packets per PID that reached unit
+// assembly: every packet the packet buffer delivered (null and
+// adaptation-field-only ones included), after the PID allow-list, the skipper
+// and the dropped or reserved packets.
+func (dmx *Demuxer) PacketCounts() (ret map[uint16]uint64) {
+	ret = make(map[uint16]uint64, len(dmx.acc.slots.Vals))
 	for i := range dmx.acc.slots.Vals {
-		if n := dmx.acc.slots.Vals[i].stats; n > 0 {
-			ret[uint64(dmx.acc.slots.Keys[i])] = uint(n) * packetSize
+		if n := dmx.acc.slots.Vals[i].packets; n > 0 {
+			ret[dmx.acc.slots.Keys[i]] = n
 		}
 	}
-
 	return
 }
 
@@ -161,33 +174,60 @@ func (dmx *Demuxer) SetKeepPIDs(keep *ts.PIDSet) {
 	dmx.optKeepPIDs = keep
 }
 
-// WithSkipErrLimit returns the option to set the tolerated sync-loss streak
+// WithSkipErrLimit bounds the streak of consecutive damage events before the
+// next one is fatal: a packet that fails to parse at an aligned position (it is
+// dropped, in either mode) and, under WithSyncLock, a lost sync — counted once
+// when the loss is detected, whatever the resync's outcome. A clean packet
+// resets the streak; a repaired sync byte and a reserved
+// adaptation_field_control packet cost nothing. 0 (the default) tolerates
+// nothing, -1 never gives up, N allows N in a row.
 func WithSkipErrLimit(count int) func(*Demuxer) {
 	return func(d *Demuxer) {
-		d.optSkipErrLimit = uint(count)
+		d.optSkipErrLimit = count
 	}
 }
 
-// WithSyncLock aligns to the first sync byte within the first packet (a leading
-// header or a mid-stream join, not just a unit boundary) and, after a lost or
-// corrupt packet, scans forward to re-lock or drops the packet instead of
-// failing — for UDP/RTP or otherwise torn feeds. Recovery is bounded by
-// WithResyncLimit. It peeks ahead, so a reader that is not already a ts.Peeker
-// (e.g. *bufio.Reader) is wrapped in bufio internally; keep it off for aligned
-// files to stay on the zero-wrap fast path.
+// WithSyncLock aligns to the first sync byte within the first scan window (a
+// leading header or a mid-stream join, not just a unit boundary; the bytes
+// before it are reported as a loss) and keeps the stream alive across damage —
+// for UDP/RTP or otherwise torn feeds: a lone corrupt sync byte with the next
+// one intact is repaired and reported, not lost (TR 101 290 sync_byte_error);
+// two in a row are a sync loss, re-locked only on five consecutive periods
+// (TS_sync_loss), so a tail shorter than five packets after a loss is consumed
+// into it; an aligned corrupt packet is dropped. How much of that is tolerated
+// is set explicitly: the default WithSkipErrLimit makes the first drop or loss
+// fatal and the default WithResyncLimit forbids scanning, so a lossy feed needs
+// both. It peeks ahead through a ts.Peeker of at least 1024 bytes; a reader
+// that is not one (*bufio.Reader is) gets wrapped in bufio internally. Keep it
+// off for aligned files to stay on the zero-wrap fast path.
 func WithSyncLock() func(*Demuxer) {
 	return func(d *Demuxer) {
 		d.optSyncLock = true
 	}
 }
 
-// WithResyncLimit caps consecutive damage events under sync lock — dropped
-// corrupt packets and fruitless scan windows — before giving up; a cleanly
-// parsed packet resets the count. 0 (the default) recovers indefinitely. Has no
-// effect without WithSyncLock.
+// WithResyncLimit is how many scan windows (about a kilobyte each) one resync
+// may spend re-locking after a sync loss under WithSyncLock: 0 (the default)
+// makes a lost sync fatal at once, -1 scans to the end of input, N gives up
+// after N fruitless windows. Every loss starts a fresh count; the loss itself
+// also counts once toward WithSkipErrLimit. Has no effect without WithSyncLock.
 func WithResyncLimit(windows int) func(*Demuxer) {
 	return func(d *Demuxer) {
-		d.optResyncLimit = uint(windows)
+		d.optResyncLimit = windows
+	}
+}
+
+// WithMaxUnitSize caps the bytes one payload unit may accumulate, separately
+// for PES and PSI units, on the shared limit scale: 0 delivers no unit of that
+// kind, -1 is unbounded, N is the byte limit. A unit outgrowing its limit is
+// torn (an ErrorKindTornUnit event with ts.ErrUnitTooLarge under
+// WithRecoverableErrors) and the next payload packet on its PID opens a new
+// unit, so a PID whose unit start never comes cannot buffer the rest of the
+// stream. The defaults are 16 MB for PES and 64 KB for PSI.
+func WithMaxUnitSize(pes, psi int) func(*Demuxer) {
+	return func(d *Demuxer) {
+		d.optMaxPES = pes
+		d.optMaxPSI = psi
 	}
 }
 
@@ -227,12 +267,15 @@ func WithPacketHook(fn func(*ts.Packet)) func(*Demuxer) {
 	}
 }
 
-// WithRecoverableErrors surfaces non-fatal parse failures the demuxer would
-// otherwise skip silently: a PSI CRC32 mismatch, a torn PSI section, a bad PES
-// unit, a lost sync byte or a dropped corrupt packet. Next then returns
-// EventError with a *ts.RecoverableError in err and continues on the following
-// call; Events yields it without ending the sequence. Off by default — the
-// silent fast path is unchanged.
+// WithRecoverableErrors surfaces non-fatal damage the demuxer would otherwise
+// skip silently: a PSI CRC32 mismatch, a torn PSI section, a bad PES unit, a
+// lost sync (with the bytes scanned past) or a lone repaired sync byte, a
+// dropped corrupt packet, a unit torn by a continuity gap, a discontinuity, a
+// transport error or scrambling, and a unit that is neither PES nor PSI. Next
+// then returns EventError with a *ts.RecoverableError in err (kind, PID,
+// offset, bytes dropped) and continues on the following call; Events yields it
+// without ending the sequence. Off by default: no events, no calls on the hot
+// path; the damage handling itself is the same either way.
 func WithRecoverableErrors() func(*Demuxer) {
 	return func(d *Demuxer) {
 		d.optRecoverable = true
@@ -243,16 +286,20 @@ func (dmx *Demuxer) reportRecoverable(e ts.RecoverableError) {
 	dmx.pendingErrs = append(dmx.pendingErrs, &e)
 }
 
+// nil without WithRecoverableErrors keeps the packet buffer and accumulator call-free.
+func (dmx *Demuxer) recoverHook() (hook func(ts.RecoverableError)) {
+	if dmx.optRecoverable {
+		hook = dmx.reportRecoverable
+	}
+	return
+}
+
 func isCancel(err error) bool {
 	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
 }
 
 func (dmx *Demuxer) nextPacket(p *ts.Packet) (err error) {
 	if dmx.packetBuffer == nil {
-		var onRecover func(ts.RecoverableError)
-		if dmx.optRecoverable {
-			onRecover = dmx.reportRecoverable
-		}
 		if dmx.packetBuffer, err = ts.NewPacketBuffer(dmx.ctx, dmx.r, ts.PacketBufferConfig{
 			PacketSize:    dmx.optPacketSize,
 			SkipErrLimit:  dmx.optSkipErrLimit,
@@ -261,7 +308,7 @@ func (dmx *Demuxer) nextPacket(p *ts.Packet) (err error) {
 			ZeroCopyBatch: dmx.optZeroCopyBatch,
 			SyncLock:      dmx.optSyncLock,
 			ResyncLimit:   dmx.optResyncLimit,
-			OnRecover:     onRecover,
+			OnRecover:     dmx.recoverHook(),
 		}); err != nil {
 			err = fmt.Errorf("astits: creating packet buffer failed: %w", err)
 			return
@@ -354,11 +401,14 @@ func (dmx *Demuxer) Next() (ev Event, err error) {
 				}
 				return 0, werr
 			}
-			// EOF: drain the unfinished units, lowest PID first. The reader is
+			// EOF: the errors of the final read come out before the drained
+			// tails, then the unfinished units, lowest PID first. The reader is
 			// retried on the next call — it may grow.
+			if len(dmx.pendingErrs) > 0 {
+				continue
+			}
 			u, ok := dmx.acc.drain()
 			if !ok {
-				// Flush any errors the final read reported before ending.
 				if len(dmx.pendingErrs) > 0 {
 					continue
 				}
@@ -396,9 +446,13 @@ func (dmx *Demuxer) PES() *PES {
 }
 
 // Section is the section behind the last table event, valid until the next
-// Next call.
-func (dmx *Demuxer) Section() (pid uint16, s psi.SectionSyntaxData) {
-	return dmx.cur.pid, dmx.cur.data
+// Next call: its header (table_id), syntax header (version, current_next,
+// section numbers) and the typed body in Syntax.Data. Tables without a syntax
+// header (TDT/TOT/RST/ST/DIT/Metadata) leave Syntax.Header zero. nil before
+// the first table event; after another kind of event it still holds the last
+// table event's section.
+func (dmx *Demuxer) Section() (pid uint16, s *psi.Section) {
+	return dmx.cur.pid, dmx.cur.sec
 }
 
 // TableChanged reports whether the last table event carried content that
@@ -409,12 +463,14 @@ func (dmx *Demuxer) TableChanged() bool {
 	return dmx.cur.changed
 }
 
-// PAT is the last parsed program association table; nil until one is seen.
+// PAT is the last program association table in effect (current_next_indicator
+// set); nil until one is seen.
 func (dmx *Demuxer) PAT() *psi.PAT {
 	return dmx.pat
 }
 
-// PMT is the last parsed program map table; nil until one is seen.
+// PMT is the last program map table in effect (current_next_indicator set);
+// nil until one is seen.
 func (dmx *Demuxer) PMT() *psi.PMT {
 	return dmx.pmt
 }
@@ -447,8 +503,10 @@ func (dmx *Demuxer) Events() iter.Seq2[Event, error] {
 }
 
 // Close releases everything the demuxer holds to the pools: slot buffers and
-// the pending unit. The demuxer must not be used after Close. Mandatory for
-// demuxers abandoned before the end of the stream.
+// the pending unit. Units still accumulating are dropped without an event; to
+// account for them, read Next up to ts.ErrNoMorePackets first, which drains
+// them. The demuxer must not be used after Close. Mandatory for demuxers
+// abandoned before the end of the stream.
 func (dmx *Demuxer) Close() {
 	if dmx.pending != nil && !dmx.claimed {
 		dmx.pending.Close()
@@ -458,15 +516,17 @@ func (dmx *Demuxer) Close() {
 }
 
 // Rewind rewinds the demuxer reader. The table state survives, the emission
-// dedup does not: tables are re-emitted on the second pass.
+// dedup does not: tables are re-emitted on the second pass. Units still
+// accumulating and queued events are dropped without an event, as in Close.
 func (dmx *Demuxer) Rewind() (n int64, err error) {
 	dmx.Close()
 	dmx.packetBuffer = nil
 	dmx.tblQueue = dmx.tblArr[:0]
 	dmx.pendingErrs = dmx.errArr[:0]
 	dmx.pendingFatal = nil
+	dmx.patSeen = false
 	dmx.psiPrev = pidmap.Map[psiCache]{Keys: dmx.psiKeysArr[:0], Vals: dmx.psiValsArr[:0]}
-	dmx.acc.init(&dmx.programMap, dmx.optDVBTables)
+	dmx.acc.init(&dmx.programMap, dmx.optDVBTables, dmx.recoverHook(), dmx.optMaxPES, dmx.optMaxPSI)
 	if n, err = ts.Rewind(dmx.r); err != nil {
 		err = fmt.Errorf("astits: rewinding reader failed: %w", err)
 		return

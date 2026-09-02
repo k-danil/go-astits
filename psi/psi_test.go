@@ -98,7 +98,7 @@ var psi = &Data{
 	},
 }
 
-func psiBytes() []byte {
+func psiSectionsBytes() []byte {
 	buf := &bytes.Buffer{}
 	w := bitstest.NewWriter(buf)
 	_ = w.Write(uint8(4))                      // Pointer field
@@ -150,9 +150,13 @@ func psiBytes() []byte {
 	_ = w.Write("000000001110")                // TOT section length
 	_ = w.Write(totBytes())                    // TOT data
 	_ = w.Write(uint32(0x6969b13))             // TOT CRC32
-	_ = w.Write(uint8(254))                    // Unknown table ID
-	_ = w.Write(uint8(0))                      // PAT table ID
 	return buf.Bytes()
+}
+
+// psiBytes ends the sections with an unknown table_id: the stop marker Parse
+// reports as a section error.
+func psiBytes() []byte {
+	return append(psiSectionsBytes(), 254, 0)
 }
 
 func TestParsePSIData(t *testing.T) {
@@ -167,14 +171,20 @@ func TestParsePSIData(t *testing.T) {
 	_ = w.Write("000000001110") // TOT section length
 	_ = w.Write(totBytes())     // TOT data
 	_ = w.Write(uint32(32))     // TOT CRC32
-	_, err := Parse(buf.Bytes())
-	assert.ErrorIs(t, err, ErrCRC32Mismatch)
-	assert.ErrorIs(t, err, ts.ErrInvalidData)
+	d, err := Parse(buf.Bytes())
+	require.NoError(t, err)
+	assert.Empty(t, d.Sections)
+	require.Len(t, d.Errors, 1)
+	assert.ErrorIs(t, d.Errors[0], ErrCRC32Mismatch)
+	assert.ErrorIs(t, d.Errors[0], ts.ErrInvalidData)
 
-	// Valid
-	d, err := Parse(psiBytes())
-	assert.NoError(t, err)
-	assert.Equal(t, d, psi)
+	// Valid, ending in an unknown table_id that is reported rather than swallowed
+	d, err = Parse(psiBytes())
+	require.NoError(t, err)
+	assert.Equal(t, psi.PointerField, d.PointerField)
+	assert.Equal(t, psi.Sections, d.Sections)
+	require.Len(t, d.Errors, 1)
+	assert.Equal(t, &SectionError{TableID: 254, Offset: 153, Len: 2, Err: ErrUnknownTable}, d.Errors[0])
 }
 
 var psiSectionHeader = SectionHeader{
@@ -367,7 +377,9 @@ func TestWritePSIData(t *testing.T) {
 }
 
 func BenchmarkParsePSIData(b *testing.B) {
-	pb := psiBytes()
+	// The successful path over the same sections as the reference number; the
+	// fixture's unknown-table trailer is a reported error, benchmarked nowhere
+	pb := psiSectionsBytes()
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		_, _ = Parse(pb)

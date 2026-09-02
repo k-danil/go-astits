@@ -82,13 +82,13 @@ var packetHeader = ts.PacketHeader{
 func packetHeaderBytes(h ts.PacketHeader, afControl string) []byte {
 	buf := &bytes.Buffer{}
 	w := bitstest.NewWriter(buf)
-	_ = w.Write(h.TransportErrorIndicator)                // Transport error indicator
-	_ = w.Write(h.PayloadUnitStartIndicator)              // Payload unit start indicator
-	_ = w.Write("1")                                      // Transport priority
-	_ = w.Write(fmt.Sprintf("%.13b", h.PID))              // PID
-	_ = w.Write("10")                                     // Scrambling control
-	_ = w.Write(afControl)                                // Adaptation field control
-	_ = w.Write(fmt.Sprintf("%.4b", h.ContinuityCounter)) // Continuity counter
+	_ = w.Write(h.TransportErrorIndicator)                         // Transport error indicator
+	_ = w.Write(h.PayloadUnitStartIndicator)                       // Payload unit start indicator
+	_ = w.Write("1")                                               // Transport priority
+	_ = w.Write(fmt.Sprintf("%.13b", h.PID))                       // PID
+	_ = w.Write(fmt.Sprintf("%.2b", h.TransportScramblingControl)) // Scrambling control
+	_ = w.Write(afControl)                                         // Adaptation field control
+	_ = w.Write(fmt.Sprintf("%.4b", h.ContinuityCounter))          // Continuity counter
 	return buf.Bytes()
 }
 

@@ -129,12 +129,15 @@ func TestWritePacket_HeaderOnly(t *testing.T) {
 	assert.Equal(t, PacketSize, n)
 	buf := bytes.NewBuffer(scratch[:n])
 
-	// we can't just compare bytes returned by packetShort since they're not completely correct,
-	//  so we just cross-check writePacket with parsePacket
+	// Header-only is adaptation_field_control '00': written as such, and on
+	// the way back discarded as reserved with the header still parsed.
+	assert.Equal(t, []byte{syncByte, 0xf5, 0x55, 0x8a}, buf.Bytes()[:HeaderSize])
 	p := new(Packet)
-	_, err = p.parse(buf.Bytes(), nil, nil)
-	assert.NoError(t, err)
-	assert.Equal(t, ep, p)
+	var skip bool
+	skip, err = p.parse(buf.Bytes(), nil, nil)
+	assert.True(t, skip)
+	assert.ErrorIs(t, err, ErrReservedAdaptationFieldControl)
+	assert.Equal(t, shortPacketHeader, p.Header)
 }
 
 var packetHeader = PacketHeader{

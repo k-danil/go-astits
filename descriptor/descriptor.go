@@ -290,6 +290,10 @@ func parseDescriptorsN(i *bytesiter.Iterator, length int) (o []Descriptor, err e
 			i.Skip(int(b))
 			descrCount++
 		}
+		if i.Offset() > offsetEnd {
+			err = fmt.Errorf("astits: descriptor overruns its loop by %d bytes: %w", i.Offset()-offsetEnd, bytesiter.ErrNoBytesLeft)
+			return
+		}
 
 		i.Seek(curOffset)
 
@@ -307,15 +311,22 @@ func parseDescriptorsN(i *bytesiter.Iterator, length int) (o []Descriptor, err e
 			}
 
 			if h.Length > 0 {
-				// Unfortunately there's no way to be sure the real descriptor length is the same as the one indicated
-				// previously therefore we must fetch bytes in descriptor functions and seek at the end
-				offsetDescriptorEnd := i.Offset() + int(h.Length)
-				if o[idx], err = h.parseDescriptor(i, offsetDescriptorEnd); err != nil {
-					err = fmt.Errorf("astits: parsing descriptor %x failed: %w", h.Tag, err)
-					return
+				offsetBody := i.Offset()
+				offsetDescriptorEnd := offsetBody + int(h.Length)
+				var perr error
+				if o[idx], perr = h.parseDescriptor(i, offsetDescriptorEnd); perr != nil {
+					// A body the parser rejects is the encoder's data, not a torn loop —
+					// unless the bytes are not there at all (the iterator's bound cut the
+					// last descriptor short), which NextBytes turns back into an error
+					i.Seek(offsetBody)
+					var raw []byte
+					if raw, err = i.NextBytes(int(h.Length)); err != nil {
+						err = fmt.Errorf("astits: fetching descriptor %x body failed: %w", h.Tag, err)
+						return
+					}
+					o[idx] = &Malformed{Header: h, Raw: raw, Err: perr}
 				}
-				// Seek in iterator to make sure we move to the end of the descriptor since its content may be
-				// corrupted
+				// The body parser may stop short of the declared length
 				i.Seek(offsetDescriptorEnd)
 			} else if h.Tag >= userDefinedTagsStart && h.Tag != 0xff {
 				// A zero-length descriptor is valid wire: represent it instead of

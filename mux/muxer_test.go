@@ -490,8 +490,8 @@ func TestWriteTablesMultiSectionPAT(t *testing.T) {
 		if ev != demux.EventPAT {
 			continue
 		}
-		if _, data := dmx.Section(); data != nil {
-			if pat, isPAT := data.(*psi.PAT); isPAT {
+		if _, sec := dmx.Section(); sec != nil {
+			if pat, isPAT := sec.Syntax.Data.(*psi.PAT); isPAT {
 				for _, p := range pat.Programs {
 					got[p.ProgramMapID] = p.ProgramNumber
 				}

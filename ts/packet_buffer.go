@@ -14,6 +14,9 @@ type packetBatch struct {
 	bs  []byte
 	len int
 	off int
+	// partial is the trailing part-packet of the last read, kept behind the
+	// window and moved ahead of the next read so the reader stays aligned.
+	partial int
 
 	// When peeker is set, bs is a view into the reader's own buffer rather than
 	// an owned copy: a Peeker-backed source already holds the bytes, so there is
@@ -36,47 +39,57 @@ func (b *packetBatch) empty() bool {
 	return b.off >= b.len
 }
 
-// refill drops a trailing partial packet: the stream either ends there or is torn,
-// exactly like the per-packet ReadFull path treats it.
-func (b *packetBatch) refill(r io.Reader, packetSize int) (err error) {
+// refill reads the next window. At end of input the bytes short of a whole
+// packet are consumed and returned as tail with ErrNoMorePackets, so the loss
+// is reported once.
+func (b *packetBatch) refill(r io.Reader, packetSize int) (tail int, err error) {
 	if b.peeker != nil {
 		return b.refillPeek(packetSize)
 	}
+	carry := b.partial
+	copy(b.bs, b.bs[b.len:b.len+carry])
+	b.partial = 0
 	var n int
-	if n, err = io.ReadFull(r, b.bs); n < packetSize {
+	n, err = io.ReadFull(r, b.bs[carry:])
+	n += carry
+	if n < packetSize {
 		if err == io.EOF || err == io.ErrUnexpectedEOF || err == nil {
-			return ErrNoMorePackets
+			return n, ErrNoMorePackets
 		}
-		return fmt.Errorf("astits: reading %d bytes failed: %w", len(b.bs), err)
+		return 0, fmt.Errorf("astits: reading %d bytes failed: %w", len(b.bs), err)
 	}
-	b.len = n - n%packetSize
+	b.partial = n % packetSize
+	b.len = n - b.partial
 	b.off = 0
-	return nil
+	return 0, nil
 }
 
 // refillPeek views the next whole-packet window straight out of the reader's
 // buffer, no copy. The previous window is dropped first; a trailing partial
 // packet is left buffered for the next peek.
-func (b *packetBatch) refillPeek(packetSize int) (err error) {
+func (b *packetBatch) refillPeek(packetSize int) (tail int, err error) {
 	if b.pending > 0 {
 		if _, err = b.peeker.Discard(b.pending); err != nil {
-			return fmt.Errorf("astits: discarding %d bytes failed: %w", b.pending, err)
+			return 0, fmt.Errorf("astits: discarding %d bytes failed: %w", b.pending, err)
 		}
 		b.pending = 0
 	}
 	var bs []byte
 	if bs, err = peekUpTo(b.peeker, b.window); err != nil {
-		return fmt.Errorf("astits: peeking %d bytes failed: %w", b.window, err)
+		return 0, fmt.Errorf("astits: peeking %d bytes failed: %w", b.window, err)
 	}
 	n := len(bs) - len(bs)%packetSize
 	if n < packetSize {
-		return ErrNoMorePackets
+		if _, err = b.peeker.Discard(len(bs)); err != nil {
+			return 0, fmt.Errorf("astits: discarding %d bytes failed: %w", len(bs), err)
+		}
+		return len(bs), ErrNoMorePackets
 	}
 	b.bs = bs
 	b.len = n
 	b.off = 0
 	b.pending = n
-	return nil
+	return 0, nil
 }
 
 func (b *packetBatch) next(packetSize int) (bs []byte) {
@@ -98,7 +111,8 @@ type PacketSkipper func(p *Packet) (skip bool)
 // consuming (fewer, with a non-nil error such as io.EOF, only at end of input),
 // and must accept n up to Size(); Discard drops exactly n bytes, where n never
 // exceeds what a preceding Peek returned; Size reports that peek ceiling, which
-// must cover one boundary-scan window (a few hundred bytes).
+// must cover one boundary-scan window (syncScanWindow, 1024 bytes): a smaller
+// one fails NewPacketBuffer under SyncLock.
 type Peeker interface {
 	Peek(n int) ([]byte, error)
 	Discard(n int) (discarded int, err error)
@@ -107,41 +121,50 @@ type Peeker interface {
 
 // PacketBufferConfig configures NewPacketBuffer. PacketSize 0 autodetects.
 // SyncLock enables arbitrary-offset start alignment and mid-stream resync via
-// Peek; ResyncLimit 0 resyncs indefinitely.
+// Peek.
+//
+// SkipErrLimit and ResyncLimit share one scale: 0 (the default) tolerates
+// nothing, -1 is unbounded, N allows N in a row. SkipErrLimit bounds the streak
+// of consecutive damage events — a packet that fails to parse at an aligned
+// position (dropped, in either mode) and, under sync lock, a lost sync, counted
+// once when the loss is detected whatever the resync's outcome — reset by a
+// clean packet; a repaired sync byte costs nothing. ResyncLimit is the number
+// of scan windows one resync may spend re-locking (sync lock only): with the
+// default a lost sync is fatal at once.
 type PacketBufferConfig struct {
 	PacketSize    uint
-	SkipErrLimit  uint
+	SkipErrLimit  int
 	Skipper       PacketSkipper
 	KeepPIDs      *PIDSet // inline PID allow-list; nil = keep all
 	ZeroCopyBatch uint
 	SyncLock      bool
-	ResyncLimit   uint
+	ResyncLimit   int
 	// OnRecover, when set, is called for each recovered damage event (sync loss,
-	// dropped packet); nil keeps the silent fast path. Only invoked on the cold
-	// error branches, never on a clean read.
+	// repaired sync byte, dropped packet); nil keeps the silent fast path. Only
+	// invoked on the cold error branches, never on a clean read.
 	OnRecover func(RecoverableError)
 }
 
 // PacketBuffer represents a packet buffer
 type PacketBuffer struct {
-	packetSize     uint
-	prefixLen      int // M2TS TP_extra_header ahead of the sync byte; 0 otherwise
-	s              PacketSkipper
-	keepPIDs       *PIDSet
-	r              io.Reader
-	peeker         Peeker // non-nil ⇒ sync-lock mode
-	pos            int64
-	batch          *packetBatch // nil = copy mode
-	zeroCopy       bool
-	skipErrCounter uint
-	skipErrLimit   uint
-	resyncCounter  uint
-	resyncLimit    uint // 0 = unlimited
-	onRecover      func(RecoverableError)
+	packetSize   uint
+	prefixLen    int // M2TS TP_extra_header ahead of the sync byte; 0 otherwise
+	s            PacketSkipper
+	keepPIDs     *PIDSet
+	r            io.Reader
+	peeker       Peeker // non-nil ⇒ sync-lock mode
+	pos          int64
+	batch        *packetBatch // nil = copy mode
+	zeroCopy     bool
+	damageStreak int
+	skipErrLimit int
+	resyncLimit  int
+	onRecover    func(RecoverableError)
 
-	// Cancellation lives here rather than in the caller: both loops below can
-	// run unboundedly on a live source (an absent PID skips forever, resync with
-	// no limit likewise), and a check outside Next cannot reach either.
+	// Cancellation lives here rather than in the caller: the read loops and the
+	// resync scan can all run unboundedly on a live source (an absent PID skips
+	// forever, an unlimited resync scans forever), and a check outside Next
+	// cannot reach any of them.
 	ctx        context.Context
 	done       <-chan struct{}
 	cancelPoll uint
@@ -229,9 +252,18 @@ func (pb *PacketBuffer) newBatch(batchPackets uint) *packetBatch {
 	return newPacketBatch(pb.packetSize, batchPackets)
 }
 
-// syncScanWindow is how many bytes a boundary search peeks: room to slide the
-// unit offset across one widest packet and still confirm the sync period.
-const syncScanWindow = RSPacketSize + (autoDetectSyncs-1)*RSPacketSize + (M2TSPacketSize - PacketSize)
+// resyncSyncs is how many periodic sync bytes a re-lock after a sync loss
+// needs: TR 101 290 §5.2.1 acquires sync on five consecutive correct ones (and
+// declares it lost on two corrupt ones), so a shorter island inside damage
+// stays part of the loss. The start-of-stream lock keeps autoDetectSyncs.
+const resyncSyncs = 5
+
+// syncScanWindow is how many bytes a boundary search peeks. A re-lock at any
+// shift within one packet needs that shift plus resyncSyncs periods in view,
+// i.e. more than prefix + resyncSyncs×size: 5×204 = 1020 for Reed-Solomon (no
+// prefix), 4 + 5×192 = 964 for M2TS, 5×188 = 940 for plain TS. 1024 covers all
+// three and lets a Peeker of exactly one kibibyte pass.
+const syncScanWindow = 1024
 
 // syncCandidates are the (sync offset within the unit, packet size) pairs the
 // detector and the resync scanner recognise; the unit begins at byte 0, M2TS
@@ -250,6 +282,9 @@ func (pb *PacketBuffer) initSyncLock(cfg PacketBufferConfig) (err error) {
 		bufSize = b
 	}
 	pb.peeker = asPeeker(pb.r, bufSize)
+	if size := pb.peeker.Size(); size < syncScanWindow {
+		return fmt.Errorf("astits: peeker size %d is below the %d-byte scan window: %w", size, syncScanWindow, ErrInvalidData)
+	}
 
 	var buf []byte
 	if buf, err = peekUpTo(pb.peeker, syncScanWindow); err != nil {
@@ -258,6 +293,9 @@ func (pb *PacketBuffer) initSyncLock(cfg PacketBufferConfig) (err error) {
 	size, off, ok := scanUnit(buf, cfg.PacketSize)
 	if !ok {
 		return fmt.Errorf("astits: could not lock onto a sync byte in first %d bytes: %w", len(buf), ErrInvalidData)
+	}
+	if off > 0 && pb.onRecover != nil {
+		pb.onRecover(RecoverableError{Kind: ErrorKindSyncLoss, PID: PIDUnset, Offset: 0, Dropped: int64(off), Err: ErrPacketMustStartWithASyncByte})
 	}
 	if _, err = pb.peeker.Discard(off); err != nil {
 		return fmt.Errorf("astits: discarding %d bytes to unit boundary failed: %w", off, err)
@@ -295,7 +333,7 @@ func scanUnit(buf []byte, fixedSize uint) (size uint, offset int, ok bool) {
 			if fixedSize != 0 && uint(c.size) != fixedSize {
 				continue
 			}
-			if syncLocked(buf, k+c.sync, c.size) {
+			if syncLocked(buf, k+c.sync, c.size, autoDetectSyncs) {
 				return uint(c.size), k, true
 			}
 		}
@@ -327,7 +365,7 @@ func autoDetectPacketSize(r io.Reader) (packetSize uint, err error) {
 	bs = bs[:n]
 
 	for _, c := range syncCandidates {
-		if syncLocked(bs, c.sync, c.size) {
+		if syncLocked(bs, c.sync, c.size, autoDetectSyncs) {
 			packetSize = uint(c.size)
 			break
 		}
@@ -362,20 +400,36 @@ func autoDetectPacketSize(r io.Reader) (packetSize uint, err error) {
 }
 
 // syncLocked reports whether every sync position at start, start+size, … that
-// fits in bs (up to autoDetectSyncs of them) holds a sync byte, with at least
-// one recurrence. Requiring all in-window periods to match (not just a run of
-// two) keeps a 204 stream's parity 0x47 at offset 188 from locking as 188 while
-// the window still has room for the next check; a short two-packet stream still
+// fits in bs (up to syncs of them) holds a sync byte, with at least one
+// recurrence. Requiring all in-window periods to match (not just a run of two)
+// keeps a 204 stream's parity 0x47 at offset 188 from locking as 188 while the
+// window still has room for the next check; a short two-packet stream still
 // locks on its single recurrence.
-func syncLocked(bs []byte, start, size int) bool {
+func syncLocked(bs []byte, start, size, syncs int) bool {
 	seen := 0
-	for i, off := 0, start; i < autoDetectSyncs && off < len(bs); i, off = i+1, off+size {
+	for i, off := 0, start; i < syncs && off < len(bs); i, off = i+1, off+size {
 		if bs[off] != syncByte {
 			return false
 		}
 		seen++
 	}
 	return seen >= 2
+}
+
+// resyncLocked is the strict form for a re-lock: all resyncSyncs periods must
+// lie inside bs and hold a sync byte, so an island shorter than that never
+// locks, however close to the window's end it sits.
+func resyncLocked(bs []byte, start, size int) bool {
+	last := start + (resyncSyncs-1)*size
+	if last >= len(bs) {
+		return false
+	}
+	for off := start; off <= last; off += size {
+		if bs[off] != syncByte {
+			return false
+		}
+	}
+	return true
 }
 
 // hasLeadingSync separates "no sync at a unit boundary" from "sync present but
@@ -445,15 +499,19 @@ func (pb *PacketBuffer) Next(p *Packet) (err error) {
 		var bs []byte
 		if pb.batch != nil {
 			if pb.batch.empty() {
-				if err = pb.batch.refill(pb.r, ps); err != nil {
+				var tail int
+				if tail, err = pb.batch.refill(pb.r, ps); err != nil {
+					pb.dropTail(tail)
 					return err
 				}
 			}
 			bs = pb.batch.next(ps)
 		} else {
 			bs = p.bs[:ps]
-			if _, err = io.ReadFull(pb.r, bs); err != nil {
+			var n int
+			if n, err = io.ReadFull(pb.r, bs); err != nil {
 				if err == io.EOF || errors.Is(err, io.ErrUnexpectedEOF) {
+					pb.dropTail(n)
 					return ErrNoMorePackets
 				}
 				return fmt.Errorf("astits: reading %d bytes failed: %w", ps, err)
@@ -466,28 +524,34 @@ func (pb *PacketBuffer) Next(p *Packet) (err error) {
 
 		var skip bool
 		if skip, err = p.parse(bs, pb.s, pb.keepPIDs); err != nil {
-			if skip && pb.skipErrCounter < pb.skipErrLimit {
-				pb.skipErrCounter++
-				if pb.onRecover != nil {
-					pb.onRecover(RecoverableError{Kind: ErrorKindPacketDrop, PID: PIDUnset, Offset: p.Offset, Err: err})
-				}
-			} else {
-				return fmt.Errorf("astits: building packet failed: %w", err)
+			if err == ErrReservedAdaptationFieldControl {
+				pb.dropReserved(p, ps)
+				continue
 			}
-		} else {
-			pb.skipErrCounter = 0
+			if pb.onRecover != nil {
+				pb.onRecover(RecoverableError{Kind: ErrorKindPacketDrop, PID: PIDUnset, Offset: p.Offset, Dropped: int64(ps), Err: err})
+			}
+			if exhausted(pb.damageStreak, pb.skipErrLimit) {
+				return fmt.Errorf("astits: packet damage streak exhausted after %d events: %w", pb.damageStreak, err)
+			}
+			pb.damageStreak++
+			continue
 		}
+		pb.damageStreak = 0
 		if !skip {
 			return nil
 		}
 	}
 }
 
-// nextSync fetches the next packet under sync lock: it peeks a packet, resyncs
-// on a missing sync byte, then copies it out (or hands back the peeked view in
-// zero-copy mode) and drops it from the buffer. An aligned but unparseable
-// packet is dropped as a damage event, not a fatal error, so one corrupt packet
-// on a lossy feed does not kill the stream.
+// exhausted applies the shared limit scale: 0 tolerates nothing, -1 never
+// gives up, N allows N events before the next one is fatal.
+func exhausted(counter, limit int) bool {
+	return limit >= 0 && counter >= limit
+}
+
+// An aligned but unparseable packet is dropped as a damage event under the
+// streak budget, not as a fatal error on its own.
 func (pb *PacketBuffer) nextSync(p *Packet) (err error) {
 	ps := int(pb.packetSize)
 	for {
@@ -501,21 +565,35 @@ func (pb *PacketBuffer) nextSync(p *Packet) (err error) {
 			return fmt.Errorf("astits: reading %d bytes failed: %w", ps, err)
 		}
 		if len(buf) < ps {
+			if _, err = pb.peeker.Discard(len(buf)); err != nil {
+				return fmt.Errorf("astits: discarding %d bytes failed: %w", len(buf), err)
+			}
+			pb.dropTail(len(buf))
 			return ErrNoMorePackets
 		}
 
+		pkt := buf[:ps]
 		if buf[pb.prefixLen] != syncByte {
-			if pb.onRecover != nil {
-				pb.onRecover(RecoverableError{Kind: ErrorKindSyncLoss, PID: PIDUnset, Offset: pb.pos, Err: ErrPacketMustStartWithASyncByte})
-			}
-			if err = pb.resync(ps); err != nil {
+			var repaired bool
+			if pkt, repaired, err = pb.repairSyncByte(p, ps); err != nil {
 				return err
 			}
-			continue
-		}
-
-		pkt := buf[:ps]
-		if !pb.zeroCopy {
+			if !repaired {
+				if exhausted(pb.damageStreak, pb.skipErrLimit) {
+					return fmt.Errorf("astits: packet damage streak exhausted after %d events: %w", pb.damageStreak, ErrPacketMustStartWithASyncByte)
+				}
+				pb.damageStreak++
+				lost := pb.pos
+				err = pb.resync(ps)
+				if pb.onRecover != nil {
+					pb.onRecover(RecoverableError{Kind: ErrorKindSyncLoss, PID: PIDUnset, Offset: lost, Dropped: pb.pos - lost, Err: ErrPacketMustStartWithASyncByte})
+				}
+				if err != nil {
+					return err
+				}
+				continue
+			}
+		} else if !pb.zeroCopy {
 			copy(p.bs[:ps], pkt)
 			pkt = p.bs[:ps]
 		}
@@ -524,16 +602,23 @@ func (pb *PacketBuffer) nextSync(p *Packet) (err error) {
 		p.Offset = pb.pos
 		var skip bool
 		if skip, err = p.parse(pkt, pb.s, pb.keepPIDs); err != nil {
+			if err == ErrReservedAdaptationFieldControl {
+				pb.dropReserved(p, ps)
+				if err = pb.discard(ps); err != nil {
+					return err
+				}
+				continue
+			}
 			// Sync was present, so scanning won't help: drop the damaged packet.
 			if pb.onRecover != nil {
-				pb.onRecover(RecoverableError{Kind: ErrorKindPacketDrop, PID: PIDUnset, Offset: p.Offset, Err: err})
+				pb.onRecover(RecoverableError{Kind: ErrorKindPacketDrop, PID: PIDUnset, Offset: p.Offset, Dropped: int64(ps), Err: err})
 			}
 			if err = pb.dropDamaged(ps); err != nil {
 				return err
 			}
 			continue
 		}
-		pb.resyncCounter = 0
+		pb.damageStreak = 0
 
 		if _, err = pb.peeker.Discard(ps); err != nil {
 			return fmt.Errorf("astits: discarding %d bytes failed: %w", ps, err)
@@ -546,65 +631,104 @@ func (pb *PacketBuffer) nextSync(p *Packet) (err error) {
 	}
 }
 
-// dropDamaged discards one packet after a damage event and enforces ResyncLimit.
+// repairSyncByte applies the TR 101 290 §5.2.1 hysteresis to a corrupt sync
+// byte: with the next period's sync intact it is a sync_byte_error, not a
+// loss, so the packet is read from a copy with the byte restored and delivered.
+// The copy keeps the hot parse and a caller's Peeker buffer untouched.
+func (pb *PacketBuffer) repairSyncByte(p *Packet, ps int) (pkt []byte, repaired bool, err error) {
+	var buf []byte
+	if buf, err = peekUpTo(pb.peeker, 2*ps); err != nil {
+		return nil, false, fmt.Errorf("astits: reading %d bytes failed: %w", 2*ps, err)
+	}
+	if len(buf) < 2*ps || buf[pb.prefixLen+ps] != syncByte {
+		return
+	}
+	pkt = p.bs[:ps]
+	copy(pkt, buf[:ps])
+	pkt[pb.prefixLen] = syncByte
+	if pb.onRecover != nil {
+		pb.onRecover(RecoverableError{Kind: ErrorKindSyncByte, PID: PIDUnset, Offset: pb.pos, Err: ErrPacketMustStartWithASyncByte})
+	}
+	return pkt, true, nil
+}
+
 func (pb *PacketBuffer) dropDamaged(ps int) (err error) {
-	if pb.noteRecovery() {
-		return fmt.Errorf("astits: sync recovery exhausted after %d events: %w", pb.resyncCounter, ErrInvalidData)
+	if exhausted(pb.damageStreak, pb.skipErrLimit) {
+		return fmt.Errorf("astits: packet damage streak exhausted after %d events: %w", pb.damageStreak, ErrInvalidData)
 	}
-	if _, err = pb.peeker.Discard(ps); err != nil {
-		return fmt.Errorf("astits: discarding %d bytes failed: %w", ps, err)
+	pb.damageStreak++
+	return pb.discard(ps)
+}
+
+// discard is the cold-path consume; the per-packet path keeps its own inline
+// Discard so no call is added there.
+func (pb *PacketBuffer) discard(n int) (err error) {
+	if _, err = pb.peeker.Discard(n); err != nil {
+		return fmt.Errorf("astits: discarding %d bytes failed: %w", n, err)
 	}
-	pb.pos += int64(ps)
+	pb.pos += int64(n)
 	return
 }
 
-// noteRecovery records one damage event and reports whether ResyncLimit is hit.
-// The counter is cleared only by a cleanly parsed packet, so it measures a run
-// of consecutive damage (corrupt packets and fruitless scan windows alike).
-func (pb *PacketBuffer) noteRecovery() bool {
-	pb.resyncCounter++
-	return pb.resyncLimit > 0 && pb.resyncCounter >= pb.resyncLimit
+// dropReserved reports a discarded adaptation_field_control '00' packet; it is
+// outside the damage budget, like a filtered packet.
+func (pb *PacketBuffer) dropReserved(p *Packet, ps int) {
+	if pb.onRecover != nil {
+		pb.onRecover(RecoverableError{Kind: ErrorKindPacketDrop, PID: p.Header.PID, Offset: p.Offset, Dropped: int64(ps), Err: ErrReservedAdaptationFieldControl})
+	}
+}
+
+// dropTail accounts for the bytes short of a whole packet at end of input,
+// already consumed by the caller.
+func (pb *PacketBuffer) dropTail(n int) {
+	if n == 0 {
+		return
+	}
+	if pb.onRecover != nil {
+		pb.onRecover(RecoverableError{Kind: ErrorKindPacketDrop, PID: PIDUnset, Offset: pb.pos, Dropped: int64(n), Err: ErrShortPacket})
+	}
+	pb.pos += int64(n)
 }
 
 // resync scans forward for the next unit boundary after a lost sync byte and
-// discards up to it. It keeps a straddling tail across windows so a boundary
-// that needs lookahead still locks; ResyncLimit caps the fruitless windows.
+// discards up to it, ResyncLimit windows at most. Each slide keeps the last
+// resyncSyncs-1 periods behind so a boundary they straddle is scanned again
+// with room to confirm it; the byte at the slide itself was already scanned.
+// A window short of syncScanWindow is the end of input: whatever did not lock
+// there is consumed into the loss.
 func (pb *PacketBuffer) resync(ps int) (err error) {
-	for {
+	for windows := 0; ; windows++ {
+		if pb.shouldPollCancel() {
+			if err = pb.pollCancel(); err != nil {
+				return
+			}
+		}
+		if exhausted(windows, pb.resyncLimit) {
+			return fmt.Errorf("astits: resync exhausted after %d windows: %w", windows, ErrInvalidData)
+		}
 		var buf []byte
 		if buf, err = peekUpTo(pb.peeker, syncScanWindow); err != nil {
 			return fmt.Errorf("astits: resync peek failed: %w", err)
 		}
-		if len(buf) < ps {
-			return ErrNoMorePackets
-		}
 
 		if k := pb.scanResync(buf, ps); k >= 0 {
-			if _, err = pb.peeker.Discard(k); err != nil {
-				return fmt.Errorf("astits: resync discard failed: %w", err)
+			return pb.discard(k)
+		}
+		if len(buf) < syncScanWindow {
+			if err = pb.discard(len(buf)); err != nil {
+				return err
 			}
-			pb.pos += int64(k)
-			return nil
+			return ErrNoMorePackets
 		}
-
-		drop := max(len(buf)-(autoDetectSyncs-1)*ps, 1)
-		if _, err = pb.peeker.Discard(drop); err != nil {
-			return fmt.Errorf("astits: resync discard failed: %w", err)
-		}
-		pb.pos += int64(drop)
-
-		if pb.noteRecovery() {
-			return fmt.Errorf("astits: resync exhausted after %d events: %w", pb.resyncCounter, ErrInvalidData)
+		if err = pb.discard(len(buf) - pb.prefixLen - (resyncSyncs-1)*ps - 1); err != nil {
+			return err
 		}
 	}
 }
 
-// scanResync returns the offset (≥1) of the next unit boundary in buf, or -1.
-// Scanning small offsets first, where the full window confirms the period,
-// finds a strong lock before any weak one a payload 0x47 could form near the end.
 func (pb *PacketBuffer) scanResync(buf []byte, ps int) int {
-	for k := 1; k+ps <= len(buf); k++ {
-		if syncLocked(buf, k+pb.prefixLen, ps) {
+	for k := 1; k+pb.prefixLen+(resyncSyncs-1)*ps < len(buf); k++ {
+		if resyncLocked(buf, k+pb.prefixLen, ps) {
 			return k
 		}
 	}

@@ -16,7 +16,12 @@ import (
 // anything else means the header is misaligned or corrupt, not merely odd.
 const optionalHeaderMarker = 0b10
 
-var ErrInvalidMarkerBits = errclass.New("astits: invalid PES optional header marker bits", ts.ErrInvalidData)
+var (
+	ErrInvalidMarkerBits = errclass.New("astits: invalid PES optional header marker bits", ts.ErrInvalidData)
+	// ErrUnboundedNonVideo: PES_packet_length 0 is allowed only for video
+	// elementary streams (H.222.0 §2.4.3.7).
+	ErrUnboundedNonVideo = errclass.New("astits: unbounded PES packet on a non-video stream", ts.ErrInvalidData)
+)
 
 // P-STD buffer scales
 type PSTDBufferScale uint8
@@ -394,7 +399,17 @@ func (h *Header) IsVideoStream() bool {
 }
 
 // Parse parses a PES data
-func (d *Data) Parse(bs []byte) (err error) {
+func (d *Data) Parse(bs []byte) error {
+	return d.parse(bs, false)
+}
+
+// ParseTruncated is Parse for a unit the stream cut short: a declared length
+// beyond bs clamps Data to the bytes present instead of failing.
+func (d *Data) ParseTruncated(bs []byte) error {
+	return d.parse(bs, true)
+}
+
+func (d *Data) parse(bs []byte, clamp bool) (err error) {
 	const pesPayloadPrefixSize = 3
 
 	var dataStart, dataEnd int
@@ -403,12 +418,18 @@ func (d *Data) Parse(bs []byte) (err error) {
 		return
 	}
 
+	if dataStart > len(bs) {
+		return ts.ErrShortPacket
+	}
 	if dataEnd < dataStart {
 		err = fmt.Errorf("astits: data end %d is before data start %d: %w", dataEnd, dataStart, ts.ErrInvalidData)
 		return
 	}
-	if dataStart > len(bs) || dataEnd > len(bs) {
-		return ts.ErrShortPacket
+	if dataEnd > len(bs) {
+		if !clamp {
+			return ts.ErrShortPacket
+		}
+		dataEnd = len(bs)
 	}
 
 	d.Data = bs[dataStart:dataEnd]

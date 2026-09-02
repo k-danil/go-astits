@@ -61,8 +61,10 @@ How:
   the produced slice.
 - **Event-based demux** (`Next() (Event, error)` and the `Events()` iterator): one call
   advances to the next `EventPES` or a typed table event (`EventPAT`/`EventPMT`/`EventEIT`/…).
-  A completed unit is claimed via `PES()` (pool-owned, `Close()` when done retaining it);
-  table state is read through `Section()`/`PAT()`/`PMT()`. The full MPEG-2 systems + DVB-SI
+  A completed unit is claimed via `PES()` (pool-owned, `Close()` when done retaining it,
+  carrying the offsets of its first and last packet); `Section()` hands over the whole
+  section behind a table event — table_id, version, current_next_indicator, section numbers
+  and the typed body — while `PAT()`/`PMT()` hold the tables in effect. The full MPEG-2 systems + DVB-SI
   table set is parsed, each surfaced as its own typed event; everything beyond PAT/PMT is off
   by default (`WithDVBTables`). `WithPSIRepeats` also emits byte-identical repeats
   (`TableChanged` distinguishes them) for stream-composition analysis. Under
@@ -70,7 +72,11 @@ How:
 - **Per-PID byte accumulator**: each PID assembles its unit into one contiguous pooled
   buffer sized from the unit's own length hint (PSI section length, PES packet length) with
   a sticky-max fallback — packets are one-shot scratch, so both copy and view modes reach the
-  parser with a single copy and no per-unit allocation.
+  parser with a single copy and no per-unit allocation. A unit is capped (`WithMaxUnitSize`,
+  16 MB for PES and 64 KB for PSI by default; `-1` unbounded) and torn with
+  `ts.ErrUnitTooLarge` past the cap, so a PID whose unit start never comes cannot buffer the
+  stream; null packets are counted but never accumulated. `PacketCounts()` reports packets
+  seen per PID, every packet the reader delivered.
 - **Circular memory lifecycle**: payload buffers cycle through size-classed pools, PES units
   through their own pool; embedded structs instead of pointer fields (AF inside `ts.Packet`,
   PES data and an owned AF copy inside `demux.PES`, optional header inside `pes.Header`),
@@ -92,9 +98,16 @@ How:
   recurring sync byte — a stray `0x47` in payload or parity doesn't mislead it — or pinned
   with `WithPacketSize`.
 - **Sync lock** (`demux.WithSyncLock`) — for UDP/RTP or otherwise torn feeds: aligns to the
-  first sync byte at any offset within a packet and re-locks after a lost or corrupt packet,
-  peeking ahead through a `ts.Peeker` (a raw reader is wrapped in bufio). Off by default so
-  aligned files stay on the zero-wrap fast path; `WithResyncLimit` bounds recovery.
+  first sync byte at any offset within a packet and survives damage with the TR 101 290
+  hysteresis — a lone corrupt sync byte is repaired and reported (sync_byte_error), two in a
+  row are a sync loss re-locked only on five consecutive periods (TS_sync_loss; a tail shorter
+  than that after a loss is consumed into it), an aligned corrupt packet is dropped — peeking
+  ahead through a `ts.Peeker` of at least 1024 bytes (a raw reader is wrapped in bufio). Off by
+  default so aligned files stay on the zero-wrap fast path. Tolerance is explicit and strict
+  by default: `WithSkipErrLimit` bounds the streak of consecutive damage events (dropped
+  packets in either mode, sync losses under sync lock) and `WithResyncLimit` the scan windows
+  a loss may take to re-lock — 0 tolerates nothing, -1 never gives up, N allows N — so a
+  lossy feed sets both.
 - **`ts.PacketSkipper`** — header-level filtering before any payload work.
 - **`demux.WithKeepPIDs`** — inline PID allow-list (`ts.PIDSet`, a 13-bit bit set) checked in
   the parse hot path with a single bit test, cheaper than a `PacketSkipper` call. Filtered
@@ -116,11 +129,29 @@ How:
   `psi.ErrCRC32Mismatch` flags checksum errors.
 - **Recoverable-error signalling** (`demux.WithRecoverableErrors`) — opt-in: instead of
   silently skipping a corrupt PSI section (CRC32 mismatch — TR 101 290 CRC_error), a torn
-  table, a bad PES unit, a lost sync byte or a dropped packet, `Next` surfaces it as
-  `EventError` carrying a typed `*ts.RecoverableError` (kind, PID, byte offset) and continues.
-  The error is non-terminal — `Events()` yields it without ending the stream, so a lossy feed
-  keeps demuxing while the consumer counts damage (e.g. TR 101 290 error counters). Off by
-  default; the silent fast path is byte-for-byte unchanged.
+  table, a bad PES unit, a lost sync or a repaired sync byte, a dropped packet, a unit torn by a continuity
+  gap / discontinuity / transport error / scrambling, or a unit that is neither PES nor PSI,
+  `Next` surfaces it as `EventError` carrying a typed `*ts.RecoverableError` (kind, PID, byte
+  offset, bytes dropped — 0 for a violation that lost nothing) and continues. The error is
+  non-terminal — `Events()` yields it without ending the stream, so a lossy feed keeps
+  demuxing while the consumer counts damage (e.g. TR 101 290 error counters) and sums the
+  loss. A unit the stream never closed (EOF) is still delivered, flagged `PES.Truncated`.
+  Violations that lost nothing carry `Dropped` 0: a non-video PES with `PES_packet_length` 0
+  (`pes.ErrUnboundedNonVideo`) is delivered and reported; a repeated packet whose bytes
+  differ from the original (`ts.ErrDuplicateMismatch`) is dropped and reported, and a
+  third repeat in a row counts as a continuity gap. The third repeat and the unit size cap
+  change what the silent mode delivers too: both drop the unit they hit.
+  A PSI unit is parsed section by section: a damaged section is one event (with its CRC32
+  checked before its body, so damage counts as CRC_error) and the sections around it are
+  still delivered (`psi.Data.Errors` lists them for direct users of `psi.Parse`); a
+  descriptor whose body does not parse under a valid CRC32 is kept verbatim as
+  `descriptor.Malformed` rather than costing its section.
+  Off by default: no events and no calls on the hot path. The damage handling is the same
+  with or without the option; against earlier versions the output differs exactly where the
+  handling changed — an `adaptation_field_control` '00' packet is discarded, a unit start
+  with `discontinuity_indicator` flushes the previous unit instead of dropping it, a
+  transport error or scrambling tears the unit in progress, and EOF tails are delivered as
+  truncated instead of dropped.
 - **`Demuxer.Close()`** — deterministic resource return for demuxers abandoned before EOF;
   `Rewind()` cleans up after itself.
 - **Muxer**: raw packet passthrough (`WritePacket` of `Packet.Raw()` with `UpdateHeader`),

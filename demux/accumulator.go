@@ -1,9 +1,9 @@
 package demux
 
 import (
+	"bytes"
 	"encoding/binary"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
 	"github.com/k-danil/go-astits/v2/internal/pidmap"
 	"github.com/k-danil/go-astits/v2/psi"
 	"github.com/k-danil/go-astits/v2/ts"
@@ -30,14 +30,20 @@ type pidSlot struct {
 	hasAF bool
 	cc    uint8 // CC of the unit's first packet
 
-	lastCC         uint8
-	lastHadPayload bool
-	seenPacket     bool
+	lastCC     uint8
+	seenPacket bool
+	lastWasDup bool
+	lastLen    int // payload length of the last packet appended, 0 once the unit is gone
+
+	firstOffset int64 // packet that started the unit
+	lastOffset  int64 // last packet that fed it
+
+	psiScan int // psiComplete resumes here: the next section header to inspect
 
 	sticky  uint8 // sticky-max size class over the slot's lifetime
 	started bool
 	isPSI   bool
-	stats   uint32
+	packets uint64
 }
 
 // accumulator replaces the per-PID packet lists: it owns per-PID slots and
@@ -45,43 +51,45 @@ type pidSlot struct {
 type accumulator struct {
 	slots      pidmap.Map[pidSlot]
 	programMap *pidmap.Map[uint16]
-	dvbTables  bool
-	units      uint32
+
+	// One-entry slot cache: a run of packets on one PID (the common case on a
+	// single-program stream) skips the hashed lookup. Invalidated whenever
+	// slots may reallocate.
+	lastPID   uint16
+	lastSlot  *pidSlot
+	report    func(ts.RecoverableError) // nil keeps the silent fast path
+	maxPES    int                       // unit size limits on the WithMaxUnitSize scale
+	maxPSI    int
+	dvbTables bool
 
 	keysArr [packetPoolPreallocPIDs]uint16
 	valsArr [packetPoolPreallocPIDs]pidSlot
 }
 
-const (
-	packetPoolPreallocPIDs = 8
-	slotReorderPeriod      = 64
-)
+const packetPoolPreallocPIDs = 8
 
-func (a *accumulator) init(programMap *pidmap.Map[uint16], dvbTables bool) {
+func (a *accumulator) init(programMap *pidmap.Map[uint16], dvbTables bool, report func(ts.RecoverableError), maxPES, maxPSI int) {
 	a.slots = pidmap.Map[pidSlot]{Keys: a.keysArr[:0], Vals: a.valsArr[:0]}
+	a.lastSlot = nil
 	a.programMap = programMap
+	a.report = report
+	a.maxPES = maxPES
+	a.maxPSI = maxPSI
 	a.dvbTables = dvbTables
-	a.units = 0
-}
-
-// reorderSlots keeps the hottest PIDs at the front of the linear scan in
-// pidmap.Get.
-func (a *accumulator) reorderSlots() {
-	for i := 1; i < len(a.slots.Keys); i++ {
-		for j := i; j > 0 && a.slots.Vals[j].stats > a.slots.Vals[j-1].stats; j-- {
-			a.slots.Swap(j, j-1)
-		}
-	}
 }
 
 // unit is a flushed payload unit handed to the parse stage. buf ownership
-// moves to the receiver.
+// moves to the receiver. truncated marks an EOF drain: the stream never
+// closed the unit, so its end is not confirmed.
 type unit struct {
-	buf   *dataPayload
-	af    *ts.PacketAdaptationField
-	cc    uint8
-	pid   uint16
-	isPSI bool
+	buf         *dataPayload
+	af          *ts.PacketAdaptationField
+	firstOffset int64
+	lastOffset  int64
+	cc          uint8
+	pid         uint16
+	isPSI       bool
+	truncated   bool
 }
 
 func (a *accumulator) isPSIPID(pid uint16) bool {
@@ -94,37 +102,70 @@ func (a *accumulator) isPSIPID(pid uint16) bool {
 // or — for a torn PSI flushed by the same packet that completes the next
 // section — two) to out. Buffer ownership moves with the units.
 func (a *accumulator) add(p *ts.Packet, out []unit) []unit {
-	// Must run before the slot lookup: reordering moves Vals, invalidating the
-	// slot pointer and the unit.af taken from it.
-	if p.Header.PayloadUnitStartIndicator {
-		a.units++
-		if a.units&(slotReorderPeriod-1) == 0 {
-			a.reorderSlots()
+	slot := a.lastSlot
+	if slot == nil || p.Header.PID != a.lastPID {
+		if slot = a.slots.Get(p.Header.PID); slot == nil {
+			slot = a.slots.GetOrAdd(p.Header.PID)
 		}
+		a.lastPID, a.lastSlot = p.Header.PID, slot
 	}
+	slot.packets++
 
-	if p.Header.TransportErrorIndicator || !p.Header.HasPayload {
+	// A null packet's payload and counter are undefined (§2.4.3.3): counted,
+	// never accumulated
+	if !p.Header.HasPayload || p.Header.PID == ts.PIDNull {
 		return out
 	}
 
-	slot := a.slots.GetOrAdd(p.Header.PID)
-	slot.stats++
-
-	// Same packet repeated (retransmission)
-	if slot.seenPacket && p.Header.ContinuityCounter == slot.lastCC && slot.lastHadPayload {
+	if p.Header.TransportErrorIndicator || p.Header.TransportScramblingControl != ts.ScramblingControlNotScrambled {
+		// The unit start still closes the previous unit; the unusable payload
+		// itself opens none
+		if !p.Header.PayloadUnitStartIndicator {
+			reason := ts.ErrScrambled
+			if p.Header.TransportErrorIndicator {
+				reason = ts.ErrTransportError
+			}
+			a.tear(slot, p.Header.PID, p.Offset, reason, 0)
+			return out
+		}
+		if slot.started {
+			if u, ok := a.finish(slot, p.Header.PID, p.Offset); ok {
+				out = append(out, u)
+			}
+		}
+		slot.seenPacket = false
 		return out
 	}
-	// Discontinuity drops the unfinished unit
-	if slot.started && a.discontinuity(slot, p) {
-		slot.release()
+
+	// §2.4.3.4 lets the indicator stay set on every PCR-PID packet until the
+	// next PCR, so only the unit start it announces is exempt from the counter
+	// checks; a mid-unit indicator packet with a continuous counter is payload
+	discontinuity := p.Header.HasAdaptationField && p.AdaptationField.DiscontinuityIndicator
+	jumpAllowed := discontinuity && p.Header.PayloadUnitStartIndicator
+	if !jumpAllowed && slot.seenPacket && p.Header.ContinuityCounter == slot.lastCC {
+		// §2.4.3.3: two and only two, byte-identical. A third repeat is a
+		// counter discontinuity, and no repeat is ever appended.
+		if !slot.lastWasDup {
+			slot.lastWasDup = true
+			a.checkDuplicate(slot, p)
+		} else {
+			a.tear(slot, p.Header.PID, p.Offset, ts.ErrContinuityGap, 0)
+			slot.seenPacket = true // the counter stays known: further repeats are still repeats
+		}
+		return out
 	}
-	slot.lastCC = p.Header.ContinuityCounter
-	slot.lastHadPayload = p.Header.HasPayload
-	slot.seenPacket = true
+	slot.lastWasDup = false
+	if slot.started && !jumpAllowed && p.Header.ContinuityCounter != (slot.lastCC+1)%16 {
+		reason := ts.ErrContinuityGap
+		if discontinuity {
+			reason = ts.ErrDiscontinuity
+		}
+		a.tear(slot, p.Header.PID, p.Offset, reason, 0)
+	}
 
 	if p.Header.PayloadUnitStartIndicator {
 		if slot.started {
-			if u, ok := slot.flush(p.Header.PID); ok {
+			if u, ok := a.finish(slot, p.Header.PID, p.Offset); ok {
 				out = append(out, u)
 			}
 		}
@@ -135,30 +176,84 @@ func (a *accumulator) add(p *ts.Packet, out []unit) []unit {
 		// list behavior; the parse stage rejects it if it is garbage.
 		slot.start(p, a.isPSIPID(p.Header.PID))
 	}
+	// After finish/start: a tear inside finish clears seenPacket, and the
+	// unit this packet opens must still see its own repeat
+	slot.lastCC = p.Header.ContinuityCounter
+	slot.seenPacket = true
 
 	if need := len(slot.buf.bs) + len(p.Payload); need > cap(slot.buf.bs) {
+		if overLimit(need, a.limitFor(slot)) {
+			a.tear(slot, p.Header.PID, p.Offset, ts.ErrUnitTooLarge, len(p.Payload))
+			return out
+		}
 		slot.grow(need)
 	}
 	slot.buf.bs = append(slot.buf.bs, p.Payload...)
+	slot.lastLen = len(p.Payload)
+	slot.lastOffset = p.Offset
 
 	// A PSI unit completes by section lengths, without waiting for the next
 	// PayloadUnitStartIndicator
 	if slot.isPSI && slot.psiComplete() {
-		if u, ok := slot.flush(p.Header.PID); ok {
+		if u, ok := a.finish(slot, p.Header.PID, p.Offset); ok {
 			out = append(out, u)
 		}
 	}
 	return out
 }
 
-func (a *accumulator) discontinuity(slot *pidSlot, p *ts.Packet) bool {
-	if p.Header.HasAdaptationField && p.AdaptationField.DiscontinuityIndicator {
-		return true
+// checkDuplicate compares a repeated packet with the last payload appended,
+// while that payload is still the tail of the unit; without it the repeat is
+// taken on the counter alone.
+func (a *accumulator) checkDuplicate(slot *pidSlot, p *ts.Packet) {
+	if a.report == nil || !slot.started || slot.lastLen == 0 || slot.lastLen > len(slot.buf.bs) {
+		return
 	}
-	if p.Header.HasPayload {
-		return p.Header.ContinuityCounter != (slot.lastCC+1)%16
+	if !bytes.Equal(p.Payload, slot.buf.bs[len(slot.buf.bs)-slot.lastLen:]) {
+		a.report(ts.RecoverableError{
+			Kind: ts.ErrorKindPacketDrop, PID: p.Header.PID, Offset: p.Offset,
+			Dropped: int64(len(p.Payload)), Err: ts.ErrDuplicateMismatch,
+		})
 	}
-	return p.Header.ContinuityCounter != slot.lastCC
+}
+
+func (a *accumulator) limitFor(slot *pidSlot) int {
+	if slot.isPSI {
+		return a.maxPSI
+	}
+	return a.maxPES
+}
+
+// overLimit: -1 is never over.
+func overLimit(size, limit int) bool {
+	return limit >= 0 && size > limit
+}
+
+func (a *accumulator) finish(slot *pidSlot, pid uint16, offset int64) (u unit, ok bool) {
+	if !slot.started {
+		return
+	}
+	if overLimit(len(slot.buf.bs), a.limitFor(slot)) {
+		a.tear(slot, pid, offset, ts.ErrUnitTooLarge, 0)
+		return
+	}
+	return slot.flush(pid)
+}
+
+// tear drops the slot's unit; lost is what the offending packet carried on
+// top of the buffer, so Dropped covers everything the unit cost.
+func (a *accumulator) tear(slot *pidSlot, pid uint16, offset int64, reason error, lost int) {
+	if !slot.started {
+		return
+	}
+	if a.report != nil && len(slot.buf.bs)+lost > 0 {
+		a.report(ts.RecoverableError{
+			Kind: ts.ErrorKindTornUnit, PID: pid, Offset: offset,
+			Dropped: int64(len(slot.buf.bs) + lost), Err: reason,
+		})
+	}
+	slot.release()
+	slot.seenPacket = false
 }
 
 // start begins a new unit from a PayloadUnitStartIndicator packet.
@@ -166,6 +261,8 @@ func (s *pidSlot) start(p *ts.Packet, isPSI bool) {
 	s.started = true
 	s.isPSI = isPSI
 	s.cc = p.Header.ContinuityCounter
+	s.firstOffset = p.Offset
+	s.psiScan = 0
 	if p.Header.HasAdaptationField {
 		s.afIdx ^= 1
 		s.af[s.afIdx].CopyFrom(&p.AdaptationField)
@@ -212,12 +309,13 @@ func (s *pidSlot) flush(pid uint16) (u unit, ok bool) {
 		return
 	}
 	s.sticky = maxClass(s.sticky, classOf(len(s.buf.bs)))
-	u = unit{buf: s.buf, cc: s.cc, pid: pid, isPSI: s.isPSI}
+	u = unit{buf: s.buf, cc: s.cc, pid: pid, isPSI: s.isPSI, firstOffset: s.firstOffset, lastOffset: s.lastOffset}
 	if s.hasAF {
 		u.af = &s.af[s.afIdx]
 	}
 	s.buf = nil
 	s.started = false
+	s.lastLen = 0
 	return u, true
 }
 
@@ -227,52 +325,58 @@ func (s *pidSlot) release() {
 		s.buf = nil
 	}
 	s.started = false
+	s.lastLen = 0
 }
 
+// psiSectionHeaderLen is table_id plus the 16 bits holding section_length.
+const psiSectionHeaderLen = 3
+
 // psiComplete reports whether the accumulated buffer already holds all its
-// sections: a scan over lengths, no copies.
+// sections: a scan over lengths, resumed from where the last call stopped so
+// a unit costs one pass however many packets feed it.
 func (s *pidSlot) psiComplete() bool {
-	i := bytesiter.New(s.buf.bs)
-
-	b, err := i.NextByte()
-	if err != nil {
-		return false
-	}
-	i.Skip(int(b)) // pointer filler bytes
-
-	for i.HasBytesLeft() {
-		if b, err = i.NextByte(); err != nil {
+	bs := s.buf.bs
+	if s.psiScan == 0 {
+		if len(bs) == 0 {
 			return false
 		}
-		if psi.TableID(b).StopsParsing() {
-			break
+		s.psiScan = 1 + int(bs[0]) // pointer filler bytes
+	}
+	for s.psiScan < len(bs) {
+		if psi.TableID(bs[s.psiScan]).StopsParsing() {
+			return true
 		}
-		var bs []byte
-		if bs, err = i.NextBytesNoCopy(2); err != nil {
+		if s.psiScan+psiSectionHeaderLen > len(bs) {
 			return false
 		}
-		i.Skip(int(binary.BigEndian.Uint16(bs) & 0x0fff))
+		s.psiScan += psiSectionHeaderLen + int(binary.BigEndian.Uint16(bs[s.psiScan+1:])&0x0fff)
 	}
-
-	return i.Len() >= i.Offset()
+	return s.psiScan == len(bs)
 }
 
 // drain flushes the unfinished unit of the lowest PID that has one: EOF tails
-// come out in ascending PID order.
+// come out in ascending PID order. A tail over its size limit is torn and the
+// next PID is tried, so one oversized tail does not hide the others.
 func (a *accumulator) drain() (u unit, ok bool) {
-	minIdx := -1
-	for i := range a.slots.Vals {
-		if !a.slots.Vals[i].started || len(a.slots.Vals[i].buf.bs) == 0 {
-			continue
+	for {
+		minIdx := -1
+		for i := range a.slots.Vals {
+			if !a.slots.Vals[i].started || len(a.slots.Vals[i].buf.bs) == 0 {
+				continue
+			}
+			if minIdx < 0 || a.slots.Keys[i] < a.slots.Keys[minIdx] {
+				minIdx = i
+			}
 		}
-		if minIdx < 0 || a.slots.Keys[i] < a.slots.Keys[minIdx] {
-			minIdx = i
+		if minIdx < 0 {
+			return
+		}
+		slot := &a.slots.Vals[minIdx]
+		if u, ok = a.finish(slot, a.slots.Keys[minIdx], slot.lastOffset); ok {
+			u.truncated = true
+			return
 		}
 	}
-	if minIdx < 0 {
-		return
-	}
-	return a.slots.Vals[minIdx].flush(a.slots.Keys[minIdx])
 }
 
 // close releases every slot buffer.

@@ -55,13 +55,15 @@ func corruptAlignedPacket() []byte {
 // same read: the damage event surfaces before the stream-ending fatal.
 func TestDemuxerRecoverableFlushedBeforeFatal(t *testing.T) {
 	var stream []byte
-	for range 3 {
-		stream = append(stream, minimalTSPacket()...)
+	for cc := range 3 {
+		p := minimalTSPacket()
+		p[3] |= byte(cc)
+		stream = append(stream, p...)
 	}
 	stream = append(stream, corruptAlignedPacket()...)
 
 	dmx := New(context.Background(), bytes.NewReader(stream),
-		WithSyncLock(), WithResyncLimit(1), WithRecoverableErrors())
+		WithSyncLock(), WithRecoverableErrors())
 
 	ev, err := dmx.Next()
 	require.Error(t, err)

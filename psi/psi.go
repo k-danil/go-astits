@@ -37,6 +37,12 @@ const (
 // ErrCRC32Mismatch reports a section whose CRC32 does not match its content.
 var ErrCRC32Mismatch = errclass.New("astits: CRC32 mismatch", ts.ErrInvalidData)
 
+var (
+	ErrPointerField = errclass.New("astits: pointer_field beyond the unit", ts.ErrInvalidData)
+	ErrNoSections   = errclass.New("astits: unit carries no section", ts.ErrInvalidData)
+	ErrUnknownTable = errclass.New("astits: unknown table_id", ts.ErrInvalidData)
+)
+
 // ErrTableNotImplemented reports a table type whose serialization is not implemented.
 var ErrTableNotImplemented = errors.New("astits: table serialization is not implemented")
 
@@ -144,7 +150,24 @@ func (t *TableID) UnmarshalJSON(b []byte) (err error) {
 type Data struct {
 	PointerField int       `json:"pointer_field"` // Present at the start of the TS packet payload signaled by the payload_unit_start_indicator bit in the TS header. Used to set packet alignment bytes or content before the start of tabled payload data.
 	Sections     []Section `json:"_sections"`
+	// Errors lists the sections of the unit that could not be used; Sections
+	// holds the rest. Parse fails as a whole only when nothing was usable.
+	Errors []*SectionError `json:"-"`
 }
+
+// SectionError is one unusable section of a unit: Len is what it cost.
+type SectionError struct {
+	Err     error
+	Offset  int // section start within the unit
+	Len     int // bytes lost with it, up to the end of the unit when the length itself is unusable
+	TableID TableID
+}
+
+func (e *SectionError) Error() string {
+	return fmt.Sprintf("astits: section %s at %d (%d bytes): %v", e.TableID, e.Offset, e.Len, e.Err)
+}
+
+func (e *SectionError) Unwrap() error { return e.Err }
 
 // Section represents a PSI section
 type Section struct {
@@ -195,66 +218,91 @@ func Parse(bs []byte) (d *Data, err error) {
 
 	d.PointerField = int(b)
 
+	if d.PointerField > i.Len()-i.Offset() {
+		err = fmt.Errorf("astits: pointer_field %d exceeds the %d bytes left: %w", d.PointerField, i.Len()-i.Offset(), ErrPointerField)
+		return
+	}
 	i.Skip(d.PointerField)
 
-	var s Section
-	var stop bool
 	for i.HasBytesLeft() {
-		if s, stop, err = parsePSISection(i); err != nil {
-			err = fmt.Errorf("astits: parsing PSI table failed: %w", err)
-			return
+		s, serr, stop := parsePSISection(i)
+		if serr != nil {
+			d.Errors = append(d.Errors, serr)
+		} else if !stop {
+			d.Sections = append(d.Sections, s)
 		}
 		if stop {
 			break
 		}
-		d.Sections = append(d.Sections, s)
+	}
+	if len(d.Sections) == 0 && len(d.Errors) == 0 {
+		err = ErrNoSections
 	}
 	return
 }
 
-// parsePSISection parses a PSI section
-func parsePSISection(i *bytesiter.Iterator) (s Section, stop bool, err error) {
+// parsePSISection parses one section. A section that cannot be used comes back
+// as serr; stop means the unit holds nothing more to parse (stuffing, an
+// unknown table, or a length that cannot be trusted to skip over).
+func parsePSISection(i *bytesiter.Iterator) (s Section, serr *SectionError, stop bool) {
+	start := i.Offset()
+
 	var offsets psiOffsets
+	var err error
 	if offsets, stop, err = s.Header.parsePSISectionHeader(i); err != nil {
-		err = fmt.Errorf("astits: parsing PSI section header failed: %w", err)
+		serr = &SectionError{TableID: s.Header.TableID, Offset: start, Len: i.Len() - start, Err: fmt.Errorf("astits: parsing PSI section header failed: %w", err)}
+		stop = true
 		return
 	}
-
 	if stop {
+		if s.Header.TableID != TableIDNull {
+			serr = &SectionError{TableID: s.Header.TableID, Offset: start, Len: i.Len() - start, Err: ErrUnknownTable}
+		}
+		return
+	}
+	if offsets.end > i.Len() {
+		err = fmt.Errorf("astits: section length %d exceeds the %d bytes left: %w", s.Header.SectionLength, i.Len()-offsets.sectionsStart, bytesiter.ErrNoBytesLeft)
+		serr = &SectionError{TableID: s.Header.TableID, Offset: start, Len: i.Len() - start, Err: err}
+		stop = true
 		return
 	}
 
 	if s.Header.SectionLength > 0 {
-		if s.Syntax, err = parsePSISectionSyntax(i, &s.Header, offsets.sectionsEnd); err != nil {
-			err = fmt.Errorf("astits: parsing PSI section syntax failed: %w", err)
-			return
-		}
-
-		if s.Header.TableID.hasCRC32() {
-			i.Seek(offsets.sectionsEnd)
-
-			if s.CRC32, err = parseCRC32(i); err != nil {
-				err = fmt.Errorf("astits: parsing CRC32 failed: %w", err)
-				return
-			}
-
-			i.Seek(offsets.start)
-			var crc32Data []byte
-			if crc32Data, err = i.NextBytesNoCopy(offsets.sectionsEnd - offsets.start); err != nil {
-				err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
-				return
-			}
-
-			crc32 := ts.ComputeCRC32(crc32Data)
-
-			if crc32 != s.CRC32 {
-				err = fmt.Errorf("astits: table CRC32 %x != computed CRC32 %x: %w", s.CRC32, crc32, ErrCRC32Mismatch)
-				return
-			}
+		if err = s.parseBody(i, offsets); err != nil {
+			serr = &SectionError{TableID: s.Header.TableID, Offset: start, Len: offsets.end - start, Err: err}
 		}
 	}
 
 	i.Seek(offsets.end)
+	return
+}
+
+// parseBody checks the CRC32 before parsing: a damaged length or body must
+// count as a CRC error, not as whatever the body parser trips over.
+func (s *Section) parseBody(i *bytesiter.Iterator, offsets psiOffsets) (err error) {
+	if s.Header.TableID.hasCRC32() {
+		i.Seek(offsets.sectionsEnd)
+		if s.CRC32, err = parseCRC32(i); err != nil {
+			return fmt.Errorf("astits: parsing CRC32 failed: %w", err)
+		}
+
+		i.Seek(offsets.start)
+		var covered []byte
+		if covered, err = i.NextBytesNoCopy(offsets.sectionsEnd - offsets.start); err != nil {
+			return fmt.Errorf("astits: fetching next bytes failed: %w", err)
+		}
+		if crc32 := ts.ComputeCRC32(covered); crc32 != s.CRC32 {
+			return fmt.Errorf("astits: table CRC32 %x != computed CRC32 %x: %w", s.CRC32, crc32, ErrCRC32Mismatch)
+		}
+	}
+
+	i.Seek(offsets.sectionsStart)
+	prev := i.Limit(offsets.sectionsEnd)
+	s.Syntax, err = parsePSISectionSyntax(i, &s.Header, offsets.sectionsEnd)
+	i.Limit(prev)
+	if err != nil {
+		return fmt.Errorf("astits: parsing PSI section syntax failed: %w", err)
+	}
 	return
 }
 

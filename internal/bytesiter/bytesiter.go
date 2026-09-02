@@ -13,14 +13,15 @@ var ErrNoBytesLeft = errclass.New("astits: not enough bytes", ts.ErrInvalidData)
 type Iterator struct {
 	bs     []byte
 	offset int
+	limit  int
 }
 
 func New(bs []byte) *Iterator {
-	return &Iterator{bs: bs}
+	return &Iterator{bs: bs, limit: len(bs)}
 }
 
 func (i *Iterator) NextByte() (b byte, err error) {
-	if i.offset < 0 || i.offset >= len(i.bs) {
+	if i.offset < 0 || i.offset >= i.limit {
 		return 0, ErrNoBytesLeft
 	}
 	b = i.bs[i.offset]
@@ -30,7 +31,7 @@ func (i *Iterator) NextByte() (b byte, err error) {
 
 // NextBytesNoCopy returns the next n bytes as a view into the underlying slice.
 func (i *Iterator) NextBytesNoCopy(n int) (bs []byte, err error) {
-	if n < 0 || i.offset < 0 || i.offset+n > len(i.bs) {
+	if n < 0 || i.offset < 0 || i.offset+n > i.limit {
 		return nil, ErrNoBytesLeft
 	}
 	bs = i.bs[i.offset : i.offset+n]
@@ -60,18 +61,28 @@ func (i *Iterator) Offset() int {
 	return i.offset
 }
 
+// Len is the readable end: the limit, not the backing slice.
 func (i *Iterator) Len() int {
-	return len(i.bs)
+	return i.limit
+}
+
+// Limit caps reads at end (clamped to the backing slice) and returns the
+// previous cap, so a nested scope restores it. A section body parsed under its
+// own end cannot read into the next section, whatever its inner lengths claim.
+func (i *Iterator) Limit(end int) (prev int) {
+	prev = i.limit
+	i.limit = min(end, len(i.bs))
+	return
 }
 
 func (i *Iterator) HasBytesLeft() bool {
-	return i.offset < len(i.bs)
+	return i.offset < i.limit
 }
 
 // Bytes returns the unread remainder without advancing.
 func (i *Iterator) Bytes() []byte {
-	if i.offset < 0 || i.offset >= len(i.bs) {
+	if i.offset < 0 || i.offset >= i.limit {
 		return nil
 	}
-	return i.bs[i.offset:]
+	return i.bs[i.offset:i.limit]
 }

@@ -7,6 +7,7 @@ import (
 	"github.com/k-danil/go-astits/v2/dvbtext"
 	"github.com/k-danil/go-astits/v2/internal/bytesiter"
 	"github.com/k-danil/go-astits/v2/internal/util"
+	"github.com/k-danil/go-astits/v2/ts"
 )
 
 type AudioType uint8
@@ -57,6 +58,8 @@ type ISO639Item struct {
 	Type     AudioType    `json:"audio_type"`
 }
 
+const iso639ItemLen = 4 // language code + audio type
+
 func newDescriptorISO639LanguageAndAudioType(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
 	var bs []byte
 	if bs, err = i.NextBytesNoCopy(offsetEnd - i.Offset()); err != nil {
@@ -64,31 +67,29 @@ func newDescriptorISO639LanguageAndAudioType(i *bytesiter.Iterator, h Header, of
 		return
 	}
 
+	if len(bs)%iso639ItemLen != 0 {
+		err = fmt.Errorf("astits: ISO 639 descriptor length %d is not a multiple of %d: %w", len(bs), iso639ItemLen, ts.ErrInvalidData)
+		return
+	}
+
 	d := &ISO639LanguageAndAudioType{
 		Header: h,
-		Items:  make([]ISO639Item, 0, len(bs)/4),
+		Items:  make([]ISO639Item, 0, len(bs)/iso639ItemLen),
 	}
 	dd = d
 
-	for len(bs) >= 4 {
+	for len(bs) >= iso639ItemLen {
 		var it ISO639Item
 		copy(it.Language[:], bs[:3])
 		it.Type = AudioType(bs[3])
 		d.Items = append(d.Items, it)
-		bs = bs[4:]
-	}
-	// Degenerate entries happen in the wild: length 3 with a 2-byte language
-	if len(bs) > 0 {
-		var it ISO639Item
-		copy(it.Language[:], bs[:len(bs)-1])
-		it.Type = AudioType(bs[len(bs)-1])
-		d.Items = append(d.Items, it)
+		bs = bs[iso639ItemLen:]
 	}
 	return
 }
 
 func (d *ISO639LanguageAndAudioType) CalcLength() int {
-	return 4 * len(d.Items) // language code + type each
+	return iso639ItemLen * len(d.Items)
 }
 
 func (d *ISO639LanguageAndAudioType) Append(dst []byte) []byte {

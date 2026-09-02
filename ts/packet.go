@@ -130,15 +130,22 @@ func (af *PacketAdaptationField) Reset() {
 }
 
 // CopyFrom stores an owned copy of src, so the receiver survives reuse of the
-// packet buffer src's private data still views. The private-data copy reuses
-// the receiver's own backing across calls; callers must not CopyFrom into an
-// af whose TransportPrivateData still views a read buffer (the pooled slot/PES
-// receivers never do — they are populated only by CopyFrom).
+// packet buffer src's private data and AF descriptors still view. The
+// private-data copy reuses the receiver's own backing across calls; callers
+// must not CopyFrom into an af whose TransportPrivateData still views a read
+// buffer (the pooled slot/PES receivers never do — they are populated only by
+// CopyFrom). The extension struct is allocated per parse and shared as is;
+// only its descriptors are copied, on the rare packets that carry any.
 func (af *PacketAdaptationField) CopyFrom(src *PacketAdaptationField) {
 	priv := af.TransportPrivateData[:0]
 	*af = *src
 	if src.TransportPrivateData != nil {
 		af.TransportPrivateData = append(priv, src.TransportPrivateData...)
+	}
+	if ext := src.AdaptationExtensionField; ext != nil && ext.AFDescriptors != nil {
+		own := *ext
+		own.AFDescriptors = append([]byte(nil), ext.AFDescriptors...)
+		af.AdaptationExtensionField = &own
 	}
 }
 
@@ -167,6 +174,8 @@ func NewPacket() (p *Packet) {
 
 // Raw returns the on-wire packet bytes (copy-mode buffer or zero-copy view);
 // nil for hand-built packets, whose bytes exist only once serialized via Put.
+// A packet whose sync byte was repaired under sync lock carries the restored
+// 0x47, one byte off the wire.
 func (p *Packet) Raw() []byte {
 	return p.raw
 }
@@ -209,6 +218,9 @@ func (p *Packet) Reset() {
 	p.Offset = 0
 }
 
+// adaptation_field_control '00' is reserved: H.222.0 §2.4.3.3, decoders shall discard.
+const adaptationFieldControlMask = 0x30
+
 // parse parses a packet from bs. Direct slice parsing: no BytesIterator on the hot
 // per-packet path — its per-field call overhead was a significant share of the cost.
 func (p *Packet) parse(bs []byte, s PacketSkipper, keep *PIDSet) (skip bool, err error) {
@@ -230,14 +242,16 @@ func (p *Packet) parse(bs []byte, s PacketSkipper, keep *PIDSet) (skip bool, err
 	// One big-endian 32-bit load covers the sync byte (top) and the 3 header bytes.
 	h := binary.BigEndian.Uint32(bs[prefixLen:])
 	if byte(h>>24) != syncByte {
-		err = ErrPacketMustStartWithASyncByte
-		// Zero-stuffed packet is skippable; check the actual bytes, not p.bs —
-		// in zero-copy mode the packet is a view and p.bs is stale.
-		skip = binary.LittleEndian.Uint64(bs[:8]) == 0
-		return
+		return false, ErrPacketMustStartWithASyncByte
 	}
 
 	p.Header.parseBytes(h)
+
+	// Reserved packets are discarded like filtered ones, outside the damage
+	// budget; the header is parsed so the drop can name the PID.
+	if h&adaptationFieldControlMask == 0 {
+		return true, ErrReservedAdaptationFieldControl
+	}
 
 	// Inline PID allow-list: cheaper than a PacketSkipper call in the hot path.
 	if keep != nil && !keep.Has(p.Header.PID) {

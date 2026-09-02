@@ -2,9 +2,12 @@ package ts
 
 import (
 	"encoding/binary"
+	"fmt"
+	"math/rand/v2"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 var (
@@ -33,6 +36,60 @@ func Test_updateCRC32(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			assert.Equal(t, test.crc, ComputeCRC32(test.data))
+		})
+	}
+}
+
+// bytewiseCRC32 is the reference the sliced tables are derived from.
+func bytewiseCRC32(crc uint32, bs []byte) uint32 {
+	for _, b := range bs {
+		crc = (crc << 8) ^ tableCRC32[0][uint8(crc>>24)^b]
+	}
+	return crc
+}
+
+// The sliced update must equal the byte-wise reference for every length
+// (whole blocks plus a tail), any state fed in, and across a split.
+func TestUpdateCRC32MatchesBytewise(t *testing.T) {
+	rng := rand.New(rand.NewPCG(1, 2))
+	data := make([]byte, 6000)
+	for i := range data {
+		data[i] = byte(rng.Uint32())
+	}
+	for range 2000 {
+		off := rng.IntN(64)
+		n := rng.IntN(len(data) - off)
+		bs := data[off : off+n]
+		seed := rng.Uint32()
+
+		want := bytewiseCRC32(seed, bs)
+		require.Equal(t, want, UpdateCRC32(seed, bs), "off=%d n=%d seed=%#x", off, n, seed)
+
+		cut := 0
+		if n > 0 {
+			cut = rng.IntN(n)
+		}
+		require.Equal(t, want, UpdateCRC32(UpdateCRC32(seed, bs[:cut]), bs[cut:]), "split off=%d n=%d cut=%d", off, n, cut)
+	}
+}
+
+var crc32Sink uint32
+
+func BenchmarkUpdateCRC32(b *testing.B) {
+	rng := rand.New(rand.NewPCG(3, 4))
+	data := make([]byte, 4096)
+	for i := range data {
+		data[i] = byte(rng.Uint32())
+	}
+	for _, size := range []int{16, 64, 184, 1024, 4096} {
+		b.Run(fmt.Sprint(size), func(b *testing.B) {
+			bs := data[:size]
+			b.SetBytes(int64(size))
+			var acc uint32
+			for b.Loop() {
+				acc ^= UpdateCRC32(CRC32Seed, bs)
+			}
+			crc32Sink = acc
 		})
 	}
 }

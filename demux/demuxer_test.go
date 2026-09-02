@@ -104,9 +104,9 @@ func TestDemuxerSyncLock(t *testing.T) {
 	stream = append(stream, make([]byte, 12)...)
 	stream = append(stream, packets(3)...)
 	stream = append(stream, make([]byte, 100)...)
-	stream = append(stream, packets(3)...)
+	stream = append(stream, packets(5)...)
 
-	dmx := New(context.Background(), bytes.NewReader(stream), WithSyncLock())
+	dmx := New(context.Background(), bytes.NewReader(stream), WithSyncLock(), WithSkipErrLimit(-1), WithResyncLimit(-1))
 	var n int
 	for {
 		_, err := dmx.NextPacket()
@@ -116,7 +116,7 @@ func TestDemuxerSyncLock(t *testing.T) {
 		require.NoError(t, err)
 		n++
 	}
-	assert.Equal(t, 6, n, "WithSyncLock reads past the prefix and the torn gap")
+	assert.Equal(t, 8, n, "WithSyncLock reads past the prefix and the torn gap")
 }
 
 func TestDemuxerNextTables(t *testing.T) {
@@ -148,9 +148,9 @@ func TestDemuxerNextTables(t *testing.T) {
 			break
 		}
 		require.NotEqual(t, EventPES, ev)
-		pid, data := dmx.Section()
+		pid, sec := dmx.Section()
 		assert.Equal(t, ts.PIDPAT, pid)
-		got = append(got, data)
+		got = append(got, sec.Syntax.Data)
 	}
 	assert.Equal(t, want, got)
 
@@ -202,18 +202,21 @@ func TestDemuxerNextPATPMT(t *testing.T) {
 	ev, err := dmx.Next()
 	assert.NoError(t, err)
 	assert.Equal(t, EventPAT, ev)
-	pid, data := dmx.Section()
+	pid, sec := dmx.Section()
 	assert.Equal(t, uint16(0), pid)
-	assert.IsType(t, (*psi.PAT)(nil), data)
+	assert.Equal(t, psi.TableIDPAT, sec.Header.TableID)
+	assert.True(t, sec.Syntax.Header.CurrentNextIndicator)
+	assert.IsType(t, (*psi.PAT)(nil), sec.Syntax.Data)
 	assert.NotNil(t, dmx.PAT())
 	assert.Equal(t, 188, r.Len())
 
 	ev, err = dmx.Next()
 	assert.NoError(t, err)
 	assert.Equal(t, EventPMT, ev)
-	pid, data = dmx.Section()
+	pid, sec = dmx.Section()
 	assert.Equal(t, uint16(0x1000), pid)
-	assert.IsType(t, (*psi.PMT)(nil), data)
+	assert.Equal(t, psi.TableIDPMT, sec.Header.TableID)
+	assert.IsType(t, (*psi.PMT)(nil), sec.Syntax.Data)
 	assert.NotNil(t, dmx.PMT())
 }
 
@@ -281,6 +284,61 @@ func TestDemuxerNextPES(t *testing.T) {
 	first.Close()
 	first.Close() // idempotent
 	dmx.Close()
+}
+
+// The flag follows the declared length against the bytes present, and only
+// for a drained unit: one closed by the next unit start is parsed strictly.
+func TestDemuxerDrainTruncated(t *testing.T) {
+	const payload = "payload"
+	const optionalHeader = 3
+	pesBytes := func(length uint16) []byte {
+		b := []byte{0, 0, 1, 0xc0, byte(length >> 8), byte(length), 0x80, 0, 0}
+		return append(b, payload...)
+	}
+	present := len(padPayload(nil)) - pes.HeaderSize - optionalHeader
+	whole := uint16(optionalHeader + len(payload))
+	short := uint16(optionalHeader + len(payload) + 200)
+
+	tests := []struct {
+		name      string
+		length    uint16
+		closed    bool // a following unit start closes the unit instead of the drain
+		wantErr   bool
+		truncated bool
+		dataLen   int
+	}{
+		{"drained, bounded and whole", whole, false, false, false, len(payload)},
+		{"drained, bounded and short", short, false, false, true, present},
+		{"drained, unbounded", 0, false, false, true, present},
+		{"closed, unbounded", 0, true, false, false, present},
+		{"closed, bounded and short", short, true, true, false, 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stream := packetBytes(ts.PacketHeader{PID: 256, PayloadUnitStartIndicator: true}, pesBytes(tt.length), false)
+			if tt.closed {
+				next := packetBytes(ts.PacketHeader{PID: 256, ContinuityCounter: 1, PayloadUnitStartIndicator: true}, pesBytes(whole), false)
+				stream = append(stream, next...)
+			}
+			dmx := New(context.Background(), bytes.NewReader(stream), WithPacketSize(ts.PacketSize), WithRecoverableErrors())
+			defer dmx.Close()
+
+			ev, err := dmx.Next()
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.Equal(t, EventError, ev)
+				var re *ts.RecoverableError
+				require.ErrorAs(t, err, &re)
+				assert.Equal(t, ts.ErrorKindPES, re.Kind)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, EventPES, ev)
+			p := dmx.PES()
+			assert.Equal(t, tt.truncated, p.Truncated)
+			assert.Len(t, p.Data.Data, tt.dataLen)
+		})
+	}
 }
 
 func TestDemuxerRewind(t *testing.T) {
