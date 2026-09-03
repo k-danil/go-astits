@@ -1,6 +1,7 @@
 package ts
 
 import (
+	"bytes"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
@@ -125,11 +126,12 @@ func (af *PacketAdaptationField) CopyFrom(src *PacketAdaptationField) {
 	priv := af.TransportPrivateData[:0]
 	*af = *src
 	if src.TransportPrivateData != nil {
-		af.TransportPrivateData = append(priv, src.TransportPrivateData...)
+		priv = append(priv, src.TransportPrivateData...)
+		af.TransportPrivateData = priv
 	}
 	if ext := src.AdaptationExtensionField; ext != nil && ext.AFDescriptors != nil {
 		own := *ext
-		own.AFDescriptors = append([]byte(nil), ext.AFDescriptors...)
+		own.AFDescriptors = bytes.Clone(ext.AFDescriptors)
 		af.AdaptationExtensionField = &own
 	}
 }
@@ -174,6 +176,8 @@ func (p *Packet) SetAdaptationField(src *PacketAdaptationField) {
 	if src == nil {
 		return
 	}
+	// After a parse the field views the read buffer, and CopyFrom appends into whatever it is given.
+	p.AdaptationField.TransportPrivateData = nil
 	p.AdaptationField.CopyFrom(src)
 }
 
@@ -477,7 +481,7 @@ func (ph *PacketHeader) putBytes(bb []byte) {
 	val |= uint32(util.B2U(ph.HasAdaptationField)) << 5
 	val |= uint32(util.B2U(ph.HasPayload)) << 4
 	val |= uint32(ph.ContinuityCounter & 0xf)
-	binary.BigEndian.PutUint32(bb[:], val)
+	binary.BigEndian.PutUint32(bb, val)
 }
 
 func (af *PacketAdaptationField) CalcLength() int {
@@ -539,7 +543,7 @@ func (af *PacketAdaptationField) Put(bs []byte) (n int, err error) {
 		n += af.AdaptationExtensionField.putBytes(bs[n:])
 	}
 
-	for i := 0; i < int(af.StuffingLength); i++ {
+	for i := range int(af.StuffingLength) {
 		bs[n+i] = 0xff
 	}
 	n += int(af.StuffingLength)

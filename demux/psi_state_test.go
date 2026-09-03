@@ -80,9 +80,12 @@ func TestDemuxerTableNotCurrentLeavesState(t *testing.T) {
 	_, sec := dmx.Section()
 	assert.False(t, sec.Syntax.Header.CurrentNextIndicator)
 	assert.Equal(t, uint8(1), sec.Syntax.Header.VersionNumber)
-	assert.Equal(t, uint16(0x200), sec.Syntax.Data.(*psi.PAT).Programs[0].ProgramMapID)
+	announced, ok := sec.Syntax.Data.(*psi.PAT)
+	require.True(t, ok)
+	assert.Equal(t, uint16(0x200), announced.Programs[0].ProgramMapID)
 	assert.Equal(t, uint16(0x100), dmx.PAT().Programs[0].ProgramMapID, "the announced PAT is not in effect")
-	assert.ElementsMatch(t, []uint16{0x100, 0x200}, dmx.programMap.Keys, "both layouts are PSI while one is announced")
+	assert.Equal(t, []uint16{0x100}, dmx.programMap.Keys, "the announced layout stays out of the map in effect")
+	assert.Equal(t, []uint16{0x200}, dmx.acc.nextMap.Keys, "it is kept apart, so its PMT still parses")
 
 	ev, err = dmx.Next()
 	require.NoError(t, err, "the announced PMT PID is parsed as PSI, not lost as an unknown unit")
@@ -93,6 +96,33 @@ func TestDemuxerTableNotCurrentLeavesState(t *testing.T) {
 
 	_, err = dmx.Next()
 	assert.ErrorIs(t, err, ts.ErrNoMorePackets)
+}
+
+// An announced PAT must not take over a PID that carries a live stream.
+func TestDemuxerNextPATLeavesLiveStream(t *testing.T) {
+	const (
+		pmtPID = uint16(0x100)
+		esPID  = uint16(0x200)
+	)
+	stream := psiPacket(ts.PIDPAT, 0, patSection(0, true, pmtPID))
+	stream = append(stream, psiPacket(pmtPID, 0, pmtSection(0, true, esPID))...)
+	stream = append(stream, payloadPacket(esPID, 0, true, unboundedPES)...)
+	stream = append(stream, psiPacket(ts.PIDPAT, 1, patSection(1, false, esPID))...)
+	stream = append(stream, payloadPacket(esPID, 1, true, unboundedPES)...)
+	stream = append(stream, payloadPacket(esPID, 2, true, unboundedPES)...)
+
+	dmx := New(context.Background(), bytes.NewReader(stream), WithPacketSize(ts.PacketSize), WithRecoverableErrors())
+	defer dmx.Close()
+
+	var units int
+	for ev, err := range dmx.Events() {
+		require.NoError(t, err)
+		if ev == EventPES {
+			units++
+			dmx.PES().Close()
+		}
+	}
+	assert.Equal(t, 3, units, "the announcement leaves the stream on esPID alone")
 }
 
 func TestDemuxerProgramMapFollowsPATVersion(t *testing.T) {

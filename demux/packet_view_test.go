@@ -35,7 +35,7 @@ func TestZeroCopyRawMatchesCopy(t *testing.T) {
 	copyRaws := walk(false)
 	viewRaws := walk(true)
 	require.NotEmpty(t, copyRaws)
-	require.Equal(t, len(copyRaws), len(viewRaws))
+	require.Len(t, viewRaws, len(copyRaws))
 	for i := range copyRaws {
 		require.Len(t, copyRaws[i], ts.PacketSize)
 		assert.Equal(t, copyRaws[i], viewRaws[i], "packet %d", i)

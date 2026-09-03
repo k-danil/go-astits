@@ -3,6 +3,7 @@ package tsio
 import (
 	"bufio"
 	"bytes"
+	"errors"
 	"io"
 	"testing"
 
@@ -56,7 +57,7 @@ func TestSeekBufferPeekBufferFull(t *testing.T) {
 	sb, _ := newBuf(t, data, 256)
 
 	bs, err := sb.Peek(512)
-	assert.ErrorIs(t, err, bufio.ErrBufferFull)
+	require.ErrorIs(t, err, bufio.ErrBufferFull)
 	assert.Equal(t, data[:256], bs)
 }
 
@@ -112,7 +113,7 @@ func TestSeekBufferPeekDiscardWindow(t *testing.T) {
 	var got []byte
 	for {
 		bs, err := sb.Peek(size)
-		if err != nil && err != io.EOF && err != bufio.ErrBufferFull {
+		if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, bufio.ErrBufferFull) {
 			require.NoError(t, err)
 		}
 		if len(bs) == 0 {

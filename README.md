@@ -68,9 +68,11 @@ How:
 - **Event-based demux** (`Next() (Event, error)` and the `Events()` iterator): one call
   advances to the next `EventPES` or a typed table event (`EventPAT`/`EventPMT`/`EventEIT`/…).
   A completed unit is claimed via `PES()` (pool-owned, `Close()` when done retaining it,
-  carrying the offsets of its first and last packet); `Section()` hands over the whole
-  section behind a table event — table_id, version, current_next_indicator, section numbers
-  and the typed body — while `PAT()`/`PMT()` hold the tables in effect. The full MPEG-2 systems + DVB-SI
+  carrying a `PacketSpan`: the offsets and reader tags of its first and last packet);
+  `Section()` hands over the whole section behind a table event — table_id, version,
+  current_next_indicator, section numbers and the typed body — and `SectionSpan()` the
+  `PacketSpan` of the unit it came from, so a table can be located in the file or charged to
+  the datagram that carried it; `PAT()`/`PMT()` hold the tables in effect. The full MPEG-2 systems + DVB-SI
   table set is parsed, each surfaced as its own typed event; everything beyond PAT/PMT is off
   by default (`WithDVBTables`). `WithPSIRepeats` also emits byte-identical repeats
   (`TableChanged` distinguishes them) for stream-composition analysis. Under
@@ -80,9 +82,17 @@ How:
   a sticky-max fallback — packets are one-shot scratch, so both copy and view modes reach the
   parser with a single copy and no per-unit allocation. A unit is capped (`WithMaxUnitSize`,
   16 MB for PES and 64 KB for PSI by default; `-1` unbounded) and torn with
-  `ts.ErrUnitTooLarge` past the cap, so a PID whose unit start never comes cannot buffer the
-  stream; null packets are counted but never accumulated. `PacketCounts()` reports packets
-  seen per PID, every packet the reader delivered.
+  `ts.ErrUnitTooLarge` past the cap; the buffer behind a PID comes from a power-of-two size
+  class chosen no larger than the cap, so the limit bounds resident memory, not just the
+  delivered unit, and a PID whose unit start never comes cannot buffer the stream. Null
+  packets are counted but never accumulated. `PacketCounts()` reports packets seen per PID,
+  every packet the reader delivered. PAT, CAT and TSDT (PIDs 0–2) are always assembled as
+  PSI; `WithDVBTables` adds the DVB SI PIDs. Sections packed back to back are followed across
+  the unit boundary: on a start indicator the bytes ahead of `pointer_field` finish the
+  section the previous packet left open before the unit is handed over. A PAT announced for
+  later (`current_next_indicator` 0) is tracked apart from the map in effect: its PMT PIDs
+  parse as PSI only while the PID has never delivered an elementary-stream unit, so an
+  announcement cannot take over a PID that is carrying PES.
 - **Circular memory lifecycle**: payload buffers cycle through size-classed pools, PES units
   through their own pool; embedded structs instead of pointer fields (AF inside `ts.Packet`,
   PES data and an owned AF copy inside `demux.PES`, optional header inside `pes.Header`),
@@ -96,7 +106,7 @@ How:
   source is wrapped in one sized to the window), and the event API parses a whole window of
   packets in place per refill — no read call, no copy and no call chain per packet. A window
   is cut to what the peeker already holds, so a live feed is never waited on for more than one
-  packet, and to 1024 packets, the cancellation cadence. `demux.WithZeroCopyPackets` hands `NextPacketTo` packets as views into the window
+  packet (sync lock's damage paths aside), and to 1024 packets, the cancellation cadence. `demux.WithZeroCopyPackets` hands `NextPacketTo` packets as views into the window
   (valid until the next refill) instead of copying each one out, and sizes the wrapping bufio
   when there is one; `Packet.Raw()` returns the view, so packet-level passthrough and PID
   rewrite over `Raw()` stay zero-copy.
@@ -108,9 +118,16 @@ How:
   window with an opaque `uint64` — a hardware or software receive timestamp, an RTP sequence —
   carried untouched as `Packet.Tag` and `PES.FirstPacketTag`/`LastPacketTag`.
 - **Plain readers and sockets**: any `io.Reader` works — a reader that is not a `tsio.Peeker`
-  (or a peeker whose `Size()` is below 204) is wrapped in bufio (13 KB by default; N × 204
-  bytes, at least 409, under `WithZeroCopyPackets(N)`) and, once that buffer is drained, read
-  one packet at a time, so a live socket is never waited on for more than a packet. Three things follow from Go's socket semantics: a read blocked on the socket is not
+  (or a peeker whose `Size()` is below 204) is wrapped in bufio (13 KB by default; N packets,
+  at least 409 bytes, under `WithZeroCopyPackets(N)` — sized for 204-byte packets until
+  `WithPacketSize` pins the format) and, once that buffer is drained, read one packet at a
+  time, so a live socket is never waited on for more than a packet (the sync-lock damage
+  paths below are the exception). A tail shorter than a packet at EOF is left in the reader
+  and reported once (`ErrorKindPacketDrop` with its length as `Dropped`), so a file or socket
+  still being written keeps its alignment: once the source grows, the next call completes the
+  packet the tail began. That report is a stall, not a loss: a tail that later completes was
+  still counted as dropped, and one that grows and then ends is not counted again, so the
+  byte balance over a growing source is approximate. Three things follow from Go's socket semantics: a read blocked on the socket is not
   interrupted by the context (cancellation is seen between reads — set a deadline or close the
   socket to wake the demuxer); a deadline error comes back wrapped and is not terminal, the next
   call continues where it left off; a datagram socket needs the read-ahead to hold a whole
@@ -121,19 +138,29 @@ How:
 - **Clock references as ticks**: `ts.ClockReference` is an `int64` count of 27 MHz ticks —
   PCR/OPCR/ESCR exactly, PTS/DTS as multiples of `ts.PTSTicks` — so intervals, offsets and
   jitter are plain subtractions; `Diff` takes the shortest signed distance across the 33-bit
-  wrap (`ts.ClockWrap`), `Base()`/`Extension()` give the wire fields back.
+  wrap (`ts.ClockWrap`); `Base()`/`Extension()` give the wire fields back, a negative value
+  (a `Diff` result) folded onto the forward range so it serializes as the same instant. A
+  non-conformant PCR/ESCR extension of 300 or more is folded into the tick count on parse:
+  `Extension()` then reads below 300 and `Base()` one higher than the field on the wire, and
+  the bytes as received stay in `Packet.Raw()`.
 - **Multi-format packet reader**: plain TS (188), M2TS (192, with the 4-byte
   TP_extra_header exposed as `Packet.Prefix` / decoded by `ArrivalTimeStamp()`) and
   Reed-Solomon (204) are read transparently. The size is autodetected by locking onto the
   recurring sync byte — a stray `0x47` in payload or parity doesn't mislead it — or pinned
   with `WithPacketSize`.
-- **Sync lock** (`demux.WithSyncLock`) — for UDP/RTP or otherwise torn feeds: aligns to the
-  first sync byte at any offset within a packet and survives damage with the TR 101 290
-  hysteresis — a lone corrupt sync byte is repaired and reported (sync_byte_error), two in a
-  row are a sync loss re-locked only on five consecutive periods (TS_sync_loss; a tail shorter
-  than that after a loss is consumed into it), an aligned corrupt packet is dropped — peeking
-  ahead through a `tsio.Peeker` of at least 1024 bytes (a raw reader is wrapped in bufio). Off by
-  default so aligned files stay on the zero-wrap fast path. Tolerance is explicit and strict
+- **Sync lock** (`demux.WithSyncLock`) — for UDP/RTP or otherwise torn feeds: aligns on the
+  first position from which the packet grid can be captured — three consecutive periods
+  carrying a sync byte, which keeps a 204-byte stream from masquerading as an aligned
+  188-byte one; with `WithPacketSize` an input holding a single period locks on one — and
+  survives damage with the TR 101 290 hysteresis — a lone corrupt sync byte is repaired and
+  reported (sync_byte_error), two in a row are a sync loss re-locked only on five consecutive
+  periods (TS_sync_loss; a tail shorter than that after a loss is consumed into it), an
+  aligned corrupt packet is dropped — peeking ahead through a `tsio.Peeker` of at least 1024
+  bytes (a raw reader is wrapped in bufio). The initial capture deliberately asks for less
+  than the five-period hysteresis, so packets ahead of the first capturable position are
+  reported as a sync loss; the damage paths look further ahead than one packet — a repair
+  needs the next period in view, a re-lock a whole scan window. Off by default so aligned
+  files stay on the zero-wrap fast path. Tolerance is explicit and strict
   by default: `WithSkipErrLimit` bounds the streak of consecutive damage events (dropped
   packets in either mode, sync losses under sync lock) and `WithResyncLimit` the scan windows
   a loss may take to re-lock — 0 tolerates nothing, -1 never gives up, N allows N — so a
@@ -160,9 +187,14 @@ How:
 - **Recoverable-error signalling** (`demux.WithRecoverableErrors`) — opt-in: instead of
   silently skipping a corrupt PSI section (CRC32 mismatch — TR 101 290 CRC_error), a torn
   table, a bad PES unit, a lost sync or a repaired sync byte, a dropped packet, a unit torn by a continuity
-  gap / discontinuity / transport error / scrambling, or a unit that is neither PES nor PSI,
-  `Next` surfaces it as `EventError` carrying a typed `*ts.RecoverableError` (kind, PID, byte
-  offset, bytes dropped — 0 for a violation that lost nothing) and continues. The error is
+  gap / discontinuity / transport error / scrambling (the payload of the packet that tore it
+  counts as dropped), a continuity gap that lost no bytes (`ErrorKindContinuity` — a PSI PID
+  closes its unit in every packet, so a counter break between two whole tables drops nothing
+  yet is a CC_error), or a unit that is neither PES nor PSI, `Next` surfaces it as
+  `EventError` carrying a typed `*ts.RecoverableError` (kind, PID, byte offset, bytes
+  dropped — 0 for a violation that lost nothing) and continues. The offset of a unit-level
+  error is the last packet of that unit, not the packet the reader happened to be on when
+  the unit was let go. The error is
   non-terminal — `Events()` yields it without ending the stream, so a lossy feed keeps
   demuxing while the consumer counts damage (e.g. TR 101 290 error counters) and sums the
   loss. A unit the stream never closed (EOF) is still delivered, flagged `PES.Truncated`.
@@ -183,10 +215,12 @@ How:
   transport error or scrambling tears the unit in progress, and EOF tails are delivered as
   truncated instead of dropped.
 - **`Demuxer.Close()`** — deterministic resource return for demuxers abandoned before EOF;
-  `Rewind()` cleans up after itself.
+  `Rewind()` cleans up after itself and keeps its read-ahead buffer across passes.
 - **Muxer**: raw packet passthrough (`WritePacket` of `Packet.Raw()` with `UpdateHeader`),
   `SetCC`, table retransmission from cache; PAT spans sections and packets when needed,
-  oversize sections are rejected (`psi.ErrSectionOverflow`) instead of silently corrupted.
+  oversize sections are rejected (`psi.ErrSectionOverflow`, against
+  `TableID.MaxSectionLength()`: 1021 for PAT/CAT/PMT/TSDT and the DVB NIT/BAT/SDT, 4093 for
+  EIT and private sections) instead of silently corrupted.
 
 ## Migrating to v3
 
@@ -199,25 +233,32 @@ Everything that breaks against v2, in one place:
 - **`ts.ClockReference` is a tick count** (`int64`, 27 MHz) instead of a packed
   `base<<9|ext`. `NewClockReference(base, ext)`, `Base()` and `Extension()` keep their
   meaning; arithmetic on the value is now correct; `Time()` is gone; the JSON form is the
-  tick count. A PCR extension must be below 300 — the packed form silently accepted 9 bits.
+  tick count. A PCR or ESCR extension of 300 or more (non-conformant) is folded into the
+  tick count rather than kept as a field — the packed form stored 9 bits verbatim.
 - **`Demuxer.Section()` returns `(pid uint16, *psi.Section)`**; the typed body sits behind
   `Section.Syntax.Data`. `PacketCounts()` (packets per PID) replaces `GetStats()`.
 - **Damage limits share one scale**: `WithSkipErrLimit`, `WithResyncLimit` and
   `WithMaxUnitSize(pes, psi)` take 0 (nothing), -1 (unbounded) or N. `WithMaxUnitSize`
   defaults to 16 MB / 64 KB.
 - **Recoverable errors** carry `Kind`, `PID`, `Offset`, `Dropped` and `Err`; new kinds
-  `ErrorKindSyncByte`, `ErrorKindPacketDrop`, `ErrorKindTornUnit`, `ErrorKindUnknownUnit`.
+  `ErrorKindSyncByte`, `ErrorKindPacketDrop`, `ErrorKindTornUnit`, `ErrorKindUnknownUnit`,
+  `ErrorKindContinuity`.
   `psi.Data.Errors` lists unusable sections of a unit, `descriptor.Malformed` keeps a body the
   parser rejected. Silent-mode output changed where the handling did (see the
   recoverable-error bullet above).
-- **`demux.PES`** gains `FirstPacketOffset`/`LastPacketOffset`, `FirstPacketTag`/`LastPacketTag`
-  and `Truncated`; `ts.Packet` gains `Tag`.
+- **`demux.PES`** gains `Truncated` and an embedded `demux.PacketSpan`
+  (`FirstPacketOffset`/`LastPacketOffset`, `FirstPacketTag`/`LastPacketTag`) — read as
+  `pes.FirstPacketOffset`, named as `PacketSpan` in a composite literal; `ts.Packet` gains `Tag`.
 - **`Rewind` on a reader that cannot seek** returns -1 and continues from the current
   position instead of replaying a window.
 - **`descriptor.DataStreamAligment*`** constants are spelled `DataStreamAlignment*`; the
   `descriptor`, `psi` and root package docs moved into this README.
-- **`ts.PacketBuffer`** exposes `Window`/`Advance`/`Pos`/`Tag`/`Close` and `ts.ReadAhead`;
-  `Packet.ParseAt` parses in place. Not needed by demuxer users.
+- **`ts.PacketBuffer`** exposes `Window`/`Advance`/`Pos`/`Tag`/`Close` and
+  `ts.ReadAhead`/`ReadAheadSize`; `Advance` takes a whole number of packets within the window
+  and rejects anything else; `Packet.ParseAt` parses in place. Not needed by demuxer users.
+- **v3.1** adds `demux.PacketSpan`/`SectionSpan`, `ts.ErrorKindContinuity`, `ts.ReadAheadSize`
+  and `psi.TableID.MaxSectionLength`, and stops consuming a sub-packet tail at EOF; the only
+  source break is a `demux.PES` composite literal naming the span fields.
 
 ## Problems and deliberate trade-offs
 
@@ -236,8 +277,13 @@ Everything that breaks against v2, in one place:
 - **PSI dedup changes emission semantics** by default: a repeated section with identical
   bytes is not delivered (only the first occurrence and any change are). Opt out with
   `WithPSIRepeats`.
-- **`Next` results are borrowed**: `PES()` before `Close` and `Section()` are valid only
-  until the next `Next`; retaining beyond that means claiming (`PES`) or copying.
+- **`Next` results are borrowed**: `PES()` before `Close`, `Section()` and `SectionSpan()`
+  are valid only until the next `Next`; retaining beyond that means claiming (`PES`) or
+  copying.
+- **Events of one packet are not ordered among themselves**: a unit completed by a packet is
+  delivered before a recoverable error queued while that same packet was read. Ordering holds
+  across packets, which is what damage counters need; to tie an error to a unit, use
+  `Offset`, not arrival order.
 - **`WithRecoverableErrors` changes the error contract**: without it, a non-nil error from
   `Next`/`Events` is terminal (as before). With it, a `*ts.RecoverableError` is non-terminal —
   distinguish with `ts.IsRecoverable(err)` and keep iterating; only a genuine fatal (or

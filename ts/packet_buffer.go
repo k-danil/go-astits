@@ -5,8 +5,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/k-danil/go-astits/v3/tsio"
 	"io"
+
+	"github.com/k-danil/go-astits/v3/tsio"
 )
 
 // pending is the last window's bytes, discarded lazily at the next refill.
@@ -31,7 +32,6 @@ func (b *packetBatch) empty() bool {
 	return b.off >= b.len
 }
 
-// At end of input the bytes short of a packet are consumed and returned as tail with ErrNoMorePackets, so the loss is reported once.
 func (b *packetBatch) refill(packetSize int) (tail int, err error) {
 	if b.pending > 0 {
 		if _, err = b.peeker.Discard(b.pending); err != nil {
@@ -51,9 +51,6 @@ func (b *packetBatch) refill(packetSize int) (tail int, err error) {
 	}
 	n := len(bs) - len(bs)%packetSize
 	if n < packetSize {
-		if _, err = b.peeker.Discard(len(bs)); err != nil {
-			return 0, fmt.Errorf("astits: discarding %d bytes failed: %w", len(bs), err)
-		}
 		return len(bs), ErrNoMorePackets
 	}
 	if b.tagger != nil {
@@ -92,21 +89,23 @@ type PacketBufferConfig struct {
 }
 
 type PacketBuffer struct {
-	packetSize   uint
-	prefixLen    int
-	s            PacketSkipper
-	keepPIDs     *PIDSet
-	r            io.Reader
-	peeker       tsio.Peeker // non-nil ⇒ sync-lock mode
-	tagger       tsio.Tagger
-	tag          uint64
-	pos          int64
-	batch        *packetBatch
-	zeroCopy     bool
-	damageStreak int
-	skipErrLimit int
-	resyncLimit  int
-	onRecover    func(RecoverableError)
+	packetSize    uint
+	prefixLen     int
+	s             PacketSkipper
+	keepPIDs      *PIDSet
+	r             io.Reader
+	peeker        tsio.Peeker // non-nil ⇒ sync-lock mode
+	tagger        tsio.Tagger
+	tag           uint64
+	pos           int64
+	batch         *packetBatch
+	syncWindowLen int
+	zeroCopy      bool
+	damageStreak  int
+	tailAt        int64
+	skipErrLimit  int
+	resyncLimit   int
+	onRecover     func(RecoverableError)
 
 	// The read loops and the resync scan can run unboundedly on a live source (an absent PID skips forever), so cancellation has to live inside them.
 	ctx        context.Context
@@ -116,6 +115,9 @@ type PacketBuffer struct {
 
 // Must be a power of two: the poll check is a mask, not a modulo.
 const cancelPollPackets = 1024
+
+// No stall reported yet; offset 0 is a valid one.
+const noTail = -1
 
 func (pb *PacketBuffer) shouldPollCancel() bool {
 	if pb.done == nil {
@@ -150,6 +152,7 @@ func NewPacketBuffer(ctx context.Context, r io.Reader, cfg PacketBufferConfig) (
 		skipErrLimit: cfg.SkipErrLimit,
 		resyncLimit:  cfg.ResyncLimit,
 		onRecover:    cfg.OnRecover,
+		tailAt:       noTail,
 	}
 	if cfg.SyncLock {
 		if err = pb.initSyncLock(cfg); err != nil {
@@ -158,10 +161,10 @@ func NewPacketBuffer(ctx context.Context, r io.Reader, cfg PacketBufferConfig) (
 		return
 	}
 
-	pb.r = ReadAhead(r, cfg.ZeroCopyBatch)
-	peeker := pb.r.(tsio.Peeker)
+	peeker := readAhead(r, cfg.ZeroCopyBatch, cfg.PacketSize)
+	pb.r = peeker
 	if pb.packetSize == 0 {
-		if pb.packetSize, err = autoDetectPacketSize(pb.r); err != nil {
+		if pb.packetSize, err = autoDetectPacketSize(peeker); err != nil {
 			err = fmt.Errorf("astits: auto detecting packet size failed: %w", err)
 			return
 		}
@@ -173,13 +176,31 @@ func NewPacketBuffer(ctx context.Context, r io.Reader, cfg PacketBufferConfig) (
 const DefaultBatchPackets = 64
 
 func ReadAhead(r io.Reader, batchPackets uint) io.Reader {
-	if p, ok := r.(tsio.Peeker); ok && p.Size() >= RSPacketSize {
-		return r
+	return ReadAheadSize(r, batchPackets, 0)
+}
+
+// packetSize 0 means the format is not known yet, so the buffer is sized for the largest one.
+func ReadAheadSize(r io.Reader, batchPackets, packetSize uint) io.Reader {
+	return readAhead(r, batchPackets, packetSize)
+}
+
+type peekReader interface {
+	io.Reader
+	tsio.Peeker
+}
+
+func readAhead(r io.Reader, batchPackets, packetSize uint) (p peekReader) {
+	var ok bool
+	if p, ok = r.(peekReader); ok && p.Size() >= RSPacketSize {
+		return
 	}
 	if batchPackets == 0 {
 		batchPackets = DefaultBatchPackets
 	}
-	return bufio.NewReaderSize(r, max(int(batchPackets)*RSPacketSize, autoDetectWindow))
+	if packetSize == 0 {
+		packetSize = RSPacketSize
+	}
+	return bufio.NewReaderSize(r, max(int(batchPackets*packetSize), autoDetectWindow))
 }
 
 // Discards the consumed part of the current window (otherwise dropped lazily at the next refill), so a reader that outlives the buffer continues where the packets ended.
@@ -249,7 +270,7 @@ func asPeeker(r io.Reader, bufSize int) tsio.Peeker {
 // A short read is not an error here; the caller checks the returned length.
 func peekUpTo(p tsio.Peeker, n int) (bs []byte, err error) {
 	bs, err = p.Peek(n)
-	if err == io.EOF || errors.Is(err, bufio.ErrBufferFull) {
+	if errors.Is(err, io.EOF) || errors.Is(err, bufio.ErrBufferFull) {
 		err = nil
 	}
 	return
@@ -257,12 +278,17 @@ func peekUpTo(p tsio.Peeker, n int) (bs []byte, err error) {
 
 // fixedSize 0 tries every candidate size.
 func scanUnit(buf []byte, fixedSize uint) (size uint, offset int, ok bool) {
+	syncs := autoDetectSyncs
+	// An explicit size already fixes the grid, so an input holding a single period has no recurrence left to confirm.
+	if fixedSize != 0 && len(buf) < 2*int(fixedSize) {
+		syncs = 1
+	}
 	for k := 0; k+PacketSize <= len(buf); k++ {
 		for _, c := range syncCandidates {
 			if fixedSize != 0 && uint(c.size) != fixedSize {
 				continue
 			}
-			if syncLocked(buf, k+c.sync, c.size, autoDetectSyncs) {
+			if syncLocked(buf, k+c.sync, c.size, syncs) {
 				return uint(c.size), k, true
 			}
 		}
@@ -276,50 +302,28 @@ const autoDetectSyncs = 3
 const autoDetectWindow = (autoDetectSyncs-1)*RSPacketSize + 1
 
 // Requires the stream to start at a unit boundary; arbitrary-offset search is sync lock's job.
-func autoDetectPacketSize(r io.Reader) (packetSize uint, err error) {
-	bs := make([]byte, autoDetectWindow)
-	n, shouldRewind, rerr := peek(r, bs)
-	if rerr != nil {
-		err = fmt.Errorf("astits: reading first %d bytes failed: %w", autoDetectWindow, rerr)
+func autoDetectPacketSize(p tsio.Peeker) (packetSize uint, err error) {
+	var bs []byte
+	if bs, err = peekUpTo(p, autoDetectWindow); err != nil {
+		err = fmt.Errorf("astits: reading first %d bytes failed: %w", autoDetectWindow, err)
 		return
 	}
-	bs = bs[:n]
 
 	for _, c := range syncCandidates {
 		if syncLocked(bs, c.sync, c.size, autoDetectSyncs) {
 			packetSize = uint(c.size)
-			break
+			return
 		}
 	}
-	if packetSize == 0 {
-		if !hasLeadingSync(bs) {
-			err = ErrPacketMustStartWithASyncByte
-		} else {
-			err = fmt.Errorf("astits: could not detect packet size in first %d bytes: %w", n, ErrInvalidData)
-		}
+	if !hasLeadingSync(bs) {
+		err = ErrPacketMustStartWithASyncByte
 		return
 	}
-
-	if !shouldRewind {
-		return
-	}
-	var rn int64
-	if rn, err = Rewind(r); err != nil {
-		err = fmt.Errorf("astits: rewinding failed: %w", err)
-		return
-	} else if rn == -1 {
-		// peek consumed n bytes; drop the rest of the partial unit so reads land on a boundary
-		if skip := (int(packetSize) - n%int(packetSize)) % int(packetSize); skip > 0 {
-			if _, err = io.ReadFull(r, make([]byte, skip)); err != nil {
-				err = fmt.Errorf("astits: reading %d bytes to sync reader failed: %w", skip, err)
-				return
-			}
-		}
-	}
+	err = fmt.Errorf("astits: could not detect packet size in first %d bytes: %w", len(bs), ErrInvalidData)
 	return
 }
 
-// Every sync position that fits in bs must match, with at least one recurrence.
+// Every sync position that fits in bs must match, with at least one recurrence unless a single period was asked for.
 func syncLocked(bs []byte, start, size, syncs int) bool {
 	seen := 0
 	for i, off := 0, start; i < syncs && off < len(bs); i, off = i+1, off+size {
@@ -328,7 +332,7 @@ func syncLocked(bs []byte, start, size, syncs int) bool {
 		}
 		seen++
 	}
-	return seen >= 2
+	return seen >= min(syncs, 2)
 }
 
 // Strict form: all resyncSyncs periods must lie inside bs, so a short island never locks.
@@ -349,27 +353,6 @@ func resyncLocked(bs []byte, start, size int) bool {
 func hasLeadingSync(bs []byte) bool {
 	m := M2TSPacketSize - PacketSize
 	return (len(bs) > 0 && bs[0] == syncByte) || (len(bs) > m && bs[m] == syncByte)
-}
-
-// shouldRewind is false for a Peeker (nothing consumed); any other reader must be rewound or synced past n.
-func peek(r io.Reader, b []byte) (n int, shouldRewind bool, err error) {
-	if p, ok := r.(tsio.Peeker); ok {
-		var bs []byte
-		bs, err = p.Peek(len(b))
-		if err == io.EOF || errors.Is(err, bufio.ErrBufferFull) {
-			err = nil
-		}
-		if err != nil {
-			return
-		}
-		return copy(b, bs), false, nil
-	}
-
-	n, err = io.ReadFull(r, b)
-	if err == io.EOF || errors.Is(err, io.ErrUnexpectedEOF) {
-		err = nil
-	}
-	return n, true, err
 }
 
 // n = -1 when r cannot seek.
@@ -420,7 +403,7 @@ func (pb *PacketBuffer) Next(p *Packet) (err error) {
 
 		var skip bool
 		if skip, err = p.parse(bs, pb.s, pb.keepPIDs); err != nil {
-			if err == ErrReservedAdaptationFieldControl {
+			if errors.Is(err, ErrReservedAdaptationFieldControl) {
 				pb.dropReserved(p, ps)
 				continue
 			}
@@ -484,13 +467,16 @@ func (pb *PacketBuffer) syncWindow(ps int) (w []byte, err error) {
 	if buf, err = peekUpTo(pb.peeker, want); err != nil {
 		return nil, fmt.Errorf("astits: reading %d bytes failed: %w", want, err)
 	}
-	if n := len(buf) - len(buf)%ps; n >= ps {
-		if pb.tagger != nil {
-			pb.tag = pb.tagger.Tag()
-		}
-		return buf[:n], nil
+	n := len(buf) - len(buf)%ps
+	if n < ps {
+		pb.syncWindowLen = 0
+		return nil, nil
 	}
-	return nil, nil
+	if pb.tagger != nil {
+		pb.tag = pb.tagger.Tag()
+	}
+	pb.syncWindowLen = n
+	return buf[:n], nil
 }
 
 func (pb *PacketBuffer) Tag() uint64 {
@@ -500,17 +486,32 @@ func (pb *PacketBuffer) Tag() uint64 {
 	return pb.batch.tag
 }
 
+// n must be a whole number of packets of the buffer's size and at most what remains of the window Window last returned; anything else is ErrInvalidData and consumes nothing.
 func (pb *PacketBuffer) Advance(n int) (err error) {
+	ps := int(pb.packetSize)
+	window := pb.windowRemaining()
+	if n < 0 || n%ps != 0 || n > window {
+		return fmt.Errorf("astits: advancing %d bytes is not a whole count of %d-byte packets within the %d-byte window: %w", n, ps, window, ErrInvalidData)
+	}
+	discarded := n
 	if pb.peeker != nil {
-		if _, err = pb.peeker.Discard(n); err != nil {
+		if discarded, err = pb.peeker.Discard(n); err != nil {
 			return fmt.Errorf("astits: discarding %d bytes failed: %w", n, err)
 		}
+		pb.syncWindowLen -= discarded
 	} else {
-		pb.batch.off += n
+		pb.batch.off += discarded
 	}
-	pb.pos += int64(n)
-	pb.cancelPoll += uint(n / int(pb.packetSize))
+	pb.pos += int64(discarded)
+	pb.cancelPoll += uint(discarded / ps)
 	return
+}
+
+func (pb *PacketBuffer) windowRemaining() int {
+	if pb.peeker != nil {
+		return min(pb.syncWindowLen, pb.peeker.Buffered())
+	}
+	return pb.batch.len - pb.batch.off
 }
 
 func (pb *PacketBuffer) Pos() int64 {
@@ -530,9 +531,6 @@ func (pb *PacketBuffer) nextSync(p *Packet) (err error) {
 			return fmt.Errorf("astits: reading %d bytes failed: %w", ps, err)
 		}
 		if len(buf) < ps {
-			if _, err = pb.peeker.Discard(len(buf)); err != nil {
-				return fmt.Errorf("astits: discarding %d bytes failed: %w", len(buf), err)
-			}
 			pb.dropTail(len(buf))
 			return ErrNoMorePackets
 		}
@@ -570,7 +568,7 @@ func (pb *PacketBuffer) nextSync(p *Packet) (err error) {
 		p.Offset = pb.pos
 		var skip bool
 		if skip, err = p.parse(pkt, pb.s, pb.keepPIDs); err != nil {
-			if err == ErrReservedAdaptationFieldControl {
+			if errors.Is(err, ErrReservedAdaptationFieldControl) {
 				pb.dropReserved(p, ps)
 				if err = pb.discard(ps); err != nil {
 					return err
@@ -641,24 +639,22 @@ func (pb *PacketBuffer) dropReserved(p *Packet, ps int) {
 	}
 }
 
-// The bytes are already consumed by the caller; this only accounts for them.
+// The tail is left in the reader so a source that is still growing can complete the packet; pos therefore stays put and the stall is reported once.
 func (pb *PacketBuffer) dropTail(n int) {
-	if n == 0 {
+	if n == 0 || pb.tailAt == pb.pos {
 		return
 	}
+	pb.tailAt = pb.pos
 	if pb.onRecover != nil {
 		pb.onRecover(RecoverableError{Kind: ErrorKindPacketDrop, PID: PIDUnset, Offset: pb.pos, Dropped: int64(n), Err: ErrShortPacket})
 	}
-	pb.pos += int64(n)
 }
 
 // Each slide keeps the last resyncSyncs-1 periods behind so a boundary they straddle is rescanned; the -1 is the byte already scanned. A window short of syncScanWindow is end of input.
 func (pb *PacketBuffer) resync(ps int) (err error) {
 	for windows := 0; ; windows++ {
-		if pb.shouldPollCancel() {
-			if err = pb.pollCancel(); err != nil {
-				return
-			}
+		if err = pb.pollCancel(); err != nil {
+			return
 		}
 		if exhausted(windows, pb.resyncLimit) {
 			return fmt.Errorf("astits: resync exhausted after %d windows: %w", windows, ErrInvalidData)

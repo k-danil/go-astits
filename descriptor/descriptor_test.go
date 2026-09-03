@@ -607,7 +607,7 @@ func TestParseDescriptorOneByOne(t *testing.T) {
 			descBytes[1] = byte(descLen & 0xff)
 
 			ds, _, err := Parse(descBytes)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Equal(t, tc.desc, ds[0])
 		})
 	}
@@ -621,7 +621,7 @@ func TestWriteDescriptorOneByOne(t *testing.T) {
 			tc.bytesFunc(wExpected)
 
 			actual := tc.desc.Append(nil)
-			assert.Equal(t, 2+tc.desc.CalcLength(), len(actual))
+			assert.Len(t, actual, 2+tc.desc.CalcLength())
 			assert.Equal(t, bufExpected.Bytes(), actual)
 		})
 	}
@@ -646,7 +646,7 @@ func TestWriteDescriptorAll(t *testing.T) {
 	descBytes[1] = byte(descLen & 0xff)
 
 	actual := AppendWithLength(nil, dss)
-	assert.Equal(t, bufExpected.Len(), len(actual))
+	assert.Len(t, actual, bufExpected.Len())
 	assert.Equal(t, bufExpected.Bytes(), actual)
 }
 
@@ -656,7 +656,7 @@ func BenchmarkWriteDescriptor(b *testing.B) {
 	for _, bm := range descriptorTestTable {
 		b.Run(bm.name, func(b *testing.B) {
 			b.ReportAllocs()
-			for i := 0; i < b.N; i++ {
+			for b.Loop() {
 				dst = bm.desc.Append(dst[:0])
 			}
 		})
@@ -682,7 +682,7 @@ func BenchmarkParseDescriptor(b *testing.B) {
 		bs := bss[ti]
 		b.Run(tc.name, func(b *testing.B) {
 			b.ReportAllocs()
-			for i := 0; i < b.N; i++ {
+			for b.Loop() {
 				_, _, _ = Parse(bs)
 			}
 		})
@@ -703,7 +703,7 @@ func TestParseOwnsInput(t *testing.T) {
 	src[0] = byte(l>>8) | 0xf0
 	src[1] = byte(l)
 
-	pristine := append([]byte(nil), src...)
+	pristine := bytes.Clone(src)
 	reference, _, err := Parse(pristine)
 	require.NoError(t, err)
 

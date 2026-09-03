@@ -2,7 +2,6 @@ package demux
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -21,7 +20,7 @@ func TestCancelObservedWithinWindow(t *testing.T) {
 		raw = append(raw, payloadPacket(ts.PIDNull, uint8(i)&0xf, false, []byte{0xFF})...)
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	seen := 0
 	dmx := New(ctx, tsio.NewBytesReader(raw),
@@ -40,6 +39,6 @@ func TestCancelObservedWithinWindow(t *testing.T) {
 			break
 		}
 	}
-	require.True(t, errors.Is(err, context.Canceled), "got %v", err)
+	require.ErrorIs(t, err, context.Canceled, "got %v", err)
 	require.Less(t, seen, 10+2*1024, "cancel must be seen within the poll cadence")
 }

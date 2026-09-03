@@ -25,9 +25,9 @@ func ParseTime(i *bytesiter.Iterator) (t time.Time, err error) {
 	if mjd == undefinedMJD && bs[0] == undefinedBCD && bs[1] == undefinedBCD && bs[2] == undefinedBCD {
 		return time.Time{}, nil
 	}
-	t = day.Add(time.Duration(parseDurationByte(bs[0]))*time.Hour +
-		time.Duration(parseDurationByte(bs[1]))*time.Minute +
-		time.Duration(parseDurationByte(bs[2]))*time.Second)
+	t = day.Add(time.Duration(parseBCDByte(bs[0]))*time.Hour +
+		time.Duration(parseBCDByte(bs[1]))*time.Minute +
+		time.Duration(parseBCDByte(bs[2]))*time.Second)
 
 	return
 }
@@ -38,7 +38,7 @@ func ParseDurationMinutes(i *bytesiter.Iterator) (d time.Duration, err error) {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return
 	}
-	d = parseDurationByte(bs[0])*time.Hour + parseDurationByte(bs[1])*time.Minute
+	d = time.Duration(parseBCDByte(bs[0]))*time.Hour + time.Duration(parseBCDByte(bs[1]))*time.Minute
 	return
 }
 
@@ -48,12 +48,12 @@ func ParseDurationSeconds(i *bytesiter.Iterator) (d time.Duration, err error) {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return
 	}
-	d = parseDurationByte(bs[0])*time.Hour + parseDurationByte(bs[1])*time.Minute + parseDurationByte(bs[2])*time.Second
+	d = time.Duration(parseBCDByte(bs[0]))*time.Hour + time.Duration(parseBCDByte(bs[1]))*time.Minute + time.Duration(parseBCDByte(bs[2]))*time.Second
 	return
 }
 
-func parseDurationByte(i byte) time.Duration {
-	return time.Duration(i>>4*10 + i&0xf)
+func parseBCDByte(i byte) int {
+	return int(i>>4)*10 + int(i&0xf)
 }
 
 var mjdEpoch = time.Date(1858, time.November, 17, 0, 0, 0, 0, time.UTC)

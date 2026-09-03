@@ -11,6 +11,8 @@ const (
 	PCRSize    = 6
 )
 
+const pcrReservedBits = 0x7e << 8
+
 const (
 	// PTS and DTS tick at ClockHz/PTSTicks (90 kHz).
 	ClockHz   = 27_000_000
@@ -27,12 +29,26 @@ func NewClockReference(base, extension uint64) ClockReference {
 	return ClockReference(base*PTSTicks + extension)
 }
 
+// Diff yields a signed distance, and only a negative one needs folding onto the forward range the wire fields carry.
+func (cr ClockReference) wire() uint64 {
+	if cr < 0 {
+		return uint64(cr%ClockWrap + ClockWrap)
+	}
+	return uint64(cr)
+}
+
 func (cr ClockReference) Base() uint64 {
-	return uint64(cr) / PTSTicks
+	return cr.wire() / PTSTicks
 }
 
 func (cr ClockReference) Extension() uint64 {
-	return uint64(cr) % PTSTicks
+	return cr.wire() % PTSTicks
+}
+
+func (cr ClockReference) baseExt() (base, extension uint64) {
+	w := cr.wire()
+	base, extension = w/PTSTicks, w%PTSTicks
+	return
 }
 
 func (cr ClockReference) Duration() time.Duration {
@@ -54,6 +70,8 @@ func (cr ClockReference) Diff(o ClockReference) ClockReference {
 }
 
 // PCR is 33 bits base, 6 reserved, 9 extension.
+//
+// An extension above PTSTicks-1 folds into the tick count, so Base and Extension then differ from the wire fields; Packet.Raw keeps the bytes as received.
 func (cr *ClockReference) ParsePCR(bs []byte) (n int, err error) {
 	if len(bs) < PCRSize {
 		return 0, ErrShortPacket
@@ -64,8 +82,9 @@ func (cr *ClockReference) ParsePCR(bs []byte) (n int, err error) {
 }
 
 func (cr ClockReference) PutPCR(bs []byte) (n int) {
+	base, ext := cr.baseExt()
 	var bb [8]byte
-	binary.BigEndian.PutUint64(bb[:], cr.Extension()|cr.Base()<<15|0x7e<<8)
+	binary.BigEndian.PutUint64(bb[:], ext|base<<15|pcrReservedBits)
 	copy(bs, bb[2:])
 	return PCRSize
 }
@@ -81,14 +100,16 @@ func (cr *ClockReference) ParsePTSDTS(bs []byte) (n int, err error) {
 }
 
 func (cr ClockReference) PutPTSDTS(bs []byte, flag uint8) (n int) {
-	bs[0] = flag<<4 | uint8(cr.Base()>>29) | 1
-	bs[1] = uint8(cr.Base() >> 22)
-	bs[2] = uint8(cr.Base()>>14) | 1
-	bs[3] = uint8(cr.Base() >> 7)
-	bs[4] = uint8(cr.Base()<<1) | 1
+	base := cr.Base()
+	bs[0] = flag<<4 | uint8(base>>29) | 1
+	bs[1] = uint8(base >> 22)
+	bs[2] = uint8(base>>14) | 1
+	bs[3] = uint8(base >> 7)
+	bs[4] = uint8(base<<1) | 1
 	return PTSDTSSize
 }
 
+// An extension above PTSTicks-1 folds into the tick count, so Base and Extension then differ from the wire fields.
 func (cr *ClockReference) ParseESCR(bs []byte) (n int, err error) {
 	if len(bs) < ESCRSize {
 		return 0, ErrShortPacket
@@ -99,11 +120,12 @@ func (cr *ClockReference) ParseESCR(bs []byte) (n int, err error) {
 }
 
 func (cr ClockReference) PutESCR(bs []byte) (n int) {
-	bs[0] = 0xc0 | uint8((cr.Base()>>27)&0x38) | 0x04 | uint8((cr.Base()>>28)&0x03)
-	bs[1] = uint8(cr.Base() >> 20)
-	bs[2] = uint8((cr.Base()>>13)&0x3) | 0x4 | uint8((cr.Base()>>12)&0xf8)
-	bs[3] = uint8(cr.Base() >> 5)
-	bs[4] = uint8(cr.Extension()>>7) | 0x4 | uint8(cr.Base()<<3)
-	bs[5] = uint8(cr.Extension()<<1) | 0x1
+	base, ext := cr.baseExt()
+	bs[0] = 0xc0 | uint8((base>>27)&0x38) | 0x04 | uint8((base>>28)&0x03)
+	bs[1] = uint8(base >> 20)
+	bs[2] = uint8((base>>13)&0x3) | 0x4 | uint8((base>>12)&0xf8)
+	bs[3] = uint8(base >> 5)
+	bs[4] = uint8(ext>>7) | 0x4 | uint8(base<<3)
+	bs[5] = uint8(ext<<1) | 0x1
 	return ESCRSize
 }

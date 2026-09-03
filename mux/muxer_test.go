@@ -58,20 +58,20 @@ func TestMuxer_generatePAT(t *testing.T) {
 	muxer := New(context.Background(), nil)
 
 	err := muxer.generatePAT()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, ts.PacketSize, muxer.patBytes.Len())
 	assert.Equal(t, patExpectedBytes(0, 0), muxer.patBytes.Bytes())
 
 	// Version number shouldn't change
 	err = muxer.generatePAT()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, ts.PacketSize, muxer.patBytes.Len())
 	assert.Equal(t, patExpectedBytes(0, 1), muxer.patBytes.Bytes())
 
 	// Version number should change
 	muxer.pmUpdated = true
 	err = muxer.generatePAT()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, ts.PacketSize, muxer.patBytes.Len())
 	assert.Equal(t, patExpectedBytes(1, 2), muxer.patBytes.Bytes())
 }
@@ -173,16 +173,16 @@ func TestMuxer_generatePMT(t *testing.T) {
 		StreamType:    psi.StreamTypeH264Video,
 	})
 	muxer.SetPCRPID(0x1234)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	err = muxer.generatePMT()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, ts.PacketSize, muxer.pmtBytes.Len())
 	assert.Equal(t, pmtExpectedBytesVideoOnly(0, 0), muxer.pmtBytes.Bytes())
 
 	// Version number shouldn't change
 	err = muxer.generatePMT()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, ts.PacketSize, muxer.pmtBytes.Len())
 	assert.Equal(t, pmtExpectedBytesVideoOnly(0, 1), muxer.pmtBytes.Bytes())
 
@@ -190,11 +190,11 @@ func TestMuxer_generatePMT(t *testing.T) {
 		ElementaryPID: 0x0234,
 		StreamType:    psi.StreamTypeAACAudio,
 	})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Version number should change
 	err = muxer.generatePMT()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, ts.PacketSize, muxer.pmtBytes.Len())
 	assert.Equal(t, pmtExpectedBytesVideoAndAudio(1, 2), muxer.pmtBytes.Bytes())
 }
@@ -317,8 +317,8 @@ func BenchmarkMuxWriteDataToBuffer(b *testing.B) {
 }
 
 func testPayload() []byte {
-	ret := make([]byte, 0xff+1)
-	for i := 0; i <= 0xff; i++ {
+	ret := make([]byte, 0x100)
+	for i := range ret {
 		ret[i] = byte(i)
 	}
 	return ret
@@ -360,7 +360,7 @@ func TestWriteTablesMultiSectionPAT(t *testing.T) {
 	m.SetPCRPID(0x123)
 
 	const extraPrograms = 300
-	for i := 0; i < extraPrograms; i++ {
+	for i := range extraPrograms {
 		m.pm.Set(uint16(0x200+i), uint16(i+1))
 	}
 	m.pmUpdated = true

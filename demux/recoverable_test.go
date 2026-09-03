@@ -3,6 +3,7 @@ package demux
 import (
 	"bytes"
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -76,8 +77,81 @@ func TestDemuxerRecoverableFlushedBeforeFatal(t *testing.T) {
 	_, err = dmx.Next()
 	require.Error(t, err)
 	assert.False(t, ts.IsRecoverable(err), "then the fatal ends the stream")
-	assert.ErrorIs(t, err, ts.ErrInvalidData)
+	require.ErrorIs(t, err, ts.ErrInvalidData)
 	assert.NotErrorIs(t, err, ts.ErrNoMorePackets)
+}
+
+// A unit-level error is charged to the unit's last packet, not the packet under the reader.
+func TestRecoverableOffsetIsOwnPacket(t *testing.T) {
+	garbage := []byte{0x11, 0x22, 0x33, 0x44, 0x55}
+	tests := []struct {
+		name       string
+		stream     []byte
+		wantOffset int64
+	}{
+		{
+			name: "drained behind another PID",
+			stream: bytes.Join([][]byte{
+				payloadPacket(0x100, 0, true, garbage),
+				payloadPacket(0x200, 0, true, garbage),
+				payloadPacket(0x200, 1, false, garbage),
+			}, nil),
+			wantOffset: 0,
+		},
+		{
+			name: "closed by the start of the next unit",
+			stream: bytes.Join([][]byte{
+				payloadPacket(0x100, 0, true, garbage),
+				payloadPacket(0x100, 1, false, garbage),
+				payloadPacket(0x100, 2, true, garbage),
+			}, nil),
+			wantOffset: ts.PacketSize,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dmx := New(context.Background(), bytes.NewReader(tt.stream), WithPacketSize(ts.PacketSize), WithRecoverableErrors())
+			defer dmx.Close()
+
+			var first *ts.RecoverableError
+			for _, err := range dmx.Events() {
+				if re, ok := errors.AsType[*ts.RecoverableError](err); ok && re.PID == 0x100 && first == nil {
+					first = re
+				}
+			}
+			require.NotNil(t, first)
+			assert.Equal(t, ts.ErrorKindUnknownUnit, first.Kind)
+			assert.Equal(t, tt.wantOffset, first.Offset)
+		})
+	}
+}
+
+func TestRecoverableContinuityWithoutLoss(t *testing.T) {
+	stream := psiPacket(ts.PIDPAT, 0, patSection(0, true, 0x100))
+	stream = append(stream, psiPacket(ts.PIDPAT, 5, patSection(1, true, 0x200))...)
+	stream = append(stream, psiPacket(ts.PIDPAT, 6, patSection(2, true, 0x300))...)
+
+	dmx := New(context.Background(), bytes.NewReader(stream), WithPacketSize(ts.PacketSize), WithRecoverableErrors())
+	defer dmx.Close()
+
+	var got []*ts.RecoverableError
+	var tables int
+	for ev, err := range dmx.Events() {
+		if re, ok := errors.AsType[*ts.RecoverableError](err); ok {
+			got = append(got, re)
+			continue
+		}
+		require.NoError(t, err)
+		if ev == EventPAT {
+			tables++
+		}
+	}
+	assert.Equal(t, 3, tables, "every table still arrives")
+	require.Len(t, got, 1, "one event for the gap, none for the first packet or the packet after it")
+	assert.Equal(t, ts.ErrorKindContinuity, got[0].Kind)
+	assert.Equal(t, int64(ts.PacketSize), got[0].Offset)
+	assert.Equal(t, int64(0), got[0].Dropped)
+	assert.ErrorIs(t, got[0].Err, ts.ErrContinuityGap)
 }
 
 func TestDemuxerRecoverableCRCMismatch(t *testing.T) {
@@ -100,8 +174,8 @@ func TestDemuxerRecoverableCRCMismatch(t *testing.T) {
 		require.ErrorAs(t, err, &re)
 		assert.Equal(t, ts.ErrorKindCRC, re.Kind)
 		assert.Equal(t, uint16(0), re.PID, "CRC error bound to the PAT PID")
-		assert.ErrorIs(t, err, psi.ErrCRC32Mismatch)
-		assert.ErrorIs(t, err, ts.ErrInvalidData)
+		require.ErrorIs(t, err, psi.ErrCRC32Mismatch)
+		require.ErrorIs(t, err, ts.ErrInvalidData)
 		assert.True(t, ts.IsRecoverable(err))
 		assert.Nil(t, dmx.PAT(), "corrupt table not applied")
 

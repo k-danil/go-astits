@@ -11,6 +11,13 @@ import (
 	"github.com/k-danil/go-astits/v3/ts"
 )
 
+type PacketSpan struct {
+	FirstPacketOffset int64
+	LastPacketOffset  int64
+	FirstPacketTag    uint64
+	LastPacketTag     uint64
+}
+
 type PES struct {
 	Data              pes.Data
 	AdaptationField   *ts.PacketAdaptationField
@@ -18,11 +25,8 @@ type PES struct {
 	ContinuityCounter uint8
 	// Truncated: the stream ended (EOF) before closing the unit, Data is what
 	// arrived. Unbounded (length 0) may still be whole; bounded is short.
-	Truncated         bool
-	FirstPacketOffset int64
-	LastPacketOffset  int64
-	FirstPacketTag    uint64
-	LastPacketTag     uint64
+	Truncated bool
+	PacketSpan
 
 	af  ts.PacketAdaptationField
 	buf *dataPayload
@@ -50,6 +54,7 @@ func (d *PES) Close() {
 
 type tableEvent struct {
 	sec     *psi.Section
+	span    PacketSpan
 	pid     uint16
 	ev      Event
 	changed bool
@@ -117,17 +122,16 @@ func (dmx *Demuxer) processUnit(u unit) (emitted *PES, err error) {
 			d.Close()
 			if dmx.optRecoverable {
 				dmx.reportRecoverable(ts.RecoverableError{
-					Kind: ts.ErrorKindPES, PID: u.pid, Offset: dmx.pkt.Offset, Dropped: int64(n), Err: perr,
+					Kind: ts.ErrorKindPES, PID: u.pid, Offset: u.LastPacketOffset, Dropped: int64(n), Err: perr,
 				})
 			}
 			return nil, perr
 		}
 		d.Truncated = u.truncated && pesTruncated(&d.Data, len(u.buf.bs))
-		d.FirstPacketOffset, d.LastPacketOffset = u.firstOffset, u.lastOffset
-		d.FirstPacketTag, d.LastPacketTag = u.firstTag, u.lastTag
+		d.PacketSpan = u.PacketSpan
 		if dmx.optRecoverable && d.Data.Header.PacketLength == 0 && !unboundedAllowed(d.Data.Header.StreamID) {
 			dmx.reportRecoverable(ts.RecoverableError{
-				Kind: ts.ErrorKindPES, PID: u.pid, Offset: dmx.pkt.Offset, Err: pes.ErrUnboundedNonVideo,
+				Kind: ts.ErrorKindPES, PID: u.pid, Offset: u.LastPacketOffset, Err: pes.ErrUnboundedNonVideo,
 			})
 		}
 
@@ -141,7 +145,7 @@ func (dmx *Demuxer) processUnit(u unit) (emitted *PES, err error) {
 	default:
 		if dmx.optRecoverable {
 			dmx.reportRecoverable(ts.RecoverableError{
-				Kind: ts.ErrorKindUnknownUnit, PID: u.pid, Offset: dmx.pkt.Offset,
+				Kind: ts.ErrorKindUnknownUnit, PID: u.pid, Offset: u.LastPacketOffset,
 				Dropped: int64(len(u.buf.bs)), Err: ts.ErrUnknownPayload,
 			})
 		}
@@ -165,23 +169,24 @@ func pesTruncated(d *pes.Data, n int) bool {
 	return d.Header.PacketLength == 0 || pes.HeaderSize+int(d.Header.PacketLength) > n
 }
 
-func (dmx *Demuxer) reportPSIError(pid uint16, dropped int, err error) {
+func (dmx *Demuxer) reportPSIError(pid uint16, offset int64, dropped int, err error) {
 	kind := ts.ErrorKindPSI
 	if errors.Is(err, psi.ErrCRC32Mismatch) {
 		kind = ts.ErrorKindCRC
 	}
 	dmx.reportRecoverable(ts.RecoverableError{
-		Kind: kind, PID: pid, Offset: dmx.pkt.Offset, Dropped: int64(dropped), Err: err,
+		Kind: kind, PID: pid, Offset: offset, Dropped: int64(dropped), Err: err,
 	})
 }
 
 func (dmx *Demuxer) processPSI(u unit) {
 	if cache := dmx.psiPrev.Get(u.pid); cache != nil && bytes.Equal(cache.raw, u.buf.bs) {
 		poolOfPayload.put(u.buf)
-		dmx.reportSectionErrors(u.pid, cache.errs)
+		dmx.reportSectionErrors(u.pid, u.LastPacketOffset, cache.errs)
 		if dmx.optPSIRepeats {
 			for _, e := range cache.events {
 				e.changed = false
+				e.span = u.PacketSpan
 				dmx.tblQueue = append(dmx.tblQueue, e)
 			}
 		}
@@ -191,13 +196,13 @@ func (dmx *Demuxer) processPSI(u unit) {
 	psiData, err := psi.Parse(u.buf.bs)
 	if err != nil {
 		if dmx.optRecoverable {
-			dmx.reportPSIError(u.pid, len(u.buf.bs), err)
+			dmx.reportPSIError(u.pid, u.LastPacketOffset, len(u.buf.bs), err)
 		}
 		poolOfPayload.put(u.buf)
 		return
 	}
 
-	dmx.reportSectionErrors(u.pid, psiData.Errors)
+	dmx.reportSectionErrors(u.pid, u.LastPacketOffset, psiData.Errors)
 	if len(psiData.Sections) == 0 {
 		poolOfPayload.put(u.buf)
 		return
@@ -226,35 +231,38 @@ func (dmx *Demuxer) processPSI(u unit) {
 				dmx.pmt = data
 			}
 		}
-		e := tableEvent{pid: u.pid, sec: s, ev: ev, changed: true}
+		e := tableEvent{pid: u.pid, sec: s, ev: ev, changed: true, span: u.PacketSpan}
 		cache.events = append(cache.events, e)
 		dmx.tblQueue = append(dmx.tblQueue, e)
 	}
 }
 
-func (dmx *Demuxer) reportSectionErrors(pid uint16, errs []*psi.SectionError) {
+func (dmx *Demuxer) reportSectionErrors(pid uint16, offset int64, errs []*psi.SectionError) {
 	if !dmx.optRecoverable {
 		return
 	}
 	for _, e := range errs {
-		dmx.reportPSIError(pid, e.Len, e)
+		dmx.reportPSIError(pid, offset, e.Len, e)
 	}
 }
 
-// A PAT announced for later still adds its PMT PIDs, so their sections parse as PSI; a version bump on the PAT in effect rebuilds the map, freeing PIDs that may return as elementary streams.
+// A PAT announced for later keeps its PMT PIDs apart, so their sections still parse as PSI without claiming a PID that currently carries a stream; a version bump on the PAT in effect drops both maps, freeing PIDs that may return as elementary streams.
 func (dmx *Demuxer) applyPAT(pat *psi.PAT, h *psi.SectionSyntaxHeader) {
+	target := &dmx.acc.nextMap
 	if h.CurrentNextIndicator {
 		dmx.pat = pat
 		if !dmx.patSeen || h.VersionNumber != dmx.patVersion {
 			dmx.programMap.Clear()
+			dmx.acc.nextMap.Clear()
 			dmx.patVersion = h.VersionNumber
 			dmx.patSeen = true
 		}
+		target = &dmx.programMap
 	}
 	for _, pgm := range pat.Programs {
 		// Program number 0 is reserved to NIT
 		if pgm.ProgramNumber > 0 {
-			dmx.programMap.Set(pgm.ProgramMapID, pgm.ProgramNumber)
+			target.Set(pgm.ProgramMapID, pgm.ProgramNumber)
 		}
 	}
 }

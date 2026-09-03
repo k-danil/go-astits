@@ -25,7 +25,8 @@ func ExampleParse() {
 	if err != nil {
 		panic(err)
 	}
-	pat := parsed.Sections[0].Syntax.Data.(*psi.PAT)
-	fmt.Printf("%s: program %d at PMT PID 0x%x, CRC ok\n", parsed.Sections[0].Header.TableID.Type(), pat.Programs[0].ProgramNumber, pat.Programs[0].ProgramMapID)
+	if pat, ok := parsed.Sections[0].Syntax.Data.(*psi.PAT); ok {
+		fmt.Printf("%s: program %d at PMT PID 0x%x, CRC ok\n", parsed.Sections[0].Header.TableID.Type(), pat.Programs[0].ProgramNumber, pat.Programs[0].ProgramMapID)
+	}
 	// Output: PAT: program 1 at PMT PID 0x1000, CRC ok
 }

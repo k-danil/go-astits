@@ -19,7 +19,7 @@ func randDVBTime(r *rand.Rand) time.Time {
 }
 
 func randDescriptors(r *rand.Rand) (ds []descriptor.Descriptor) {
-	for i := uint(0); i < r.UintN(3); i++ {
+	for range r.UintN(3) {
 		d := &descriptor.StreamIdentifier{
 			Header:       descriptor.Header{Tag: descriptor.TagStreamIdentifier},
 			ComponentTag: uint8(r.UintN(256)),
@@ -53,9 +53,9 @@ func randSection(r *rand.Rand, tableID TableID, data SectionSyntaxData, sectionL
 
 func TestRoundtripPSI(t *testing.T) {
 	r := rand.New(rand.NewPCG(7, 8))
-	for i := 0; i < 300; i++ {
+	for i := range 300 {
 		pat := &PAT{TransportStreamID: uint16(r.UintN(1 << 16))}
-		for j := uint(0); j < 1+r.UintN(10); j++ {
+		for range 1 + r.UintN(10) {
 			pat.Programs = append(pat.Programs, PATProgram{
 				ProgramMapID:  uint16(r.UintN(1 << 13)),
 				ProgramNumber: uint16(r.UintN(1 << 16)),
@@ -67,7 +67,7 @@ func TestRoundtripPSI(t *testing.T) {
 			PCRPID:             uint16(r.UintN(1 << 13)),
 			ProgramDescriptors: randDescriptors(r),
 		}
-		for j := uint(0); j < 1+r.UintN(5); j++ {
+		for range 1 + r.UintN(5) {
 			pmt.ElementaryStreams = append(pmt.ElementaryStreams, ElementaryStream{
 				StreamType:                  StreamTypeH264Video,
 				ElementaryPID:               uint16(r.UintN(1 << 13)),
@@ -98,7 +98,7 @@ func TestRoundtripPSI(t *testing.T) {
 
 func randRST(r *rand.Rand) *RST {
 	rst := &RST{}
-	for j := uint(0); j < 1+r.UintN(5); j++ {
+	for range 1 + r.UintN(5) {
 		rst.Events = append(rst.Events, RSTEvent{
 			TransportStreamID: uint16(r.UintN(1 << 16)),
 			OriginalNetworkID: uint16(r.UintN(1 << 16)),
@@ -112,10 +112,10 @@ func randRST(r *rand.Rand) *RST {
 
 func TestRoundtripPSITrivial(t *testing.T) {
 	r := rand.New(rand.NewPCG(11, 12))
-	for i := 0; i < 300; i++ {
+	for range 300 {
 		cases := []struct {
 			tableID TableID
-			data    SectionSyntaxData
+			data    sectionBody
 		}{
 			{TableIDST, &ST{}},
 			{TableIDDIT, &DIT{TransitionFlag: r.UintN(2) == 1}},
@@ -127,7 +127,7 @@ func TestRoundtripPSITrivial(t *testing.T) {
 		for _, tc := range cases {
 			d := &Data{
 				PointerField: int(r.UintN(5)),
-				Sections:     []Section{randSection(r, tc.tableID, tc.data, tc.data.(sectionBody).CalcSectionLength())},
+				Sections:     []Section{randSection(r, tc.tableID, tc.data, tc.data.CalcSectionLength())},
 			}
 
 			b1, err := d.Append(nil)
@@ -154,12 +154,12 @@ func randDuration(r *rand.Rand) time.Duration {
 
 func TestRoundtripPSITables(t *testing.T) {
 	r := rand.New(rand.NewPCG(13, 14))
-	for i := 0; i < 300; i++ {
+	for range 300 {
 		// ext is the section's TableIDExtension; SDT/EIT/NIT/BAT mirror it into an ID field.
 		ext := uint16(r.UintN(1 << 16))
 
 		sdt := &SDT{TransportStreamID: ext, OriginalNetworkID: uint16(r.UintN(1 << 16))}
-		for j := uint(0); j < 1+r.UintN(4); j++ {
+		for range 1 + r.UintN(4) {
 			sdt.Services = append(sdt.Services, SDTService{
 				ServiceID: uint16(r.UintN(1 << 16)), HasEITSchedule: r.UintN(2) == 1,
 				HasEITPresentFollowing: r.UintN(2) == 1, HasFreeCSAMode: r.UintN(2) == 1,
@@ -169,7 +169,7 @@ func TestRoundtripPSITables(t *testing.T) {
 
 		eit := &EIT{ServiceID: ext, TransportStreamID: uint16(r.UintN(1 << 16)),
 			OriginalNetworkID: uint16(r.UintN(1 << 16)), SegmentLastSectionNumber: uint8(r.UintN(256)), LastTableID: TableID(r.UintN(256))}
-		for j := uint(0); j < 1+r.UintN(4); j++ {
+		for range 1 + r.UintN(4) {
 			eit.Events = append(eit.Events, EITEvent{
 				EventID: uint16(r.UintN(1 << 16)), StartTime: randDVBTime(r), Duration: randDuration(r),
 				RunningStatus: RunningStatus(r.UintN(8)), HasFreeCSAMode: r.UintN(2) == 1, Descriptors: randDescriptors(r),
@@ -178,24 +178,24 @@ func TestRoundtripPSITables(t *testing.T) {
 
 		nit := &NIT{NetworkID: ext, NetworkDescriptors: randDescriptors(r)}
 		bat := &BAT{BouquetID: ext, BouquetDescriptors: randDescriptors(r)}
-		for j := uint(0); j < 1+r.UintN(3); j++ {
+		for range 1 + r.UintN(3) {
 			nit.TransportStreams = append(nit.TransportStreams, NITTransportStream{TransportStreamID: uint16(r.UintN(1 << 16)), OriginalNetworkID: uint16(r.UintN(1 << 16)), TransportDescriptors: randDescriptors(r)})
 			bat.TransportStreams = append(bat.TransportStreams, BATTransportStream{TransportStreamID: uint16(r.UintN(1 << 16)), OriginalNetworkID: uint16(r.UintN(1 << 16)), TransportDescriptors: randDescriptors(r)})
 		}
 
 		sit := &SIT{TransmissionInfoDescriptors: randDescriptors(r)}
-		for j := uint(0); j < 1+r.UintN(4); j++ {
+		for range 1 + r.UintN(4) {
 			sit.Services = append(sit.Services, SITService{ServiceID: uint16(r.UintN(1 << 16)), RunningStatus: RunningStatus(r.UintN(8)), Descriptors: randDescriptors(r)})
 		}
 
 		iso := &ISO14496Section{}
-		for j := uint(0); j < 1+r.UintN(10); j++ {
+		for range 1 + r.UintN(10) {
 			iso.Data = append(iso.Data, uint8(r.UintN(256)))
 		}
 
 		cases := []struct {
 			tableID TableID
-			data    SectionSyntaxData
+			data    sectionBody
 		}{
 			{TableIDCAT, &CAT{Descriptors: randDescriptors(r)}},
 			{TableIDSDTVariant1, sdt},
@@ -206,7 +206,7 @@ func TestRoundtripPSITables(t *testing.T) {
 			{TableIDISO14496, iso},
 		}
 		for _, tc := range cases {
-			sec := randSection(r, tc.tableID, tc.data, tc.data.(sectionBody).CalcSectionLength())
+			sec := randSection(r, tc.tableID, tc.data, tc.data.CalcSectionLength())
 			sec.Syntax.Header.TableIDExtension = ext
 			d := &Data{PointerField: int(r.UintN(5)), Sections: []Section{sec}}
 
@@ -225,7 +225,7 @@ func TestRoundtripPSITables(t *testing.T) {
 
 func TestRoundtripPSIMetadata(t *testing.T) {
 	r := rand.New(rand.NewPCG(21, 22))
-	for i := 0; i < 300; i++ {
+	for range 300 {
 		md := &Metadata{
 			MetadataServiceID:         uint8(r.UintN(256)),
 			SectionFragmentIndication: uint8(r.UintN(4)),
@@ -234,7 +234,7 @@ func TestRoundtripPSIMetadata(t *testing.T) {
 			SectionNumber:             uint8(r.UintN(256)),
 			LastSectionNumber:         uint8(r.UintN(256)),
 		}
-		for j := uint(0); j < 1+r.UintN(20); j++ {
+		for range 1 + r.UintN(20) {
 			md.MetadataBytes = append(md.MetadataBytes, uint8(r.UintN(256)))
 		}
 

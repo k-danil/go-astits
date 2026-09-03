@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/k-danil/go-astits/v3/internal/bitstest"
 )
@@ -46,11 +48,11 @@ func TestParsePacket204(t *testing.T) {
 	ts[1] = 0x40 // payload_unit_start_indicator, PID hi 0
 	ts[3] = 0x10 // payload only, CC 0
 	copy(ts[4:], []byte("payload"))
-	b204 := append(ts, bytes.Repeat([]byte{0xaa}, RSPacketSize-PacketSize)...)
+	b204 := slices.Concat(ts, bytes.Repeat([]byte{0xaa}, RSPacketSize-PacketSize))
 
 	p := new(Packet)
 	_, err := p.parse(b204, nil, nil)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.True(t, p.Header.PayloadUnitStartIndicator)
 	assert.Zero(t, p.PrefixLen)
 	assert.Len(t, p.Payload, PacketSize-HeaderSize) // 184; the 16 RS parity bytes are excluded
@@ -61,7 +63,7 @@ func packetShort(h PacketHeader, payload []byte) ([]byte, *Packet) {
 	w := bitstest.NewWriter(buf)
 	_ = w.Write(syncByte)                   // Sync byte
 	_ = w.Write(packetHeaderBytes(h, "01")) // Header
-	p := append(payload, bytes.Repeat([]byte{0}, PacketSize-buf.Len())...)
+	p := slices.Concat(payload, bytes.Repeat([]byte{0}, PacketSize-buf.Len()))
 	_ = w.Write(p)
 	return buf.Bytes(), &Packet{
 		Header:  h,
@@ -73,7 +75,7 @@ func TestParsePacket(t *testing.T) {
 	b, ep := packet([]byte("payload"), true)
 	p := new(Packet)
 	_, err := p.parse(b, nil, nil)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, ep, p)
 }
 
@@ -81,7 +83,7 @@ func TestWritePacket(t *testing.T) {
 	eb, ep := packet([]byte("payload"), false)
 	scratch := make([]byte, PacketSize)
 	n, err := ep.Put(scratch)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, PacketSize, n)
 	assert.Equal(t, len(eb), n)
 	assert.Equal(t, eb, scratch[:n])
@@ -92,7 +94,7 @@ func BenchmarkWritePacket(b *testing.B) {
 	scratch := make([]byte, PacketSize)
 
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, _ = ep.Put(scratch)
 	}
 }
@@ -105,7 +107,7 @@ func TestWritePacket_HeaderOnly(t *testing.T) {
 
 	scratch := make([]byte, PacketSize)
 	n, err := ep.Put(scratch)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, PacketSize, n)
 	buf := bytes.NewBuffer(scratch[:n])
 
@@ -116,7 +118,7 @@ func TestWritePacket_HeaderOnly(t *testing.T) {
 	var skip bool
 	skip, err = p.parse(buf.Bytes(), nil, nil)
 	assert.True(t, skip)
-	assert.ErrorIs(t, err, ErrReservedAdaptationFieldControl)
+	require.ErrorIs(t, err, ErrReservedAdaptationFieldControl)
 	assert.Equal(t, shortPacketHeader, p.Header)
 }
 
@@ -148,7 +150,7 @@ func BenchmarkWritePacketHeader(b *testing.B) {
 	bb := new([8]byte)
 
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		packetHeader.Put(bb[:])
 	}
 }
@@ -217,7 +219,7 @@ func BenchmarkWritePacketAdaptationField(b *testing.B) {
 	bs := make([]byte, PacketSize)
 
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, _ = packetAdaptationField.Put(bs)
 	}
 }
@@ -239,7 +241,7 @@ func BenchmarkParsePCR(b *testing.B) {
 	bs := pcrBytes()
 
 	var v ClockReference
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, _ = v.ParsePCR(bs)
 	}
 	_ = v
@@ -249,7 +251,7 @@ func BenchmarkWritePCR(b *testing.B) {
 	bs := make([]byte, PCRSize)
 
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		pcr.PutPCR(bs)
 	}
 }
@@ -260,7 +262,7 @@ func BenchmarkParsePacket(b *testing.B) {
 	p := NewPacket()
 	b.Run("ParsePacket", func(b *testing.B) {
 		b.ReportAllocs()
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			_, _ = p.parse(bs, nil, nil)
 		}
 		p.Reset()

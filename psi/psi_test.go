@@ -91,9 +91,6 @@ var psi = &Data{
 				Data: tot,
 			},
 		},
-		//{Header: SectionHeader{
-		//	TableID: 254,
-		//}},
 	},
 }
 
@@ -174,8 +171,8 @@ func TestParsePSIData(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, d.Sections)
 	require.Len(t, d.Errors, 1)
-	assert.ErrorIs(t, d.Errors[0], ErrCRC32Mismatch)
-	assert.ErrorIs(t, d.Errors[0], ts.ErrInvalidData)
+	require.ErrorIs(t, d.Errors[0], ErrCRC32Mismatch)
+	require.ErrorIs(t, d.Errors[0], ts.ErrInvalidData)
 
 	// Valid, ending in an unknown table_id that is reported rather than swallowed
 	d, err = Parse(psiBytes())
@@ -297,8 +294,8 @@ func TestWritePSIData(t *testing.T) {
 			tc.bytesFunc(wExpected)
 
 			actual, err := tc.data.Append(nil)
-			assert.NoError(t, err)
-			assert.Equal(t, bufExpected.Len(), len(actual))
+			require.NoError(t, err)
+			assert.Len(t, actual, bufExpected.Len())
 			assert.Equal(t, bufExpected.Bytes(), actual)
 		})
 	}
@@ -309,7 +306,7 @@ func BenchmarkParsePSIData(b *testing.B) {
 	// fixture's unknown-table trailer is a reported error, benchmarked nowhere
 	pb := psiSectionsBytes()
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, _ = Parse(pb)
 	}
 }

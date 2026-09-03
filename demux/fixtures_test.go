@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"slices"
 
 	"github.com/k-danil/go-astits/v3/internal/bitstest"
 	"github.com/k-danil/go-astits/v3/ts"
@@ -60,7 +61,7 @@ func packetShort(h ts.PacketHeader, payload []byte) ([]byte, *ts.Packet) {
 	w := bitstest.NewWriter(buf)
 	_ = w.Write(syncByte)                   // Sync byte
 	_ = w.Write(packetHeaderBytes(h, "01")) // Header
-	p := append(payload, bytes.Repeat([]byte{0}, ts.PacketSize-buf.Len())...)
+	p := slices.Concat(payload, bytes.Repeat([]byte{0}, ts.PacketSize-buf.Len()))
 	_ = w.Write(p)
 	return buf.Bytes(), &ts.Packet{
 		Header:  h,

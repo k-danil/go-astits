@@ -36,14 +36,14 @@ func newDescriptorEnhancedAC3(i *bytesiter.Iterator, h Header, offsetEnd int) (d
 
 	d := &EnhancedAC3{
 		Header:           h,
-		HasASVC:          uint8(b&0x10) > 0,
-		HasBSID:          uint8(b&0x40) > 0,
-		HasComponentType: uint8(b&0x80) > 0,
-		HasMainID:        uint8(b&0x20) > 0,
-		HasSubStream1:    uint8(b&0x4) > 0,
-		HasSubStream2:    uint8(b&0x2) > 0,
-		HasSubStream3:    uint8(b&0x1) > 0,
-		MixInfoExists:    uint8(b&0x8) > 0,
+		HasASVC:          b&0x10 > 0,
+		HasBSID:          b&0x40 > 0,
+		HasComponentType: b&0x80 > 0,
+		HasMainID:        b&0x20 > 0,
+		HasSubStream1:    b&0x4 > 0,
+		HasSubStream2:    b&0x2 > 0,
+		HasSubStream3:    b&0x1 > 0,
+		MixInfoExists:    b&0x8 > 0,
 	}
 	dd = d
 

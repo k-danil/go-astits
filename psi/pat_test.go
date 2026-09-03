@@ -32,7 +32,7 @@ func BenchmarkParsePATSection(b *testing.B) {
 	b.ReportAllocs()
 	bs := patBytes()
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, _ = parsePATSection(bytesiter.New(bs), len(bs), uint16(1))
 	}
 }
@@ -42,7 +42,7 @@ func BenchmarkWritePATSection(b *testing.B) {
 
 	dst := make([]byte, 0, 1024)
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		dst = pat.appendSection(dst[:0])
 	}
 }

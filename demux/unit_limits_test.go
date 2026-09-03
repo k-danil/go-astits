@@ -44,18 +44,18 @@ func TestAccumulatorUnitSizeLimit(t *testing.T) {
 
 			var units []unit
 			for i, pl := range tt.payloads {
-				p := accPacket(1, uint8(i), i == 0, pl)
+				p := accPacket(0x100, uint8(i), i == 0, pl)
 				p.Offset = int64(i) * ts.PacketSize
 				units = a.add(p, units[:0])
 				assert.Empty(t, units)
 			}
-			next := accPacket(1, uint8(len(tt.payloads)), true, []byte("fresh"))
+			next := accPacket(0x100, uint8(len(tt.payloads)), true, []byte("fresh"))
 			units = a.add(next, units[:0])
 			assert.Empty(t, units, "the torn unit is not delivered")
 
 			require.Len(t, torn, 1)
 			assert.Equal(t, ts.ErrorKindTornUnit, torn[0].Kind)
-			assert.ErrorIs(t, torn[0].Err, ts.ErrUnitTooLarge)
+			require.ErrorIs(t, torn[0].Err, ts.ErrUnitTooLarge)
 			assert.Equal(t, tt.dropped, torn[0].Dropped)
 		})
 	}
@@ -99,23 +99,23 @@ func TestAccumulatorRepeats(t *testing.T) {
 		a, _ := newAcc(func(e ts.RecoverableError) { events = append(events, e) }, defaultMaxPESUnit, defaultMaxPSIUnit)
 		var units []unit
 		for _, p := range []*ts.Packet{
-			accPacket(1, 0, true, []byte("abc")),
-			accPacket(1, 1, false, []byte("def")),
-			accPacket(1, 1, false, []byte("def")),
-			accPacket(1, 1, false, []byte("def")),
-			accPacket(1, 1, false, []byte("def")),
+			accPacket(0x100, 0, true, []byte("abc")),
+			accPacket(0x100, 1, false, []byte("def")),
+			accPacket(0x100, 1, false, []byte("def")),
+			accPacket(0x100, 1, false, []byte("def")),
+			accPacket(0x100, 1, false, []byte("def")),
 		} {
 			units = a.add(p, units[:0])
 			assert.Empty(t, units)
 		}
 		require.Len(t, events, 1, "the fourth repeat adds no event")
 		assert.Equal(t, ts.ErrorKindTornUnit, events[0].Kind)
-		assert.ErrorIs(t, events[0].Err, ts.ErrContinuityGap)
+		require.ErrorIs(t, events[0].Err, ts.ErrContinuityGap)
 		assert.Equal(t, int64(6), events[0].Dropped)
 
-		units = a.add(accPacket(1, 2, true, []byte("next")), units[:0])
+		units = a.add(accPacket(0x100, 2, true, []byte("next")), units[:0])
 		assert.Empty(t, units, "no unit is made of the repeats")
-		units = a.add(accPacket(1, 3, true, []byte("after")), units[:0])
+		units = a.add(accPacket(0x100, 3, true, []byte("after")), units[:0])
 		require.Len(t, units, 1)
 		assert.Equal(t, []byte("next"), units[0].buf.bs)
 		poolOfPayload.put(units[0].buf)
@@ -126,18 +126,18 @@ func TestAccumulatorRepeats(t *testing.T) {
 		a, _ := newAcc(func(e ts.RecoverableError) { events = append(events, e) }, defaultMaxPESUnit, defaultMaxPSIUnit)
 		var units []unit
 		for _, p := range []*ts.Packet{
-			accPacket(1, 0, true, []byte("abc")),
-			accPacket(1, 1, false, []byte("def")),
-			accPacket(1, 1, false, []byte("def")),
-			accPacket(1, 2, false, []byte("ghi")),
-			accPacket(1, 3, false, []byte("jkl")),
-			accPacket(1, 3, false, []byte("jkl")),
+			accPacket(0x100, 0, true, []byte("abc")),
+			accPacket(0x100, 1, false, []byte("def")),
+			accPacket(0x100, 1, false, []byte("def")),
+			accPacket(0x100, 2, false, []byte("ghi")),
+			accPacket(0x100, 3, false, []byte("jkl")),
+			accPacket(0x100, 3, false, []byte("jkl")),
 		} {
 			units = a.add(p, units[:0])
 			assert.Empty(t, units)
 		}
 		assert.Empty(t, events)
-		units = a.add(accPacket(1, 4, true, []byte("next")), units[:0])
+		units = a.add(accPacket(0x100, 4, true, []byte("next")), units[:0])
 		require.Len(t, units, 1)
 		assert.Equal(t, []byte("abcdefghijkl"), units[0].buf.bs)
 		poolOfPayload.put(units[0].buf)
@@ -148,19 +148,19 @@ func TestAccumulatorRepeats(t *testing.T) {
 		a, _ := newAcc(func(e ts.RecoverableError) { events = append(events, e) }, defaultMaxPESUnit, defaultMaxPSIUnit)
 		var units []unit
 		for _, p := range []*ts.Packet{
-			accPacket(1, 0, true, []byte("abc")),
-			accPacket(1, 1, false, []byte("def")),
-			accPacket(1, 1, false, []byte("dXf")),
+			accPacket(0x100, 0, true, []byte("abc")),
+			accPacket(0x100, 1, false, []byte("def")),
+			accPacket(0x100, 1, false, []byte("dXf")),
 		} {
 			units = a.add(p, units[:0])
 			assert.Empty(t, units)
 		}
 		require.Len(t, events, 1)
 		assert.Equal(t, ts.ErrorKindPacketDrop, events[0].Kind)
-		assert.ErrorIs(t, events[0].Err, ts.ErrDuplicateMismatch)
+		require.ErrorIs(t, events[0].Err, ts.ErrDuplicateMismatch)
 		assert.Equal(t, int64(3), events[0].Dropped)
 
-		units = a.add(accPacket(1, 2, true, []byte("next")), units[:0])
+		units = a.add(accPacket(0x100, 2, true, []byte("next")), units[:0])
 		require.Len(t, units, 1)
 		assert.Equal(t, []byte("abcdef"), units[0].buf.bs)
 		poolOfPayload.put(units[0].buf)
@@ -178,8 +178,7 @@ func TestDemuxerPacketCountsAndNullPackets(t *testing.T) {
 
 	var pesUnits int
 	for ev, err := range dmx.Events() {
-		var re *ts.RecoverableError
-		if errors.As(err, &re) {
+		if re, ok := errors.AsType[*ts.RecoverableError](err); ok {
 			assert.NotEqual(t, ts.PIDNull, re.PID, "no event on the null PID: %v", re)
 			continue
 		}

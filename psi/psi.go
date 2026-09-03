@@ -45,12 +45,14 @@ var ErrTableNotImplemented = errors.New("astits: table serialization is not impl
 
 var ErrSectionOverflow = errors.New("astits: section data does not fit a single section")
 
-// ISO/IEC 13818-1 §2.4.4.1: 12-bit field, capped at 1021 for PSI sections.
 const (
-	maxSectionLength    = 1021
-	psiSyntaxHeaderLen  = 5
-	crc32Len            = 4
-	sectionReservedBits = 0x30
+	// ISO/IEC 13818-1 §2.4.4.1; EN 300 468 caps NIT, BAT and SDT the same way.
+	maxSectionLength = 1021
+	// The private_section limit: EN 300 468 §5.2.4 (EIT), ISO/IEC 13818-1 §2.11 and §2.12.4.
+	maxPrivateSectionLength = 4093
+	psiSyntaxHeaderLen      = 5
+	crc32Len                = 4
+	sectionReservedBits     = 0x30
 )
 
 type TableID uint8
@@ -413,6 +415,18 @@ func (t TableID) hasPSISyntaxHeader() bool {
 		(t >= TableIDEITStart && t <= TableIDEITEnd)
 }
 
+// Write side only: the parser accepts whatever the 12-bit field holds.
+func (t TableID) MaxSectionLength() int {
+	switch {
+	case t == TableIDST, t == TableIDSIT, t == TableIDMetadata,
+		t == TableIDISO14496Scene, t == TableIDISO14496Object, t == TableIDISO14496,
+		t >= TableIDEITStart && t <= TableIDEITEnd,
+		t.IsUnknown():
+		return maxPrivateSectionLength
+	}
+	return maxSectionLength
+}
+
 func (t TableID) hasCRC32() bool {
 	return t.hasPSISyntaxHeader() || t == TableIDTOT || t == TableIDMetadata
 }
@@ -583,7 +597,7 @@ func parsePSISectionSyntaxData(i *bytesiter.Iterator, h *SectionHeader, sh *Sect
 
 func (d *Data) Append(dst []byte) ([]byte, error) {
 	dst = append(dst, uint8(d.PointerField))
-	for i := 0; i < d.PointerField; i++ {
+	for range d.PointerField {
 		dst = append(dst, 0x00)
 	}
 
@@ -626,8 +640,8 @@ func (s *Section) appendSection(dst []byte) ([]byte, error) {
 	if body != nil {
 		sectionLength = s.calcPSISectionLength(body)
 	}
-	if sectionLength > maxSectionLength {
-		return dst, fmt.Errorf("astits: section length %d exceeds %d: %w", sectionLength, maxSectionLength, ErrSectionOverflow)
+	if maxLength := s.Header.TableID.MaxSectionLength(); int(sectionLength) > maxLength {
+		return dst, fmt.Errorf("astits: section length %d exceeds %d: %w", sectionLength, maxLength, ErrSectionOverflow)
 	}
 	crcStart := len(dst)
 

@@ -29,10 +29,10 @@ func newDescriptorAC3(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descri
 
 	d := &AC3{
 		Header:           h,
-		HasASVC:          uint8(b&0x10) > 0,
-		HasBSID:          uint8(b&0x40) > 0,
-		HasComponentType: uint8(b&0x80) > 0,
-		HasMainID:        uint8(b&0x20) > 0,
+		HasASVC:          b&0x10 > 0,
+		HasBSID:          b&0x40 > 0,
+		HasComponentType: b&0x80 > 0,
+		HasMainID:        b&0x20 > 0,
 	}
 	dd = d
 

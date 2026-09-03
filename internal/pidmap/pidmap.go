@@ -10,9 +10,9 @@ type Map[V any] struct {
 	Keys []uint16
 	Vals []V
 
-	idx    []uint16 // len is a power of two: the probe mask depends on it.
-	shift  uint8    // 32 - log2(len(idx))
-	idxArr [inlineIndex]uint16
+	idx    []uint16            // len is a power of two: the probe mask depends on it.
+	shift  uint8               // 32 - log2(len(idx))
+	idxArr [inlineIndex]uint16 // idx may alias this array, so a populated Map must not be copied by value
 }
 
 func hash(key uint16, shift uint8) uint32 {
@@ -89,20 +89,23 @@ func (m *Map[V]) rebuild() {
 }
 
 func (m *Map[V]) Remove(key uint16) {
-	v := m.Get(key)
-	if v == nil {
+	if m.idx == nil {
 		return
 	}
-	i := 0
-	for j := range m.Vals {
-		if &m.Vals[j] == v {
-			i = j
-			break
+	mask := uint32(len(m.idx) - 1)
+	for s := hash(key, m.shift); ; s = (s + 1) & mask {
+		p := m.idx[s]
+		if p == posNone {
+			return
+		}
+		if m.Keys[p-1] == key {
+			i := int(p - 1)
+			m.Keys = append(m.Keys[:i], m.Keys[i+1:]...)
+			m.Vals = append(m.Vals[:i], m.Vals[i+1:]...)
+			m.rebuild()
+			return
 		}
 	}
-	m.Keys = append(m.Keys[:i], m.Keys[i+1:]...)
-	m.Vals = append(m.Vals[:i], m.Vals[i+1:]...)
-	m.rebuild()
 }
 
 // Vals is cleared so nothing it referenced stays alive.

@@ -40,12 +40,14 @@ type pidSlot struct {
 	sticky  uint8
 	started bool
 	isPSI   bool
+	sawPES  bool
 	packets uint64
 }
 
 type accumulator struct {
 	slots      pidmap.Map[pidSlot]
 	programMap *pidmap.Map[uint16]
+	nextMap    pidmap.Map[uint16]
 
 	// lastSlot points into slots.Vals: reassign it after any GetOrAdd, which may reallocate.
 	lastPID   uint16
@@ -63,6 +65,7 @@ const packetPoolPreallocPIDs = 8
 
 func (a *accumulator) init(programMap *pidmap.Map[uint16], dvbTables bool, report func(ts.RecoverableError), maxPES, maxPSI int) {
 	a.slots = pidmap.Map[pidSlot]{Keys: a.keysArr[:0], Vals: a.valsArr[:0]}
+	a.nextMap = pidmap.Map[uint16]{}
 	a.lastSlot = nil
 	a.programMap = programMap
 	a.report = report
@@ -72,22 +75,33 @@ func (a *accumulator) init(programMap *pidmap.Map[uint16], dvbTables bool, repor
 }
 
 type unit struct {
-	buf         *dataPayload
-	af          *ts.PacketAdaptationField
-	firstOffset int64
-	lastOffset  int64
-	firstTag    uint64
-	lastTag     uint64
-	cc          uint8
-	pid         uint16
-	isPSI       bool
-	truncated   bool
+	buf *dataPayload
+	af  *ts.PacketAdaptationField
+	PacketSpan
+	cc        uint8
+	pid       uint16
+	isPSI     bool
+	truncated bool
 }
 
-func (a *accumulator) isPSIPID(pid uint16) bool {
-	return pid == ts.PIDPAT ||
+const (
+	dvbSIFirstPID = 0x10
+	dvbSILastPID  = 0x14
+	dvbDITPID     = 0x1e
+	dvbSITPID     = 0x1f
+)
+
+// An announced PAT (nextMap) may not claim a PID that already delivered elementary-stream units.
+func (a *accumulator) isPSIPID(slot *pidSlot, pid uint16) bool {
+	return pid <= ts.PIDTSDT ||
 		a.programMap.Has(pid) ||
-		(a.dvbTables && (pid == ts.PIDCAT || pid == ts.PIDTSDT || (pid >= 0x10 && pid <= 0x14) || (pid >= 0x1e && pid <= 0x1f)))
+		(a.dvbTables && ((pid >= dvbSIFirstPID && pid <= dvbSILastPID) || pid == dvbDITPID || pid == dvbSITPID)) ||
+		(!slot.sawPES && a.nextMap.Has(pid))
+}
+
+func (a *accumulator) startUnit(slot *pidSlot, p *ts.Packet) {
+	isPSI := a.isPSIPID(slot, p.Header.PID)
+	slot.start(p, isPSI, a.limitOf(isPSI))
 }
 
 // One packet can yield two units: the start indicator closes the previous one and the section it opens can complete in the same packet.
@@ -113,7 +127,7 @@ func (a *accumulator) add(p *ts.Packet, out []unit) []unit {
 			if p.Header.TransportErrorIndicator {
 				reason = ts.ErrTransportError
 			}
-			a.tear(slot, p.Header.PID, p.Offset, reason, 0)
+			a.tear(slot, p.Header.PID, p.Offset, reason, len(p.Payload))
 			return out
 		}
 		if slot.started {
@@ -141,24 +155,34 @@ func (a *accumulator) add(p *ts.Packet, out []unit) []unit {
 		return out
 	}
 	slot.lastWasDup = false
-	if slot.started && !jumpAllowed && p.Header.ContinuityCounter != (slot.lastCC+1)%16 {
+	if slot.seenPacket && !jumpAllowed && p.Header.ContinuityCounter != (slot.lastCC+1)%16 {
 		reason := ts.ErrContinuityGap
 		if discontinuity {
 			reason = ts.ErrDiscontinuity
 		}
-		a.tear(slot, p.Header.PID, p.Offset, reason, 0)
+		if slot.started {
+			a.tear(slot, p.Header.PID, p.Offset, reason, 0)
+		} else if a.report != nil {
+			// A PSI PID closes its unit in every packet, so a gap between two whole units loses no bytes and still breaks the counter.
+			a.report(ts.RecoverableError{
+				Kind: ts.ErrorKindContinuity, PID: p.Header.PID, Offset: p.Offset, Err: reason,
+			})
+		}
 	}
 
 	if p.Header.PayloadUnitStartIndicator {
 		if slot.started {
+			if slot.isPSI {
+				a.carrySectionTail(slot, p)
+			}
 			if u, ok := a.finish(slot, p.Header.PID, p.Offset); ok {
 				out = append(out, u)
 			}
 		}
-		slot.start(p, a.isPSIPID(p.Header.PID))
+		a.startUnit(slot, p)
 	} else if !slot.started {
 		// A headless prefix (joined mid-unit) accumulates too; the parse stage rejects it if it is garbage.
-		slot.start(p, a.isPSIPID(p.Header.PID))
+		a.startUnit(slot, p)
 	}
 	// After finish/start: a tear inside finish clears seenPacket, and the
 	// unit this packet opens must still see its own repeat
@@ -166,7 +190,7 @@ func (a *accumulator) add(p *ts.Packet, out []unit) []unit {
 	slot.seenPacket = true
 
 	if need := len(slot.buf.bs) + len(p.Payload); need > cap(slot.buf.bs) {
-		if overLimit(need, a.limitFor(slot)) {
+		if overLimit(need, a.limitOf(slot.isPSI)) {
 			a.tear(slot, p.Header.PID, p.Offset, ts.ErrUnitTooLarge, len(p.Payload))
 			return out
 		}
@@ -185,6 +209,26 @@ func (a *accumulator) add(p *ts.Packet, out []unit) []unit {
 	return out
 }
 
+// §2.4.4.2: the bytes ahead of pointer_field finish the section the previous packet left open, and stay at the head of the new unit too, where pointer_field skips them.
+func (a *accumulator) carrySectionTail(slot *pidSlot, p *ts.Packet) {
+	payload := p.Payload
+	if len(payload) == 0 {
+		return
+	}
+	end := 1 + int(payload[0])
+	if end <= 1 || end > len(payload) {
+		return
+	}
+	if need := len(slot.buf.bs) + end - 1; need > cap(slot.buf.bs) {
+		if overLimit(need, a.limitOf(slot.isPSI)) {
+			return
+		}
+		slot.grow(need)
+	}
+	slot.buf.bs = append(slot.buf.bs, payload[1:end]...)
+	slot.lastOffset, slot.lastTag = p.Offset, p.Tag
+}
+
 // lastLen must still describe the buffer tail: never call after appending the repeat.
 func (a *accumulator) checkDuplicate(slot *pidSlot, p *ts.Packet) {
 	if a.report == nil || !slot.started || slot.lastLen == 0 || slot.lastLen > len(slot.buf.bs) {
@@ -198,8 +242,8 @@ func (a *accumulator) checkDuplicate(slot *pidSlot, p *ts.Packet) {
 	}
 }
 
-func (a *accumulator) limitFor(slot *pidSlot) int {
-	if slot.isPSI {
+func (a *accumulator) limitOf(isPSI bool) int {
+	if isPSI {
 		return a.maxPSI
 	}
 	return a.maxPES
@@ -213,7 +257,7 @@ func (a *accumulator) finish(slot *pidSlot, pid uint16, offset int64) (u unit, o
 	if !slot.started {
 		return
 	}
-	if overLimit(len(slot.buf.bs), a.limitFor(slot)) {
+	if overLimit(len(slot.buf.bs), a.limitOf(slot.isPSI)) {
 		a.tear(slot, pid, offset, ts.ErrUnitTooLarge, 0)
 		return
 	}
@@ -234,7 +278,7 @@ func (a *accumulator) tear(slot *pidSlot, pid uint16, offset int64, reason error
 	slot.seenPacket = false
 }
 
-func (s *pidSlot) start(p *ts.Packet, isPSI bool) {
+func (s *pidSlot) start(p *ts.Packet, isPSI bool, limit int) {
 	s.started = true
 	s.isPSI = isPSI
 	s.firstCC = p.Header.ContinuityCounter
@@ -250,7 +294,11 @@ func (s *pidSlot) start(p *ts.Packet, isPSI bool) {
 	}
 
 	if s.buf == nil {
-		s.buf = poolOfPayload.getClass(s.classFor(p.Payload, isPSI))
+		class := s.classFor(p.Payload, isPSI)
+		if limit > 0 {
+			class = min(class, classOf(limit))
+		}
+		s.buf = poolOfPayload.getClass(class)
 	}
 	s.buf.bs = s.buf.bs[:0]
 }
@@ -282,7 +330,13 @@ func (s *pidSlot) flush(pid uint16) (u unit, ok bool) {
 		return
 	}
 	s.sticky = maxClass(s.sticky, classOf(len(s.buf.bs)))
-	u = unit{buf: s.buf, cc: s.firstCC, pid: pid, isPSI: s.isPSI, firstOffset: s.firstOffset, lastOffset: s.lastOffset, firstTag: s.firstTag, lastTag: s.lastTag}
+	if !s.isPSI {
+		s.sawPES = true
+	}
+	u = unit{buf: s.buf, cc: s.firstCC, pid: pid, isPSI: s.isPSI, PacketSpan: PacketSpan{
+		FirstPacketOffset: s.firstOffset, LastPacketOffset: s.lastOffset,
+		FirstPacketTag: s.firstTag, LastPacketTag: s.lastTag,
+	}}
 	if s.hasAF {
 		u.af = &s.af[s.afIdx]
 	}

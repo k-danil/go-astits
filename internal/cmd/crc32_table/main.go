@@ -36,7 +36,7 @@ func slicingTables() (t [tables][256]uint32) {
 			if (k^j)&0x80000000 != 0 {
 				k = (k << 1) ^ polynomial
 			} else {
-				k = k << 1
+				k <<= 1
 			}
 		}
 		t[0][i] = k

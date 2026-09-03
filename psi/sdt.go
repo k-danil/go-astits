@@ -91,9 +91,9 @@ func parseSDTSection(i *bytesiter.Iterator, offsetSectionsEnd int, tableIDExtens
 			return
 		}
 
-		s.HasEITSchedule = uint8(b&0x2) > 0
+		s.HasEITSchedule = b&0x2 > 0
 
-		s.HasEITPresentFollowing = uint8(b&0x1) > 0
+		s.HasEITPresentFollowing = b&0x1 > 0
 
 		if b, err = i.NextByte(); err != nil {
 			err = fmt.Errorf("astits: fetching next byte failed: %w", err)
@@ -102,7 +102,7 @@ func parseSDTSection(i *bytesiter.Iterator, offsetSectionsEnd int, tableIDExtens
 
 		s.RunningStatus = RunningStatus(b >> 5)
 
-		s.HasFreeCSAMode = uint8(b&0x10) > 0
+		s.HasFreeCSAMode = b&0x10 > 0
 
 		// The low bits of this byte are descriptors_loop_length; rewind for descriptor.Parse.
 		i.Skip(-1)

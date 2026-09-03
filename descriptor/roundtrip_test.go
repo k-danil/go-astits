@@ -99,7 +99,7 @@ var roundtripGenerators = map[string]func(r *rand.Rand) Descriptor{
 	},
 	"Content": func(r *rand.Rand) Descriptor {
 		d := &Content{Header: Header{Tag: TagContent}}
-		for i := uint(0); i < 1+r.UintN(5); i++ {
+		for range 1 + r.UintN(5) {
 			d.Items = append(d.Items, ContentItem{
 				ContentNibbleLevel1: uint8(r.UintN(16)),
 				ContentNibbleLevel2: uint8(r.UintN(16)),
@@ -114,7 +114,7 @@ var roundtripGenerators = map[string]func(r *rand.Rand) Descriptor{
 		d := &ExtendedEvent{Header: Header{Tag: TagExtendedEvent},
 			Number: uint8(r.UintN(16)), LastDescriptorNumber: uint8(r.UintN(16)),
 			ISO639LanguageCode: randLang(r), Text: randBytes(r, int(r.UintN(16)))}
-		for i := uint(0); i < r.UintN(3); i++ {
+		for range r.UintN(3) {
 			d.Items = append(d.Items, ExtendedEventItem{
 				Description: randBytes(r, int(r.UintN(10))),
 				Content:     randBytes(r, int(r.UintN(10)))})
@@ -134,14 +134,14 @@ var roundtripGenerators = map[string]func(r *rand.Rand) Descriptor{
 	},
 	"ISO639": func(r *rand.Rand) Descriptor {
 		d := &ISO639LanguageAndAudioType{Header: Header{Tag: TagISO639LanguageAndAudioType}}
-		for i := uint(0); i < 1+r.UintN(4); i++ {
+		for range 1 + r.UintN(4) {
 			d.Items = append(d.Items, ISO639Item{Language: randLang(r), Type: AudioType(r.UintN(256))})
 		}
 		return d
 	},
 	"LocalTimeOffset": func(r *rand.Rand) Descriptor {
 		d := &LocalTimeOffset{Header: Header{Tag: TagLocalTimeOffset}}
-		for i := uint(0); i < 1+r.UintN(3); i++ {
+		for range 1 + r.UintN(3) {
 			d.Items = append(d.Items, LocalTimeOffsetItem{
 				CountryCode:             randLang(r),
 				CountryRegionID:         uint8(r.UintN(64)),
@@ -160,7 +160,7 @@ var roundtripGenerators = map[string]func(r *rand.Rand) Descriptor{
 	},
 	"ParentalRating": func(r *rand.Rand) Descriptor {
 		d := &ParentalRating{Header: Header{Tag: TagParentalRating}}
-		for i := uint(0); i < 1+r.UintN(4); i++ {
+		for range 1 + r.UintN(4) {
 			d.Items = append(d.Items, ParentalRatingItem{CountryCode: randLang(r), Rating: uint8(r.UintN(256))})
 		}
 		return d
@@ -188,7 +188,7 @@ var roundtripGenerators = map[string]func(r *rand.Rand) Descriptor{
 	},
 	"Subtitling": func(r *rand.Rand) Descriptor {
 		d := &Subtitling{Header: Header{Tag: TagSubtitling}}
-		for i := uint(0); i < 1+r.UintN(4); i++ {
+		for range 1 + r.UintN(4) {
 			d.Items = append(d.Items, SubtitlingItem{Language: randLang(r), Type: uint8(r.UintN(256)),
 				CompositionPageID: uint16(r.UintN(1 << 16)), AncillaryPageID: uint16(r.UintN(1 << 16))})
 		}
@@ -196,7 +196,7 @@ var roundtripGenerators = map[string]func(r *rand.Rand) Descriptor{
 	},
 	"Teletext": func(r *rand.Rand) Descriptor {
 		d := &Teletext{Header: Header{Tag: TagTeletext}}
-		for i := uint(0); i < 1+r.UintN(4); i++ {
+		for range 1 + r.UintN(4) {
 			d.Items = append(d.Items, TeletextItem{Language: randLang(r), Type: TeletextType(r.UintN(32)),
 				Magazine: uint8(r.UintN(8)), Page: uint8(r.UintN(256))})
 		}
@@ -210,14 +210,14 @@ var roundtripGenerators = map[string]func(r *rand.Rand) Descriptor{
 	},
 	"VBIData": func(r *rand.Rand) Descriptor {
 		d := &VBIData{Header: Header{Tag: TagVBIData}}
-		for i := uint(0); i < 1+r.UintN(3); i++ {
+		for range 1 + r.UintN(3) {
 			if r.UintN(2) == 0 { // reserved service: opaque payload
 				d.Services = append(d.Services, VBIDataService{
 					DataServiceID: VBIDataServiceID(0x08 + r.UintN(0xf8)), Reserved: randBytes(r, int(r.UintN(8)))})
 				continue
 			}
 			svc := VBIDataService{DataServiceID: VBIDataServiceIDEBUTeletext}
-			for j := uint(0); j < 1+r.UintN(3); j++ {
+			for range 1 + r.UintN(3) {
 				svc.Descriptors = append(svc.Descriptors, VBIDataDescriptor{
 					FieldParity: r.UintN(2) == 1, LineOffset: uint8(r.UintN(32))})
 			}
@@ -230,21 +230,21 @@ var roundtripGenerators = map[string]func(r *rand.Rand) Descriptor{
 	},
 	"CAIdentifier": func(r *rand.Rand) Descriptor {
 		d := &CAIdentifier{Header: Header{Tag: TagCAIdentifier}}
-		for i := uint(0); i < 1+r.UintN(4); i++ {
+		for range 1 + r.UintN(4) {
 			d.SystemIDs = append(d.SystemIDs, uint16(r.UintN(1<<16)))
 		}
 		return d
 	},
 	"CountryAvailability": func(r *rand.Rand) Descriptor {
 		d := &CountryAvailability{Header: Header{Tag: TagCountryAvailability}, AvailabilityFlag: r.UintN(2) == 1}
-		for i := uint(0); i < 1+r.UintN(4); i++ {
+		for range 1 + r.UintN(4) {
 			d.Countries = append(d.Countries, randLang(r))
 		}
 		return d
 	},
 	"ServiceList": func(r *rand.Rand) Descriptor {
 		d := &ServiceList{Header: Header{Tag: TagServiceList}}
-		for i := uint(0); i < 1+r.UintN(5); i++ {
+		for range 1 + r.UintN(5) {
 			d.Items = append(d.Items, ServiceListItem{
 				ServiceID: uint16(r.UintN(1 << 16)), ServiceType: uint8(r.UintN(256))})
 		}
@@ -258,7 +258,7 @@ var roundtripGenerators = map[string]func(r *rand.Rand) Descriptor{
 	},
 	"ServiceAvailability": func(r *rand.Rand) Descriptor {
 		d := &ServiceAvailability{Header: Header{Tag: TagServiceAvailability}, AvailabilityFlag: r.UintN(2) == 1}
-		for i := uint(0); i < 1+r.UintN(4); i++ {
+		for range 1 + r.UintN(4) {
 			d.CellIDs = append(d.CellIDs, uint16(r.UintN(1<<16)))
 		}
 		return d
@@ -295,7 +295,7 @@ var roundtripGenerators = map[string]func(r *rand.Rand) Descriptor{
 	},
 	"NVODReference": func(r *rand.Rand) Descriptor {
 		d := &NVODReference{Header: Header{Tag: TagNVODReference}}
-		for i := uint(0); i < 1+r.UintN(4); i++ {
+		for range 1 + r.UintN(4) {
 			d.Items = append(d.Items, NVODReferenceItem{
 				TransportStreamID: uint16(r.UintN(1 << 16)),
 				OriginalNetworkID: uint16(r.UintN(1 << 16)),
@@ -331,7 +331,7 @@ var roundtripGenerators = map[string]func(r *rand.Rand) Descriptor{
 	},
 	"FrequencyList": func(r *rand.Rand) Descriptor {
 		d := &FrequencyList{Header: Header{Tag: TagFrequencyList}, CodingType: uint8(r.UintN(4))}
-		for i := uint(0); i < 1+r.UintN(4); i++ {
+		for range 1 + r.UintN(4) {
 			d.Frequencies = append(d.Frequencies, r.Uint32())
 		}
 		return d
@@ -343,7 +343,7 @@ var roundtripGenerators = map[string]func(r *rand.Rand) Descriptor{
 	},
 	"MultilingualNetworkName": func(r *rand.Rand) Descriptor {
 		d := &MultilingualNetworkName{Header: Header{Tag: TagMultilingualNetworkName}}
-		for i := uint(0); i < 1+r.UintN(3); i++ {
+		for range 1 + r.UintN(3) {
 			d.Items = append(d.Items, MultilingualNetworkNameItem{
 				Language: randLang(r), Name: randBytes(r, int(r.UintN(16)))})
 		}
@@ -351,7 +351,7 @@ var roundtripGenerators = map[string]func(r *rand.Rand) Descriptor{
 	},
 	"MultilingualBouquetName": func(r *rand.Rand) Descriptor {
 		d := &MultilingualBouquetName{Header: Header{Tag: TagMultilingualBouquetName}}
-		for i := uint(0); i < 1+r.UintN(3); i++ {
+		for range 1 + r.UintN(3) {
 			d.Items = append(d.Items, MultilingualBouquetNameItem{
 				Language: randLang(r), Name: randBytes(r, int(r.UintN(16)))})
 		}
@@ -359,7 +359,7 @@ var roundtripGenerators = map[string]func(r *rand.Rand) Descriptor{
 	},
 	"MultilingualComponent": func(r *rand.Rand) Descriptor {
 		d := &MultilingualComponent{Header: Header{Tag: TagMultilingualComponent}, ComponentTag: uint8(r.UintN(256))}
-		for i := uint(0); i < 1+r.UintN(3); i++ {
+		for range 1 + r.UintN(3) {
 			d.Items = append(d.Items, MultilingualComponentItem{
 				Language: randLang(r), Description: randBytes(r, int(r.UintN(16)))})
 		}
@@ -367,7 +367,7 @@ var roundtripGenerators = map[string]func(r *rand.Rand) Descriptor{
 	},
 	"MultilingualServiceName": func(r *rand.Rand) Descriptor {
 		d := &MultilingualServiceName{Header: Header{Tag: TagMultilingualServiceName}}
-		for i := uint(0); i < 1+r.UintN(3); i++ {
+		for range 1 + r.UintN(3) {
 			d.Items = append(d.Items, MultilingualServiceNameItem{
 				Language: randLang(r), Provider: randBytes(r, int(r.UintN(12))), Name: randBytes(r, int(r.UintN(12)))})
 		}
@@ -381,7 +381,7 @@ var roundtripGenerators = map[string]func(r *rand.Rand) Descriptor{
 	},
 	"AnnouncementSupport": func(r *rand.Rand) Descriptor {
 		d := &AnnouncementSupport{Header: Header{Tag: TagAnnouncementSupport}, SupportIndicator: uint16(r.UintN(1 << 16))}
-		for i := uint(0); i < 1+r.UintN(4); i++ {
+		for range 1 + r.UintN(4) {
 			d.Announcements = append(d.Announcements, AnnouncementSupportItem{
 				AnnouncementType: AnnouncementType(r.UintN(16)), ReferenceType: AnnouncementReference(r.UintN(8)),
 				OriginalNetworkID: uint16(r.UintN(1 << 16)), TransportStreamID: uint16(r.UintN(1 << 16)),
@@ -391,9 +391,9 @@ var roundtripGenerators = map[string]func(r *rand.Rand) Descriptor{
 	},
 	"CellFrequencyLink": func(r *rand.Rand) Descriptor {
 		d := &CellFrequencyLink{Header: Header{Tag: TagCellFrequencyLink}}
-		for i := uint(0); i < 1+r.UintN(3); i++ {
+		for range 1 + r.UintN(3) {
 			cell := CellFrequencyLinkCell{CellID: uint16(r.UintN(1 << 16)), Frequency: r.Uint32()}
-			for j := uint(0); j < r.UintN(3); j++ {
+			for range r.UintN(3) {
 				cell.Subcells = append(cell.Subcells, CellFrequencyLinkSubcell{
 					CellIDExtension: uint8(r.UintN(256)), TransposerFrequency: r.Uint32()})
 			}
@@ -403,11 +403,11 @@ var roundtripGenerators = map[string]func(r *rand.Rand) Descriptor{
 	},
 	"CellList": func(r *rand.Rand) Descriptor {
 		d := &CellList{Header: Header{Tag: TagCellList}}
-		for i := uint(0); i < 1+r.UintN(3); i++ {
+		for range 1 + r.UintN(3) {
 			cell := CellListCell{CellID: uint16(r.UintN(1 << 16)),
 				CellLatitude: uint16(r.UintN(1 << 16)), CellLongitude: uint16(r.UintN(1 << 16)),
 				CellExtentOfLatitude: uint16(r.UintN(1 << 12)), CellExtentOfLongitude: uint16(r.UintN(1 << 12))}
-			for j := uint(0); j < r.UintN(3); j++ {
+			for range r.UintN(3) {
 				cell.Subcells = append(cell.Subcells, CellListSubcell{
 					CellIDExtension: uint8(r.UintN(256)),
 					SubcellLatitude: uint16(r.UintN(1 << 16)), SubcellLongitude: uint16(r.UintN(1 << 16)),
@@ -451,7 +451,7 @@ var roundtripGenerators = map[string]func(r *rand.Rand) Descriptor{
 	},
 	"ext.CPIdentifier": func(r *rand.Rand) Descriptor {
 		e := &ext.CPIdentifier{}
-		for i := uint(0); i < 1+r.UintN(4); i++ {
+		for range 1 + r.UintN(4) {
 			e.SystemIDs = append(e.SystemIDs, uint16(r.UintN(1<<16)))
 		}
 		return &Extension{Header: Header{Tag: TagExtension}, Body: e}
@@ -464,7 +464,7 @@ var roundtripGenerators = map[string]func(r *rand.Rand) Descriptor{
 	},
 	"ext.C2BundleDeliverySystem": func(r *rand.Rand) Descriptor {
 		e := &ext.C2BundleDeliverySystem{}
-		for i := uint(0); i < 1+r.UintN(3); i++ {
+		for range 1 + r.UintN(3) {
 			e.Entries = append(e.Entries, ext.C2BundleEntry{
 				PLPID: uint8(r.UintN(256)), DataSliceID: uint8(r.UintN(256)),
 				C2SystemTuningFrequency: r.Uint32(), C2SystemTuningFrequencyType: uint8(r.UintN(4)),
@@ -475,7 +475,7 @@ var roundtripGenerators = map[string]func(r *rand.Rand) Descriptor{
 	},
 	"ext.SHDeliverySystem": func(r *rand.Rand) Descriptor {
 		sh := &ext.SHDeliverySystem{DiversityMode: uint8(r.UintN(16))}
-		for i := uint(0); i < 1+r.UintN(3); i++ {
+		for range 1 + r.UintN(3) {
 			sh.Modulations = append(sh.Modulations, ext.SHModulation{
 				ModulationType: uint8(r.UintN(2)), InterleaverPresence: r.UintN(2) == 1, InterleaverType: r.UintN(2) == 1,
 				Polarization: uint8(r.UintN(4)), RollOff: uint8(r.UintN(4)), ModulationMode: uint8(r.UintN(4)),
@@ -505,16 +505,16 @@ var roundtripGenerators = map[string]func(r *rand.Rand) Descriptor{
 			t2.TransmissionMode = uint8(r.UintN(8))
 			t2.OtherFrequencyFlag = r.UintN(2) == 1
 			t2.TFSFlag = r.UintN(2) == 1
-			for i := uint(0); i < 1+r.UintN(3); i++ {
+			for range 1 + r.UintN(3) {
 				cell := ext.T2Cell{CellID: uint16(r.UintN(1 << 16))}
 				freqs := uint(1)
 				if t2.TFSFlag {
 					freqs = 1 + r.UintN(3)
 				}
-				for j := uint(0); j < freqs; j++ {
+				for range freqs {
 					cell.CentreFrequencies = append(cell.CentreFrequencies, r.Uint32())
 				}
-				for j := uint(0); j < r.UintN(3); j++ {
+				for range r.UintN(3) {
 					cell.Subcells = append(cell.Subcells, ext.T2Subcell{
 						CellIDExtension: uint8(r.UintN(256)), TransposerFrequency: r.Uint32()})
 				}
@@ -541,7 +541,7 @@ var roundtripGenerators = map[string]func(r *rand.Rand) Descriptor{
 	},
 	"ext.TargetRegion": func(r *rand.Rand) Descriptor {
 		tr := &ext.TargetRegion{CountryCode: randLang(r)}
-		for i := uint(0); i < 1+r.UintN(3); i++ {
+		for range 1 + r.UintN(3) {
 			tr.Regions = append(tr.Regions, ext.Region{
 				CountryCodeFlag: r.UintN(2) == 1, CountryCode: randLang(r), RegionDepth: uint8(r.UintN(4)),
 				PrimaryRegionCode: uint8(r.UintN(256)), SecondaryRegionCode: uint8(r.UintN(256)),
@@ -551,7 +551,7 @@ var roundtripGenerators = map[string]func(r *rand.Rand) Descriptor{
 	},
 	"ext.TargetRegionName": func(r *rand.Rand) Descriptor {
 		tr := &ext.TargetRegionName{CountryCode: randLang(r), Language: randLang(r)}
-		for i := uint(0); i < 1+r.UintN(3); i++ {
+		for range 1 + r.UintN(3) {
 			tr.Regions = append(tr.Regions, ext.NamedRegion{
 				RegionDepth: uint8(1 + r.UintN(3)), RegionName: randBytes(r, int(r.UintN(16))),
 				PrimaryRegionCode: uint8(r.UintN(256)), SecondaryRegionCode: uint8(r.UintN(256)),
@@ -573,7 +573,7 @@ var roundtripGenerators = map[string]func(r *rand.Rand) Descriptor{
 	},
 	"ext.VideoDepthRange": func(r *rand.Rand) Descriptor {
 		vd := &ext.VideoDepthRange{}
-		for i := uint(0); i < 1+r.UintN(3); i++ {
+		for range 1 + r.UintN(3) {
 			rng := ext.DepthRange{RangeType: ext.VideoDepthRangeType(r.UintN(4))}
 			switch rng.RangeType {
 			case 0:
@@ -609,7 +609,7 @@ var roundtripGenerators = map[string]func(r *rand.Rand) Descriptor{
 			}
 			s := &ext.DTSHDSubstream{ChannelCount: uint8(r.UintN(32)), SamplingFrequency: uint8(r.UintN(16)),
 				LFEFlag: r.UintN(2) == 1, SampleResolution: r.UintN(2) == 1}
-			for i := uint(0); i < 1+r.UintN(4); i++ {
+			for range 1 + r.UintN(4) {
 				a := ext.DTSHDAsset{AssetConstruction: uint8(r.UintN(32)), BitRate: uint16(r.UintN(1 << 13)),
 					VBRFlag: r.UintN(2) == 1, PostEncodeBRScalingFlag: r.UintN(2) == 1,
 					ComponentTypeFlag: r.UintN(2) == 1, LanguageCodeFlag: r.UintN(2) == 1,
@@ -623,9 +623,9 @@ var roundtripGenerators = map[string]func(r *rand.Rand) Descriptor{
 	},
 	"ext.NetworkChangeNotify": func(r *rand.Rand) Descriptor {
 		ncn := &ext.NetworkChangeNotify{}
-		for i := uint(0); i < 1+r.UintN(2); i++ {
+		for range 1 + r.UintN(2) {
 			cell := ext.NetworkChangeCell{CellID: uint16(r.UintN(1 << 16))}
-			for j := uint(0); j < 1+r.UintN(2); j++ {
+			for range 1 + r.UintN(2) {
 				cell.Changes = append(cell.Changes, ext.NetworkChange{
 					NetworkChangeID: uint8(r.UintN(256)), NetworkChangeVersion: uint8(r.UintN(256)),
 					StartTimeOfChange: r.Uint64N(1 << 40), ChangeDuration: uint32(r.UintN(1 << 24)),
@@ -657,14 +657,14 @@ var roundtripGenerators = map[string]func(r *rand.Rand) Descriptor{
 	"Mosaic": func(r *rand.Rand) Descriptor {
 		d := &Mosaic{Header: Header{Tag: TagMosaic}, MosaicEntryPoint: r.UintN(2) == 1,
 			NumberOfHorizontalElementaryCells: uint8(r.UintN(8)), NumberOfVerticalElementaryCells: uint8(r.UintN(8))}
-		for i := uint(0); i < 1+r.UintN(3); i++ {
+		for range 1 + r.UintN(3) {
 			cell := MosaicCell{
 				LogicalCellID: uint8(r.UintN(64)), LogicalCellPresentationInfo: uint8(r.UintN(8)),
 				CellLinkageInfo: MosaicCellLinkage(r.UintN(5)),
 				BouquetID:       uint16(r.UintN(1 << 16)), OriginalNetworkID: uint16(r.UintN(1 << 16)),
 				TransportStreamID: uint16(r.UintN(1 << 16)), ServiceID: uint16(r.UintN(1 << 16)),
 				EventID: uint16(r.UintN(1 << 16))}
-			for j := uint(0); j < 1+r.UintN(3); j++ {
+			for range 1 + r.UintN(3) {
 				cell.ElementaryCellIDs = append(cell.ElementaryCellIDs, uint8(r.UintN(64)))
 			}
 			d.Cells = append(d.Cells, cell)
@@ -770,7 +770,7 @@ var roundtripGenerators = map[string]func(r *rand.Rand) Descriptor{
 	},
 	"FMC": func(r *rand.Rand) Descriptor {
 		d := &FMC{Header: Header{Tag: TagFMC}}
-		for i := uint(0); i < 1+r.UintN(5); i++ {
+		for range 1 + r.UintN(5) {
 			d.Entries = append(d.Entries, FMCEntry{
 				ESID:           uint16(r.UintN(1 << 16)),
 				FlexMuxChannel: uint8(r.UintN(256)),
@@ -1103,7 +1103,7 @@ func TestRoundtripDescriptors(t *testing.T) {
 	for name, gen := range roundtripGenerators {
 		t.Run(name, func(t *testing.T) {
 			r := rand.New(rand.NewPCG(5, 6))
-			for i := 0; i < 200; i++ {
+			for i := range 200 {
 				d := gen(r)
 				b1 := AppendWithLength(nil, []Descriptor{d})
 

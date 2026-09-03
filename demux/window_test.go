@@ -3,7 +3,6 @@ package demux
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"testing"
 
@@ -44,7 +43,7 @@ func TestDemuxerEventsIndependentOfWindow(t *testing.T) {
 		for ev, err := range dmx.Events() {
 			if err != nil {
 				var re *ts.RecoverableError
-				require.True(t, errors.As(err, &re), "window %d: %v", window, err)
+				require.ErrorAs(t, err, &re, "window %d: %v", window, err)
 				out = append(out, fmt.Sprintf("err %s pid=%d off=%d dropped=%d", re.Kind, re.PID, re.Offset, re.Dropped))
 				continue
 			}

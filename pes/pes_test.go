@@ -272,11 +272,10 @@ var pesTestCases = []pesTestCase{
 			_ = w.Write("111")                      // Dummy
 			_ = w.Write("1")                        // Extension 2 flag
 			_ = w.Write([]byte("1234567890123456")) // Private data
-			//w.Write(uint8(5))                   // Pack field
-			_ = w.Write("1101010111010101")   // Packet sequence counter
-			_ = w.Write("0111010101010101")   // PSTD buffer
-			_ = w.Write("10001010")           // Extension 2 header
-			_ = w.Write([]byte("extension2")) // Extension 2 data
+			_ = w.Write("1101010111010101")         // Packet sequence counter
+			_ = w.Write("0111010101010101")         // PSTD buffer
+			_ = w.Write("10001010")                 // Extension 2 header
+			_ = w.Write([]byte("extension2"))       // Extension 2 data
 			if withStuffing {
 				_ = w.Write(stuffing) // Optional header stuffing bytes
 			}
@@ -357,7 +356,7 @@ func TestParsePESData(t *testing.T) {
 			tc.bytesFunc(w, true, true)
 			d := &Data{}
 			err := d.Parse(buf.Bytes())
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Equal(t, embedPESFixture(tc.pesData), d)
 		})
 	}
@@ -386,7 +385,7 @@ func TestWritePESData(t *testing.T) {
 					tc.pesData.Data[payloadPos:],
 					start,
 				)
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				start = false
 
 				bufActual.Write(scratch[:n])
@@ -408,7 +407,7 @@ func BenchmarkWritePESHeader(b *testing.B) {
 		wh := tc.pesData.Header
 		b.Run(tc.name, func(b *testing.B) {
 			b.ReportAllocs()
-			for i := 0; i < b.N; i++ {
+			for b.Loop() {
 				_, _ = wh.putBytes(bs, len(tc.pesData.Data))
 			}
 		})
@@ -431,7 +430,7 @@ func BenchmarkParsePESData(b *testing.B) {
 	for ti, tc := range pesTestCases {
 		b.Run(tc.name, func(b *testing.B) {
 			b.ReportAllocs()
-			for i := 0; i < b.N; i++ {
+			for b.Loop() {
 				_ = d.Parse(bss[ti])
 				*d = Data{}
 			}

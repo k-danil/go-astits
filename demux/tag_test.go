@@ -51,6 +51,34 @@ func (r *frameTagger) Buffered() int { return r.frameEnd() - r.pos }
 func (r *frameTagger) Size() int     { return r.frame }
 func (r *frameTagger) Tag() uint64   { return uint64(r.pos/r.frame) + 1 }
 
+// A cached repeat reports the packets it arrived on, not the cached copy's.
+func TestSectionSpanFollowsRepeats(t *testing.T) {
+	const frameBytes = 3 * ts.PacketSize
+	sec := patSection(0, true, 0x100)
+	raw := psiPacket(ts.PIDPAT, 0, sec)
+	raw = append(raw, payloadPacket(ts.PIDNull, 0, false, nil)...)
+	raw = append(raw, payloadPacket(ts.PIDNull, 1, false, nil)...)
+	raw = append(raw, psiPacket(ts.PIDPAT, 1, sec)...)
+
+	dmx := New(context.Background(), &frameTagger{data: raw, frame: frameBytes},
+		WithPacketSize(ts.PacketSize), WithPSIRepeats())
+	defer dmx.Close()
+
+	var spans []PacketSpan
+	var changed []bool
+	for ev, err := range dmx.Events() {
+		require.NoError(t, err)
+		require.Equal(t, EventPAT, ev)
+		spans = append(spans, dmx.SectionSpan())
+		changed = append(changed, dmx.TableChanged())
+	}
+	require.Equal(t, []bool{true, false}, changed, "the second arrival is served from the cache")
+	assert.Equal(t, []PacketSpan{
+		{FirstPacketTag: 1, LastPacketTag: 1},
+		{FirstPacketOffset: frameBytes, LastPacketOffset: frameBytes, FirstPacketTag: 2, LastPacketTag: 2},
+	}, spans)
+}
+
 // The reader's tag must reach every packet and both ends of every PES through
 // each read path: the batch window, the sync-lock window and the per-packet
 // repair path after a corrupt packet.
@@ -112,7 +140,7 @@ func TestTagFollowsPacketsAndUnits(t *testing.T) {
 				units++
 			}
 			require.Greater(t, units, 70)
-			require.Greater(t, crossing, 0, "some unit must straddle a frame")
+			require.Positive(t, crossing, "some unit must straddle a frame")
 
 		})
 	}

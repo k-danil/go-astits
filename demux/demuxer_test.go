@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
-	"errors"
 	"io"
 	"strings"
 	"testing"
@@ -43,13 +42,13 @@ func TestDemuxerNextPacket(t *testing.T) {
 	dmx := New(context.Background(), bytes.NewReader(buf.Bytes()))
 
 	p, err := dmx.NextPacket()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, b1, p.Raw())
 	assert.Equal(t, p1.Offset, p.Offset)
 	assert.Equal(t, uint(192), dmx.packetBuffer.PacketSize())
 
 	p, err = dmx.NextPacket()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, b2, p.Raw())
 	assert.Equal(t, p2.Offset, p.Offset)
 
@@ -115,7 +114,7 @@ func TestDemuxerNextPES(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, EventPES, ev)
 	_, err = dmx.Next()
-	assert.EqualError(t, err, ts.ErrNoMorePackets.Error())
+	require.EqualError(t, err, ts.ErrNoMorePackets.Error())
 	dmx.Close()
 }
 
@@ -189,7 +188,7 @@ func TestDemuxerRewind(t *testing.T) {
 		for {
 			_, err := dmx.Next()
 			if err != nil {
-				require.True(t, errors.Is(err, ts.ErrNoMorePackets))
+				require.ErrorIs(t, err, ts.ErrNoMorePackets)
 				return
 			}
 			n++
@@ -222,7 +221,7 @@ func BenchmarkDemuxer_Next(b *testing.B) {
 	r := bytes.NewReader(buf.Bytes())
 	dmx := New(context.Background(), r)
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, _ = dmx.Rewind()
 		for {
 			if _, err := dmx.Next(); err != nil {
@@ -291,7 +290,7 @@ func TestDemuxerPSIRepeats(t *testing.T) {
 		cc++
 	}
 	const copies = 3
-	for i := 0; i < copies; i++ {
+	for range copies {
 		writePSI()
 	}
 	stream := buf.Bytes()
@@ -302,7 +301,7 @@ func TestDemuxerPSIRepeats(t *testing.T) {
 	for {
 		ev, err := def.Next()
 		if err != nil {
-			require.True(t, errors.Is(err, ts.ErrNoMorePackets))
+			require.ErrorIs(t, err, ts.ErrNoMorePackets)
 			break
 		}
 		require.NotEqual(t, EventPES, ev)
@@ -320,7 +319,7 @@ func TestDemuxerPSIRepeats(t *testing.T) {
 	for {
 		ev, err := rep.Next()
 		if err != nil {
-			require.True(t, errors.Is(err, ts.ErrNoMorePackets))
+			require.ErrorIs(t, err, ts.ErrNoMorePackets)
 			break
 		}
 		require.NotEqual(t, EventPES, ev)
@@ -352,4 +351,30 @@ func TestRewindNonSeekableContinues(t *testing.T) {
 	assert.Equal(t, int64(-1), n)
 	require.NoError(t, dmx.NextPacketTo(p))
 	assert.Equal(t, byte(5), p.Payload[0])
+}
+
+// Without resetting the read-ahead a seekable source was wrapped in, the second pass resumes from stale bytes.
+func TestRewindSeekableResetsReadAhead(t *testing.T) {
+	const packets = 200 // more than the default read-ahead holds
+	var raw []byte
+	for i := range packets {
+		raw = append(raw, payloadPacket(0x100, uint8(i)&0xf, false, []byte{byte(i)})...)
+	}
+	dmx := New(context.Background(), bytes.NewReader(raw), WithPacketSize(ts.PacketSize))
+	defer dmx.Close()
+	p := ts.NewPacket()
+	defer p.Close()
+	for range 5 {
+		require.NoError(t, dmx.NextPacketTo(p))
+	}
+	n, err := dmx.Rewind()
+	require.NoError(t, err)
+	assert.Zero(t, n)
+	require.NoError(t, dmx.NextPacketTo(p))
+	assert.Equal(t, byte(0), p.Payload[0])
+	got := 1
+	for dmx.NextPacketTo(p) == nil {
+		got++
+	}
+	assert.Equal(t, packets, got)
 }

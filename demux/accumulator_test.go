@@ -35,7 +35,7 @@ func runAcc(t *testing.T, steps []accStep) (units []string, torn []ts.Recoverabl
 	pm := pidmap.Map[uint16]{}
 	a.init(&pm, false, func(e ts.RecoverableError) { torn = append(torn, e) }, defaultMaxPESUnit, defaultMaxPSIUnit)
 	for _, st := range steps {
-		p := accPacket(1, st.cc, st.pusi, []byte(st.payload))
+		p := accPacket(0x100, st.cc, st.pusi, []byte(st.payload))
 		p.Header.TransportErrorIndicator = st.tei
 		if st.di {
 			p.Header.HasAdaptationField = true
@@ -72,7 +72,7 @@ func TestAccumulatorDiscontinuityIndicator(t *testing.T) {
 				{cc: 0, pusi: true, payload: "abc"}, {cc: 1, payload: "def"},
 				{cc: 9, payload: "x", di: true},
 			},
-			wantTorn: []ts.RecoverableError{{Kind: ts.ErrorKindTornUnit, PID: 1, Dropped: 6, Err: ts.ErrDiscontinuity}},
+			wantTorn: []ts.RecoverableError{{Kind: ts.ErrorKindTornUnit, PID: 0x100, Dropped: 6, Err: ts.ErrDiscontinuity}},
 		},
 		{
 			name: "unit start with a repeated counter is new, not a duplicate",
@@ -114,7 +114,7 @@ func TestAccumulatorTransportError(t *testing.T) {
 				{cc: 7, pusi: true, payload: "new"}, {cc: 8, pusi: true, payload: "z"},
 			},
 			wantUnits: []string{"new"},
-			wantTorn:  []ts.RecoverableError{{Kind: ts.ErrorKindTornUnit, PID: 1, Dropped: 3, Err: ts.ErrTransportError}},
+			wantTorn:  []ts.RecoverableError{{Kind: ts.ErrorKindTornUnit, PID: 0x100, Dropped: 6, Err: ts.ErrTransportError}},
 		},
 		{
 			name: "at a unit start delivers the finished unit and starts none",
@@ -158,21 +158,36 @@ func TestAccumulatorDrainAscendingPIDs(t *testing.T) {
 
 func TestIsPSIPID(t *testing.T) {
 	var a accumulator
+	var slot pidSlot
 	pm := pidmap.Map[uint16]{}
 	a.init(&pm, true, nil, defaultMaxPESUnit, defaultMaxPSIUnit)
 	var pids []int
-	for i := 0; i <= 255; i++ {
-		if a.isPSIPID(uint16(i)) {
+	for i := range 256 {
+		if a.isPSIPID(&slot, uint16(i)) {
 			pids = append(pids, i)
 		}
 	}
 	assert.Equal(t, []int{0, 1, 2, 16, 17, 18, 19, 20, 30, 31}, pids)
-	pm.Set(uint16(1), uint16(0))
-	assert.True(t, a.isPSIPID(uint16(1)))
 
-	// DVB ranges are ignored without the option
+	// CAT and TSDT are base tables, not DVB ones: they stand without the option and without a program map entry
 	a.init(&pm, false, nil, defaultMaxPESUnit, defaultMaxPSIUnit)
-	assert.False(t, a.isPSIPID(uint16(0x12)))
-	assert.True(t, a.isPSIPID(ts.PIDPAT))
-	assert.True(t, a.isPSIPID(uint16(1)))
+	assert.False(t, a.isPSIPID(&slot, uint16(0x12)))
+	assert.True(t, a.isPSIPID(&slot, ts.PIDPAT))
+	assert.True(t, a.isPSIPID(&slot, ts.PIDCAT))
+	assert.True(t, a.isPSIPID(&slot, ts.PIDTSDT))
+}
+
+func TestIsPSIPIDNextPAT(t *testing.T) {
+	var a accumulator
+	pm := pidmap.Map[uint16]{}
+	a.init(&pm, false, nil, defaultMaxPESUnit, defaultMaxPSIUnit)
+	a.nextMap.Set(0x100, 1)
+
+	var fresh, live pidSlot
+	live.sawPES = true
+	assert.True(t, a.isPSIPID(&fresh, 0x100))
+	assert.False(t, a.isPSIPID(&live, 0x100), "a PID carrying a stream is not announced away")
+
+	pm.Set(0x100, 1)
+	assert.True(t, a.isPSIPID(&live, 0x100), "the PAT in effect wins over what the PID carried")
 }

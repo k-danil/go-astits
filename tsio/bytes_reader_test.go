@@ -31,7 +31,7 @@ func TestBytesReaderEnd(t *testing.T) {
 			require.Equal(t, tc.skip, n)
 
 			bs, err := r.Peek(tc.n)
-			assert.ErrorIs(t, err, tc.err)
+			require.ErrorIs(t, err, tc.err)
 			assert.Equal(t, tc.want, bs)
 			assert.Equal(t, len(data)-tc.skip, r.Buffered())
 		})
@@ -39,7 +39,7 @@ func TestBytesReaderEnd(t *testing.T) {
 
 	r := NewBytesReader(data)
 	n, err := r.Discard(12)
-	assert.ErrorIs(t, err, io.EOF)
+	require.ErrorIs(t, err, io.EOF)
 	assert.Equal(t, 10, n)
 	assert.Equal(t, 0, r.Buffered())
 }

@@ -2,8 +2,8 @@ package ts
 
 import (
 	"encoding/binary"
-	"fmt"
 	"math/rand/v2"
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -82,7 +82,7 @@ func BenchmarkUpdateCRC32(b *testing.B) {
 		data[i] = byte(rng.Uint32())
 	}
 	for _, size := range []int{16, 64, 184, 1024, 4096} {
-		b.Run(fmt.Sprint(size), func(b *testing.B) {
+		b.Run(strconv.Itoa(size), func(b *testing.B) {
 			bs := data[:size]
 			b.SetBytes(int64(size))
 			var acc uint32

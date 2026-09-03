@@ -20,7 +20,7 @@ func TestParseMalformedBody(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, Header{Tag: TagISO639LanguageAndAudioType, Length: 3}, m.Header)
 	assert.Equal(t, []byte("rus"), m.Raw)
-	assert.Error(t, m.Err)
+	require.Error(t, m.Err)
 	assert.Equal(t, &StreamIdentifier{Header: Header{Tag: TagStreamIdentifier, Length: 1}, ComponentTag: 7}, ds[1])
 
 	assert.Equal(t, loop[2:], Append(nil, ds))

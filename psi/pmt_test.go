@@ -38,7 +38,7 @@ func BenchmarkParsePMTSection(b *testing.B) {
 	b.ReportAllocs()
 	bs := pmtBytes()
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, _ = parsePMTSection(bytesiter.New(bs), len(bs), uint16(1))
 	}
 }
@@ -48,7 +48,7 @@ func BenchmarkWritePMTSection(b *testing.B) {
 
 	dst := make([]byte, 0, 1024)
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		dst = pmt.appendSection(dst[:0])
 	}
 }

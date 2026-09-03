@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/k-danil/go-astits/v3/internal/bitstest"
 )
@@ -51,6 +52,21 @@ func TestParseESCR(t *testing.T) {
 func TestWriteESCR(t *testing.T) {
 	bs := make([]byte, ESCRSize)
 	n := clockReference.PutESCR(bs)
-	assert.Equal(t, n, 6)
+	assert.Equal(t, 6, n)
 	assert.Equal(t, escrBytes(), bs)
+}
+
+// A backwards Diff must fold into the 33-bit base before it can be written.
+func TestNegativeClockReferenceOnTheWire(t *testing.T) {
+	d := NewClockReference(1000, 0).Diff(NewClockReference(2000, 0))
+	assert.Less(t, d.Base(), uint64(1)<<33, "base is a 33-bit field")
+	assert.Less(t, d.Extension(), uint64(PTSTicks))
+
+	bs := make([]byte, PCRSize)
+	require.Equal(t, PCRSize, d.PutPCR(bs))
+	var parsed ClockReference
+	n, err := parsed.ParsePCR(bs)
+	require.NoError(t, err)
+	require.Equal(t, PCRSize, n)
+	assert.Zero(t, parsed.Diff(d), "the wire form names the same instant")
 }

@@ -661,10 +661,7 @@ func (h *Header) CalcDataLength(payloadLeft []byte, isPayloadStart bool, bytesAv
 		}
 	}
 
-	payloadBytes = bytesAvailable - headerBytes
-	if len(payloadLeft) < payloadBytes {
-		payloadBytes = len(payloadLeft)
-	}
+	payloadBytes = min(len(payloadLeft), bytesAvailable-headerBytes)
 
 	totalBytes = headerBytes + payloadBytes
 	return
@@ -680,10 +677,7 @@ func (h *Header) Put(bs []byte, payloadLeft []byte, isPayloadStart bool) (totalB
 		totalBytesWritten += n
 	}
 
-	payloadBytesWritten = len(bs) - totalBytesWritten
-	if payloadBytesWritten > len(payloadLeft) {
-		payloadBytesWritten = len(payloadLeft)
-	}
+	payloadBytesWritten = min(len(bs)-totalBytesWritten, len(payloadLeft))
 
 	copy(bs[totalBytesWritten:], payloadLeft[:payloadBytesWritten])
 	totalBytesWritten += payloadBytesWritten

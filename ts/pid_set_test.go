@@ -31,7 +31,7 @@ func TestPIDSet(t *testing.T) {
 	assert.True(t, oob.Has(8192), "Has folds the same way")
 
 	s.Clear()
-	for pid := 0; pid < 8192; pid++ {
+	for pid := range 8192 {
 		assert.False(t, s.Has(uint16(pid)))
 	}
 }

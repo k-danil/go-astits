@@ -1,6 +1,7 @@
 package demux
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
@@ -36,6 +37,8 @@ const (
 type Demuxer struct {
 	ctx context.Context
 	r   io.Reader
+	// The read-ahead wrapper is kept apart from r: Rewind seeks r, and a *bufio.Reader is no io.Seeker.
+	readAhead io.Reader
 
 	optPacketSize    uint
 	optSkipErrLimit  int
@@ -167,7 +170,7 @@ func WithResyncLimit(windows int) func(*Demuxer) {
 	}
 }
 
-// Caps the bytes one unit may accumulate: 0 delivers no unit of that kind, -1 is unbounded. An oversized unit is torn and the next payload packet on its PID opens a new one.
+// Caps the bytes one unit may accumulate: 0 delivers no unit of that kind, -1 is unbounded. An oversized unit is torn and the next payload packet on its PID opens a new one. Buffers come in power-of-two classes, so a PID holds the limit rounded up.
 func WithMaxUnitSize(pes, psi int) func(*Demuxer) {
 	return func(d *Demuxer) {
 		d.optMaxPES = pes
@@ -230,12 +233,11 @@ func (dmx *Demuxer) ensurePacketBuffer() (err error) {
 	if dmx.packetBuffer != nil {
 		return
 	}
-	// Store the wrapper in dmx.r: a non-seekable reader loses its read-ahead across Rewind if it dies with the packet buffer.
-	if _, seekable := dmx.r.(io.Seeker); !seekable {
-		dmx.r = ts.ReadAhead(dmx.r, dmx.optZeroCopyBatch)
+	if dmx.readAhead == nil {
+		dmx.readAhead = ts.ReadAheadSize(dmx.r, dmx.optZeroCopyBatch, dmx.optPacketSize)
 	}
 	dmx.keepPIDs = dmx.optKeepPIDs
-	if dmx.packetBuffer, err = ts.NewPacketBuffer(dmx.ctx, dmx.r, ts.PacketBufferConfig{
+	if dmx.packetBuffer, err = ts.NewPacketBuffer(dmx.ctx, dmx.readAhead, ts.PacketBufferConfig{
 		PacketSize:    dmx.optPacketSize,
 		SkipErrLimit:  dmx.optSkipErrLimit,
 		Skipper:       dmx.optPacketSkipper,
@@ -272,7 +274,7 @@ func (dmx *Demuxer) nextPacket(p *ts.Packet) (err error) {
 	return
 }
 
-// Stops after a packet that completes a unit or queues an error, so events stay in packet order, and before one that fails to parse, which Next handles under its damage budget.
+// Stops after a packet that completes a unit or queues an error, so a later packet's events cannot overtake it, and before one that fails to parse, which Next handles under its damage budget.
 func (dmx *Demuxer) walk(w []byte, out []unit) (units []unit, consumed int, err error) {
 	pb := dmx.packetBuffer
 	p := &dmx.pkt
@@ -435,6 +437,11 @@ func (dmx *Demuxer) Section() (pid uint16, s *psi.Section) {
 	return dmx.cur.pid, dmx.cur.sec
 }
 
+// The packets the last table event's unit came from.
+func (dmx *Demuxer) SectionSpan() PacketSpan {
+	return dmx.cur.span
+}
+
 // Always true unless WithPSIRepeats is set, which also emits byte-identical repeats (then false).
 func (dmx *Demuxer) TableChanged() bool {
 	return dmx.cur.changed
@@ -495,6 +502,7 @@ func (dmx *Demuxer) Rewind() (n int64, err error) {
 	}
 	dmx.Close()
 	dmx.packetBuffer = nil
+	dmx.cur = tableEvent{}
 	dmx.tblQueue = dmx.tblArr[:0]
 	dmx.pendingErrs = dmx.errArr[:0]
 	dmx.pendingFatal = nil
@@ -504,6 +512,10 @@ func (dmx *Demuxer) Rewind() (n int64, err error) {
 	if n, err = ts.Rewind(dmx.r); err != nil {
 		err = fmt.Errorf("astits: rewinding reader failed: %w", err)
 		return
+	}
+	// A source that seeked back leaves the wrapper holding bytes from the old position; one that could not seek must keep them, or the packets read ahead are lost.
+	if br, ok := dmx.readAhead.(*bufio.Reader); ok && n >= 0 && dmx.readAhead != dmx.r {
+		br.Reset(dmx.r)
 	}
 	return
 }

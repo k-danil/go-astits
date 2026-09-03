@@ -2,7 +2,6 @@ package tsio_test
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -37,5 +36,5 @@ func TestBytesReaderShortInputSyncLock(t *testing.T) {
 		assert.Equal(t, uint16(0x100), p.Header.PID)
 		assert.Equal(t, uint8(i), p.Header.ContinuityCounter)
 	}
-	assert.True(t, errors.Is(dmx.NextPacketTo(p), ts.ErrNoMorePackets))
+	assert.ErrorIs(t, dmx.NextPacketTo(p), ts.ErrNoMorePackets)
 }

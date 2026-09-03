@@ -27,14 +27,14 @@ func randOptionalHeader(r *rand.Rand) *OptionalHeader {
 		HasExtension:           r.UintN(2) == 1,
 	}
 	if h.PTSDTSIndicator == PTSDTSIndicatorOnlyPTS {
-		h.PTS = ts.NewClockReference(uint64(r.Uint64N(1<<33)), 0)
+		h.PTS = ts.NewClockReference(r.Uint64N(1<<33), 0)
 	}
 	if h.PTSDTSIndicator == PTSDTSIndicatorBothPresent {
-		h.PTS = ts.NewClockReference(uint64(r.Uint64N(1<<33)), 0)
-		h.DTS = ts.NewClockReference(uint64(r.Uint64N(1<<33)), 0)
+		h.PTS = ts.NewClockReference(r.Uint64N(1<<33), 0)
+		h.DTS = ts.NewClockReference(r.Uint64N(1<<33), 0)
 	}
 	if h.HasESCR {
-		h.ESCR = ts.NewClockReference(uint64(r.Uint64N(1<<33)), uint64(r.UintN(300)))
+		h.ESCR = ts.NewClockReference(r.Uint64N(1<<33), uint64(r.UintN(300)))
 	}
 	if h.HasESRate {
 		h.ESRate = uint32(r.UintN(1 << 22))
@@ -75,7 +75,7 @@ func randOptionalHeader(r *rand.Rand) *OptionalHeader {
 			if e.HasStreamIDExtension {
 				e.StreamIDExtension = uint8(r.UintN(128))
 			} else if e.HasTREF = r.UintN(2) == 1; e.HasTREF {
-				e.TREF = ts.NewClockReference(uint64(r.Uint64N(1<<33)), 0)
+				e.TREF = ts.NewClockReference(r.Uint64N(1<<33), 0)
 			}
 			n := int(r.UintN(8))
 			e.Extension2Reserved = make([]byte, n)
@@ -91,7 +91,7 @@ func randOptionalHeader(r *rand.Rand) *OptionalHeader {
 func TestRoundtripPESData(t *testing.T) {
 	r := rand.New(rand.NewPCG(3, 4))
 	buf := make([]byte, 64<<10)
-	for i := 0; i < roundtripIterations; i++ {
+	for i := range roundtripIterations {
 		h := Header{
 			StreamID:       0xc0, // non-video: packet length gets written
 			OptionalHeader: randOptionalHeader(r),

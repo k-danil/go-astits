@@ -131,8 +131,7 @@ func ExampleWithSyncLock() {
 	defer dmx.Close()
 
 	for ev, err := range dmx.Events() {
-		var re *ts.RecoverableError
-		if errors.As(err, &re) {
+		if re, ok := errors.AsType[*ts.RecoverableError](err); ok {
 			switch re.Kind { // TR 101 290 counters, for instance
 			case ts.ErrorKindSyncLoss:
 				_ = re.Dropped // bytes lost until the next lock
@@ -245,12 +244,37 @@ func ExampleDemuxer_Section() {
 			return
 		}
 		switch ev {
-		case demux.EventSDT:
+		case demux.EventSDT, demux.EventEIT:
 			pid, s := dmx.Section() // valid until the next Next
-			_, _ = pid, s.Syntax.Data.(*psi.SDT)
-		case demux.EventEIT:
-			_, s := dmx.Section()
-			_ = s.Syntax.Data.(*psi.EIT)
+			switch table := s.Syntax.Data.(type) {
+			case *psi.SDT:
+				_, _ = pid, table.Services
+			case *psi.EIT:
+				_, _ = pid, table.Events
+			}
+		case demux.EventPES:
+			dmx.PES().Close()
+		}
+	}
+}
+
+// Where a table came from: the span covers the packets its unit was assembled
+// from, so a section can be located in the stream or charged to the datagram
+// that carried it.
+func ExampleDemuxer_SectionSpan() {
+	var r io.Reader
+
+	dmx := demux.New(context.Background(), r, demux.WithPacketSize(ts.PacketSize))
+	defer dmx.Close()
+
+	for ev, err := range dmx.Events() {
+		if err != nil {
+			return
+		}
+		switch ev {
+		case demux.EventPMT:
+			span := dmx.SectionSpan()
+			fmt.Printf("PMT over packets %d..%d\n", span.FirstPacketOffset, span.LastPacketOffset)
 		case demux.EventPES:
 			dmx.PES().Close()
 		}

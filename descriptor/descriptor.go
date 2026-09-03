@@ -304,7 +304,8 @@ func parseDescriptorsN(i *bytesiter.Iterator, length int) (o []Descriptor, err e
 				Length: bs[1],
 			}
 
-			if h.Length > 0 {
+			switch {
+			case h.Length > 0:
 				offsetBody := i.Offset()
 				offsetDescriptorEnd := offsetBody + int(h.Length)
 				var perr error
@@ -320,9 +321,9 @@ func parseDescriptorsN(i *bytesiter.Iterator, length int) (o []Descriptor, err e
 				}
 				// Realign: a body parser may stop short of the declared length, or read past it.
 				i.Seek(offsetDescriptorEnd)
-			} else if h.Tag >= userDefinedTagsStart && h.Tag != tagForbidden {
+			case h.Tag >= userDefinedTagsStart && h.Tag != tagForbidden:
 				o[idx] = &UserDefined{Header: h}
-			} else {
+			default:
 				o[idx] = &Unknown{Header: h}
 			}
 		}

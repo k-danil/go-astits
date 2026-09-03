@@ -19,6 +19,7 @@ const (
 	ErrorKindTornUnit
 	ErrorKindUnknownUnit
 	ErrorKindSyncByte
+	ErrorKindContinuity
 )
 
 func (k ErrorKind) String() (s string) {
@@ -39,6 +40,8 @@ func (k ErrorKind) String() (s string) {
 		s = "unknown-unit"
 	case ErrorKindSyncByte:
 		s = "sync-byte"
+	case ErrorKindContinuity:
+		s = "continuity"
 	default:
 		s = "unknown"
 	}
@@ -66,7 +69,6 @@ func (e *RecoverableError) Error() (s string) {
 func (e *RecoverableError) Unwrap() error { return e.Err }
 
 func IsRecoverable(err error) (ok bool) {
-	var re *RecoverableError
-	ok = errors.As(err, &re)
+	_, ok = errors.AsType[*RecoverableError](err)
 	return
 }

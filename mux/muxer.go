@@ -429,7 +429,7 @@ func (m *Muxer) generatePAT() (err error) {
 		version := uint8(m.patVersion.inc())
 
 		psiData := psi.Data{Sections: make([]psi.Section, 0, numSections)}
-		for si := 0; si < numSections; si++ {
+		for si := range numSections {
 			part := &psi.PAT{TransportStreamID: d.TransportStreamID}
 			end := min((si+1)*maxPATProgramsPerSection, len(d.Programs))
 			part.Programs = d.Programs[si*maxPATProgramsPerSection : end]
