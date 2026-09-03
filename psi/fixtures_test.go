@@ -3,8 +3,8 @@ package psi
 import (
 	"time"
 
-	"github.com/k-danil/go-astits/v2/descriptor"
-	"github.com/k-danil/go-astits/v2/internal/bitstest"
+	"github.com/k-danil/go-astits/v3/descriptor"
+	"github.com/k-danil/go-astits/v3/internal/bitstest"
 )
 
 var descriptors = []descriptor.Descriptor{

@@ -4,27 +4,27 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
-	"github.com/k-danil/go-astits/v2/internal/util"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/util"
 )
 
 type AlignmentType uint8
 
-// Data stream alignments
-// Page: 85 | Chapter:2.6.11 | Link: http://ecee.colorado.edu/~ecen5653/ecen5653/papers/iso13818-1.pdf
+// 0x1 is both the video value and the legacy audio "sync word", so String
+// cannot tell them apart.
 const (
-	DataStreamAligmentAudioSyncWord          AlignmentType = 0x1
-	DataStreamAligmentVideoSliceOrAccessUnit AlignmentType = 0x1
-	DataStreamAligmentVideoAccessUnit        AlignmentType = 0x2
-	DataStreamAligmentVideoGOPOrSEQ          AlignmentType = 0x3
-	DataStreamAligmentVideoSEQ               AlignmentType = 0x4
+	DataStreamAlignmentAudioSyncWord          AlignmentType = 0x1
+	DataStreamAlignmentVideoSliceOrAccessUnit AlignmentType = 0x1
+	DataStreamAlignmentVideoAccessUnit        AlignmentType = 0x2
+	DataStreamAlignmentVideoGOPOrSEQ          AlignmentType = 0x3
+	DataStreamAlignmentVideoSEQ               AlignmentType = 0x4
 )
 
 var alignmentTypeNames = map[AlignmentType]string{
-	DataStreamAligmentVideoSliceOrAccessUnit: "slice_or_video_access_unit",
-	DataStreamAligmentVideoAccessUnit:        "video_access_unit",
-	DataStreamAligmentVideoGOPOrSEQ:          "GOP_or_SEQ",
-	DataStreamAligmentVideoSEQ:               "SEQ",
+	DataStreamAlignmentVideoSliceOrAccessUnit: "slice_or_video_access_unit",
+	DataStreamAlignmentVideoAccessUnit:        "video_access_unit",
+	DataStreamAlignmentVideoGOPOrSEQ:          "GOP_or_SEQ",
+	DataStreamAlignmentVideoSEQ:               "SEQ",
 }
 
 func (t AlignmentType) String() (s string) {
@@ -44,7 +44,6 @@ func (t *AlignmentType) UnmarshalJSON(b []byte) (err error) {
 	return
 }
 
-// DataStreamAlignment represents a data stream alignment descriptor
 type DataStreamAlignment struct {
 	Header Header        `json:"_header"`
 	Type   AlignmentType `json:"alignment_type"`

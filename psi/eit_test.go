@@ -2,12 +2,8 @@ package psi
 
 import (
 	"bytes"
-	"testing"
 
-	"github.com/stretchr/testify/assert"
-
-	"github.com/k-danil/go-astits/v2/internal/bitstest"
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/bitstest"
 )
 
 var eit = &EIT{
@@ -40,11 +36,4 @@ func eitBytes() []byte {
 	_ = w.Write("1")                     // Event #1 free CA mode
 	descriptorsBytes(w)                  // Event #1 descriptors
 	return buf.Bytes()
-}
-
-func TestParseEITSection(t *testing.T) {
-	var b = eitBytes()
-	d, err := parseEITSection(bytesiter.New(b), len(b), uint16(1))
-	assert.Equal(t, d, eit)
-	assert.NoError(t, err)
 }

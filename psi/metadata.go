@@ -3,16 +3,10 @@ package psi
 import (
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
-	"github.com/k-danil/go-astits/v2/internal/util"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/util"
 )
 
-// Metadata represents a metadata_section (ISO/IEC 13818-1 §2.12.4): a fragment
-// of a metadata service. Its header deviates from the standard PSI long form:
-// random_access_indicator and decoder_config_flag occupy the section header's
-// reserved bits (see SectionHeader), and metadata_service_id /
-// section_fragment_indication replace table_id_extension / the syntax header's
-// reserved bits. The metadata Access Unit payload is carried verbatim.
 type Metadata struct {
 	MetadataBytes             []byte `json:"metadata_byte"`
 	MetadataServiceID         uint8  `json:"metadata_service_id"`
@@ -31,7 +25,7 @@ func parseMetadataSection(i *bytesiter.Iterator, offsetSectionsEnd int) (d *Meta
 		return
 	}
 
-	i.Skip(1) // reserved
+	i.Skip(1)
 
 	var b byte
 	if b, err = i.NextByte(); err != nil {

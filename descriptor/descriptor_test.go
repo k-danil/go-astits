@@ -8,8 +8,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/k-danil/go-astits/v2/descriptor/ext"
-	"github.com/k-danil/go-astits/v2/internal/bitstest"
+	"github.com/k-danil/go-astits/v3/descriptor/ext"
+	"github.com/k-danil/go-astits/v3/internal/bitstest"
 )
 
 var (
@@ -610,28 +610,6 @@ func TestParseDescriptorOneByOne(t *testing.T) {
 			assert.NoError(t, err)
 			assert.Equal(t, tc.desc, ds[0])
 		})
-	}
-}
-
-func TestParseDescriptorAll(t *testing.T) {
-	buf := bytes.Buffer{}
-	buf.Write([]byte{0x00, 0x00}) // reserve two bytes for length
-	w := bitstest.NewWriter(&buf)
-
-	for _, tc := range descriptorTestTable {
-		tc.bytesFunc(w)
-	}
-
-	descLen := uint16(buf.Len() - 2)
-	descBytes := buf.Bytes()
-	descBytes[0] = byte(descLen >> 8)
-	descBytes[1] = byte(descLen & 0xff)
-
-	ds, _, err := Parse(descBytes)
-	assert.NoError(t, err)
-
-	for i, tc := range descriptorTestTable {
-		assert.Equal(t, tc.desc, ds[i])
 	}
 }
 

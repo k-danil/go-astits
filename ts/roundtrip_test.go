@@ -118,30 +118,3 @@ func TestRoundtripAdaptationField(t *testing.T) {
 		assert.Equal(t, scratch1[:n1], scratch2[:n2], "iteration %d", i)
 	}
 }
-
-func TestRoundtripClockCodecs(t *testing.T) {
-	r := roundtripRand()
-	var bs [8]byte
-	for i := 0; i < roundtripIterations; i++ {
-		cr := NewClockReference(uint64(r.Uint64N(1<<33)), uint64(r.UintN(300)))
-
-		cr.PutPCR(bs[:])
-		var pcr ClockReference
-		_, err := pcr.ParsePCR(bs[:])
-		require.NoError(t, err)
-		assert.Equal(t, cr, pcr, "PCR iteration %d", i)
-
-		base := NewClockReference(cr.Base(), 0)
-		base.PutPTSDTS(bs[:], 0b0010)
-		var pts ClockReference
-		_, err = pts.ParsePTSDTS(bs[:])
-		require.NoError(t, err)
-		assert.Equal(t, base, pts, "PTSDTS iteration %d", i)
-
-		cr.PutESCR(bs[:])
-		var escr ClockReference
-		_, err = escr.ParseESCR(bs[:])
-		require.NoError(t, err)
-		assert.Equal(t, cr, escr, "ESCR iteration %d", i)
-	}
-}

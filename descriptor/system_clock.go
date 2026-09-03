@@ -3,11 +3,10 @@ package descriptor
 import (
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
-	"github.com/k-danil/go-astits/v2/internal/util"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/util"
 )
 
-// SystemClock is the MPEG-2 systems system_clock_descriptor (ISO/IEC 13818-1).
 type SystemClock struct {
 	Header                          Header `json:"_header"`
 	ClockAccuracyInteger            uint8  `json:"clock_accuracy_integer"`

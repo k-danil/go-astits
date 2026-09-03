@@ -4,27 +4,21 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/descriptor"
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/descriptor"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
 )
 
-// SIT represents a SIT: the selection information table describes the services
-// carried in a partial (recorded) transport stream — transmission-wide
-// descriptors followed by a per-service loop with running status.
-// Page: 40 | Chapter: 5.2.10 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type SIT struct {
 	TransmissionInfoDescriptors []descriptor.Descriptor `json:"_transmission_info_descriptors"`
 	Services                    []SITService            `json:"_services"`
 }
 
-// SITService represents one service entry of a SIT
 type SITService struct {
 	Descriptors   []descriptor.Descriptor `json:"_descriptors"`
 	ServiceID     uint16                  `json:"service_id"`
 	RunningStatus RunningStatus           `json:"running_status"`
 }
 
-// parseSITSection parses a SIT section
 func parseSITSection(i *bytesiter.Iterator, offsetSectionsEnd int) (d *SIT, err error) {
 	d = &SIT{}
 
@@ -51,8 +45,7 @@ func parseSITSection(i *bytesiter.Iterator, offsetSectionsEnd int) (d *SIT, err 
 		}
 		s.RunningStatus = RunningStatus(binary.BigEndian.Uint16(bs) >> 12 & 0x7)
 
-		// The 2 bytes just read pack running_status over the descriptor-loop
-		// length; rewind so descriptor.Parse consumes them as its prefix.
+		// These 2 bytes also hold descriptors_loop_length; rewind for descriptor.Parse.
 		i.Skip(-2)
 		if s.Descriptors, dn, err = descriptor.Parse(i.Bytes()); err != nil {
 			err = fmt.Errorf("astits: parsing descriptors failed: %w", err)
@@ -66,9 +59,9 @@ func parseSITSection(i *bytesiter.Iterator, offsetSectionsEnd int) (d *SIT, err 
 }
 
 func (d *SIT) CalcSectionLength() int {
-	n := 2 + descriptor.CalcLength(d.TransmissionInfoDescriptors) // transmission_info_loop_length prefix + descriptors
+	n := 2 + descriptor.CalcLength(d.TransmissionInfoDescriptors)
 	for _, s := range d.Services {
-		n += 4 + descriptor.CalcLength(s.Descriptors) // service_id + 2 status/length bytes + descriptors
+		n += 2 + 2 + descriptor.CalcLength(s.Descriptors)
 	}
 	return n
 }
@@ -79,7 +72,7 @@ func (d *SIT) appendSection(dst []byte) []byte {
 		loopLen := descriptor.CalcLength(s.Descriptors)
 		dst = append(dst,
 			byte(s.ServiceID>>8), byte(s.ServiceID),
-			0x80|byte(s.RunningStatus)<<4|byte(loopLen>>8)&0xf, // reserved(1) + running_status(3) + service_loop_length(12)
+			0x80|byte(s.RunningStatus)<<4|byte(loopLen>>8)&0xf,
 			byte(loopLen))
 		dst = descriptor.Append(dst, s.Descriptors)
 	}

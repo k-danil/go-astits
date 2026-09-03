@@ -3,10 +3,9 @@ package descriptor
 import (
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
 )
 
-// MultiplexBuffer is the MPEG-2 systems MultiplexBuffer descriptor (ISO/IEC 13818-1).
 type MultiplexBuffer struct {
 	MBBufferSize uint32 `json:"MB_buffer_size"` // bytes
 	TBLeakRate   uint32 `json:"TB_leak_rate"`   // units of 400 bit/s

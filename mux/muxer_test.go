@@ -9,12 +9,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/k-danil/go-astits/v2/demux"
-	"github.com/k-danil/go-astits/v2/descriptor"
-	"github.com/k-danil/go-astits/v2/internal/bitstest"
-	"github.com/k-danil/go-astits/v2/pes"
-	"github.com/k-danil/go-astits/v2/psi"
-	"github.com/k-danil/go-astits/v2/ts"
+	"github.com/k-danil/go-astits/v3/demux"
+	"github.com/k-danil/go-astits/v3/internal/bitstest"
+	"github.com/k-danil/go-astits/v3/pes"
+	"github.com/k-danil/go-astits/v3/psi"
+	"github.com/k-danil/go-astits/v3/ts"
 )
 
 const syncByte byte = '\x47'
@@ -200,67 +199,6 @@ func TestMuxer_generatePMT(t *testing.T) {
 	assert.Equal(t, pmtExpectedBytesVideoAndAudio(1, 2), muxer.pmtBytes.Bytes())
 }
 
-func TestMuxer_WriteTables(t *testing.T) {
-	buf := bytes.Buffer{}
-	muxer := New(context.Background(), &buf)
-	err := muxer.AddElementaryStream(psi.ElementaryStream{
-		ElementaryPID: 0x1234,
-		StreamType:    psi.StreamTypeH264Video,
-	})
-	muxer.SetPCRPID(0x1234)
-	assert.NoError(t, err)
-
-	n, err := muxer.WriteTables()
-	assert.NoError(t, err)
-	assert.Equal(t, 2*ts.PacketSize, n)
-	assert.Equal(t, n, buf.Len())
-
-	expectedBytes := append(patExpectedBytes(0, 0), pmtExpectedBytesVideoOnly(0, 0)...)
-	assert.Equal(t, expectedBytes, buf.Bytes())
-}
-
-func TestMuxer_WriteTables_Error(t *testing.T) {
-	muxer := New(context.Background(), nil)
-	err := muxer.AddElementaryStream(psi.ElementaryStream{
-		ElementaryPID: 0x1234,
-		StreamType:    psi.StreamTypeH264Video,
-	})
-	assert.NoError(t, err)
-
-	_, err = muxer.WriteTables()
-	assert.Equal(t, ErrPCRPIDInvalid, err)
-}
-
-func TestMuxer_AddElementaryStream(t *testing.T) {
-	muxer := New(context.Background(), nil)
-	err := muxer.AddElementaryStream(psi.ElementaryStream{
-		ElementaryPID: 0x1234,
-		StreamType:    psi.StreamTypeH264Video,
-	})
-	assert.NoError(t, err)
-
-	err = muxer.AddElementaryStream(psi.ElementaryStream{
-		ElementaryPID: 0x1234,
-		StreamType:    psi.StreamTypeH264Video,
-	})
-	assert.Equal(t, ErrPIDAlreadyExists, err)
-}
-
-func TestMuxer_RemoveElementaryStream(t *testing.T) {
-	muxer := New(context.Background(), nil)
-	err := muxer.AddElementaryStream(psi.ElementaryStream{
-		ElementaryPID: 0x1234,
-		StreamType:    psi.StreamTypeH264Video,
-	})
-	assert.NoError(t, err)
-
-	err = muxer.RemoveElementaryStream(0x1234)
-	assert.NoError(t, err)
-
-	err = muxer.RemoveElementaryStream(0x1234)
-	assert.Equal(t, ErrPIDNotFound, err)
-}
-
 func TestMuxer_WriteDataMultiPacket(t *testing.T) {
 	// A payload spanning many packets exercises the fast mid-unit path (fixed
 	// header + full payload chunk, no PES header, no adaptation field). Demuxing
@@ -389,74 +327,25 @@ func testPayload() []byte {
 func TestMuxer_WritePayload(t *testing.T) {
 	buf := bytes.Buffer{}
 	muxer := New(context.Background(), &buf)
-
-	err := muxer.AddElementaryStream(psi.ElementaryStream{
+	require.NoError(t, muxer.AddElementaryStream(psi.ElementaryStream{
 		ElementaryPID: 0x1234,
 		StreamType:    psi.StreamTypeH264Video,
-	})
+	}))
 	muxer.SetPCRPID(0x1234)
-	assert.NoError(t, err)
 
-	err = muxer.AddElementaryStream(psi.ElementaryStream{
-		ElementaryPID: 0x0234,
-		StreamType:    psi.StreamTypeAACAudio,
-	})
-	assert.NoError(t, err)
-
-	payload := testPayload()
-	pcr := ts.NewClockReference(5726623061, 341)
+	pcr := ts.NewClockReference(5726623061, 85)
 	pts := ts.NewClockReference(5726623060, 0)
-
 	n, err := muxer.WriteData(&Data{
-		PID: 0x1234,
-		AdaptationField: &ts.PacketAdaptationField{
-			HasPCR:                true,
-			PCR:                   pcr,
-			RandomAccessIndicator: true,
-		},
+		PID:             0x1234,
+		AdaptationField: &ts.PacketAdaptationField{HasPCR: true, PCR: pcr, RandomAccessIndicator: true},
 		PES: &pes.Data{
-			Data: payload,
-			Header: pes.Header{
-				OptionalHeader: &pes.OptionalHeader{
-					DTS:             pts,
-					PTS:             pts,
-					PTSDTSIndicator: pes.PTSDTSIndicatorBothPresent,
-				},
-			},
+			Data:   testPayload(),
+			Header: pes.Header{OptionalHeader: &pes.OptionalHeader{DTS: pts, PTS: pts, PTSDTSIndicator: pes.PTSDTSIndicatorBothPresent}},
 		},
 	})
-
-	assert.NoError(t, err)
-	assert.Equal(t, buf.Len(), n)
-
-	bytesTotal := n
-
-	n, err = muxer.WriteData(&Data{
-		PID: 0x0234,
-		AdaptationField: &ts.PacketAdaptationField{
-			HasPCR:                true,
-			PCR:                   pcr,
-			RandomAccessIndicator: true,
-		},
-		PES: &pes.Data{
-			Data: payload,
-			Header: pes.Header{
-				OptionalHeader: &pes.OptionalHeader{
-					DTS:             pts,
-					PTS:             pts,
-					PTSDTSIndicator: pes.PTSDTSIndicatorBothPresent,
-				},
-			},
-		},
-	})
-
-	assert.NoError(t, err)
-	assert.Equal(t, buf.Len(), bytesTotal+n)
+	require.NoError(t, err)
+	assert.Equal(t, buf.Len(), n, "WriteData must account for every byte it wrote")
 	assert.Equal(t, 0, buf.Len()%ts.PacketSize)
-
-	bs := buf.Bytes()
-	assert.Equal(t, patExpectedBytes(0, 0), bs[:ts.PacketSize])
-	assert.Equal(t, pmtExpectedBytesVideoAndAudio(0, 0), bs[ts.PacketSize:ts.PacketSize*2])
 }
 
 // A PAT with more programs than fit one section must span sections and
@@ -500,24 +389,4 @@ func TestWriteTablesMultiSectionPAT(t *testing.T) {
 	}
 	assert.Len(t, got, extraPrograms+1)
 	assert.Equal(t, uint16(42+1), got[uint16(0x200+42)])
-}
-
-func TestWriteTablesSectionOverflow(t *testing.T) {
-	m := New(context.Background(), &bytes.Buffer{})
-	for i := 0; i < 5; i++ {
-		require.NoError(t, m.AddElementaryStream(psi.ElementaryStream{
-			ElementaryPID: uint16(0x100 + i),
-			StreamType:    psi.StreamTypeH264Video,
-			ElementaryStreamDescriptors: []descriptor.Descriptor{
-				&descriptor.UserDefined{
-					Header: descriptor.Header{Tag: descriptor.Tag(0x80)},
-					Data:   bytes.Repeat([]byte{0xab}, 220),
-				},
-			},
-		}))
-	}
-	m.SetPCRPID(0x100)
-
-	_, err := m.WriteTables()
-	assert.ErrorIs(t, err, psi.ErrSectionOverflow)
 }

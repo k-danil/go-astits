@@ -3,12 +3,10 @@ package descriptor
 import (
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
-	"github.com/k-danil/go-astits/v2/internal/util"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/util"
 )
 
-// EnhancedAC3 represents an enhanced AC3 descriptor
-// Chapter: Annex D | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type EnhancedAC3 struct {
 	Header           Header `json:"_header"`
 	AdditionalInfo   []byte `json:"additional_info_byte"`
@@ -115,7 +113,7 @@ func newDescriptorEnhancedAC3(i *bytesiter.Iterator, h Header, offsetEnd int) (d
 }
 
 func (d *EnhancedAC3) CalcLength() int {
-	ret := 1 // flags
+	ret := 1
 	ret += int(util.B2U(d.HasComponentType))
 	ret += int(util.B2U(d.HasBSID))
 	ret += int(util.B2U(d.HasMainID))

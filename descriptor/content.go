@@ -3,18 +3,14 @@ package descriptor
 import (
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
 )
 
-// Content represents a content descriptor
-// Chapter: 6.2.9 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type Content struct {
 	Header Header        `json:"_header"`
 	Items  []ContentItem `json:"_items"`
 }
 
-// ContentItem represents a content item descriptor
-// Chapter: 6.2.9 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type ContentItem struct {
 	ContentNibbleLevel1 uint8 `json:"content_nibble_level_1"`
 	ContentNibbleLevel2 uint8 `json:"content_nibble_level_2"`

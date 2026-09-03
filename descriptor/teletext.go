@@ -3,16 +3,14 @@ package descriptor
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/k-danil/go-astits/v2/dvbtext"
+	"github.com/k-danil/go-astits/v3/dvbtext"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
-	"github.com/k-danil/go-astits/v2/internal/util"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/util"
 )
 
 type TeletextType uint8
 
-// Teletext types
-// Chapter: 6.2.43 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 const (
 	TeletextTypeAdditionalInformationPage                    TeletextType = 0x3
 	TeletextTypeInitialTeletextPage                          TeletextType = 0x1
@@ -46,15 +44,11 @@ func (t *TeletextType) UnmarshalJSON(b []byte) (err error) {
 	return
 }
 
-// Teletext represents a teletext descriptor
-// Chapter: 6.2.43 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type Teletext struct {
 	Header Header         `json:"_header"`
 	Items  []TeletextItem `json:"_items"`
 }
 
-// TeletextItem represents a teletext descriptor item
-// Chapter: 6.2.43 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type TeletextItem struct {
 	Language dvbtext.Code `json:"ISO_639_language_code"`
 	Magazine uint8        `json:"teletext_magazine_number"`

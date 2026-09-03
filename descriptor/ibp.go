@@ -3,11 +3,10 @@ package descriptor
 import (
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
-	"github.com/k-danil/go-astits/v2/internal/util"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/util"
 )
 
-// IBP is the MPEG-2 systems IBP_descriptor (ISO/IEC 13818-1).
 type IBP struct {
 	Header           Header `json:"_header"`
 	MaxGOPLength     uint16 `json:"max_gop_length"`

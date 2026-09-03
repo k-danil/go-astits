@@ -3,13 +3,9 @@ package descriptor
 import (
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
 )
 
-// PartialTransportStream represents a partial transport stream descriptor: the
-// play-out/copy control parameters (rates and buffer) of a partial TS, carried
-// in the transmission-info loop of a SIT.
-// Chapter: 7.2.1 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type PartialTransportStream struct {
 	Header                        Header `json:"_header"`
 	PeakRate                      uint32 `json:"peak_rate"`

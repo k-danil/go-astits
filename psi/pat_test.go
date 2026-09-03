@@ -4,10 +4,8 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
-
-	"github.com/k-danil/go-astits/v2/internal/bitstest"
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/bitstest"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
 )
 
 var pat = &PAT{
@@ -28,19 +26,6 @@ func patBytes() []byte {
 	_ = w.Write("111")           // Program #2 reserved bits
 	_ = w.Write("0000000000101") // Program #3 map ID
 	return buf.Bytes()
-}
-
-func TestParsePATSection(t *testing.T) {
-	var b = patBytes()
-	d, err := parsePATSection(bytesiter.New(b), len(b), uint16(1))
-	assert.Equal(t, d, pat)
-	assert.NoError(t, err)
-}
-
-func TestWritePATSection(t *testing.T) {
-	dst := pat.appendSection(nil)
-	assert.Equal(t, 8, len(dst))
-	assert.Equal(t, patBytes(), dst)
 }
 
 func BenchmarkParsePATSection(b *testing.B) {

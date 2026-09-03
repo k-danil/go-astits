@@ -3,10 +3,9 @@ package descriptor
 import (
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
 )
 
-// StereoscopicProgramInfo is the MPEG-2 systems Stereoscopic_program_info_descriptor (ISO/IEC 13818-1).
 type StereoscopicProgramInfo struct {
 	Header      Header `json:"_header"`
 	ServiceType uint8  `json:"service_type"`

@@ -1,8 +1,6 @@
 package descriptor
 
-// Malformed is a descriptor whose body failed to parse while the loop
-// structure held: the body is the encoder's data, kept verbatim so the loop
-// stays usable and the violation stays visible.
+// Malformed carries a descriptor body the parser rejected, kept verbatim so the surrounding loop stays parseable.
 type Malformed struct {
 	Err    error  `json:"-"`
 	Header Header `json:"_header"`

@@ -3,12 +3,10 @@ package descriptor
 import (
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
 )
 
-// PDC represents a PDC descriptor: the 20-bit Programme Identification Label
-// (day/month/hour/minute of the first published start time), per EN 300 231.
-// Chapter: 6.2.30 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
+// ProgrammeIdentificationLabel packs day/month/hour/minute (EN 300 231), not a plain number.
 type PDC struct {
 	Header                       Header `json:"_header"`
 	ProgrammeIdentificationLabel uint32 `json:"programme_identification_label"`

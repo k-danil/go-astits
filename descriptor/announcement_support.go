@@ -5,22 +5,16 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
-	"github.com/k-danil/go-astits/v2/internal/util"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/util"
 )
 
-// AnnouncementSupport represents an announcement support descriptor: the
-// announcement types a service supports and, for referenced ones, how to reach
-// the announcement stream.
-// Chapter: 6.2.3 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type AnnouncementSupport struct {
 	Announcements    []AnnouncementSupportItem `json:"_announcements"`
 	Header           Header                    `json:"_header"`
 	SupportIndicator uint16                    `json:"announcement_support_indicator"`
 }
 
-// AnnouncementSupportItem is one announcement entry; the reference fields are
-// present only when ReferenceType is 1, 2 or 3.
 type AnnouncementSupportItem struct {
 	OriginalNetworkID uint16                `json:"original_network_id"`
 	TransportStreamID uint16                `json:"transport_stream_id"`
@@ -32,7 +26,6 @@ type AnnouncementSupportItem struct {
 
 type AnnouncementType uint8
 
-// announcement_type values (EN 300 468 Table 19)
 const (
 	AnnouncementTypeEmergencyAlarm       AnnouncementType = 0x00
 	AnnouncementTypeRoadTrafficFlash     AnnouncementType = 0x01
@@ -74,7 +67,6 @@ func (t *AnnouncementType) UnmarshalJSON(b []byte) (err error) {
 
 type AnnouncementReference uint8
 
-// reference_type values (EN 300 468 Table 20)
 const (
 	AnnouncementReferenceUsualAudio       AnnouncementReference = 0x00
 	AnnouncementReferenceSeparateAudio    AnnouncementReference = 0x01

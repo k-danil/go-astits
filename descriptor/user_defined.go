@@ -1,6 +1,6 @@
 package descriptor
 
-import "github.com/k-danil/go-astits/v2/internal/bytesiter"
+import "github.com/k-danil/go-astits/v3/internal/bytesiter"
 
 func newDescriptorUserDefined(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {
 	d := &UserDefined{
@@ -11,8 +11,6 @@ func newDescriptorUserDefined(i *bytesiter.Iterator, h Header, _ int) (dd Descri
 	return
 }
 
-// UserDefined holds the raw body of a descriptor in the user-defined tag
-// range (0x80 and above), whose meaning is private to the stream.
 type UserDefined struct {
 	Header Header `json:"_header"`
 	Data   []byte `json:"_data"`

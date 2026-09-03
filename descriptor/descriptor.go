@@ -5,15 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
-	"github.com/k-danil/go-astits/v2/internal/util"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/util"
 )
 
-// Tag identifies a descriptor type on the wire.
 type Tag uint8
 
-// Descriptor tags
-// Chapter: 6.1 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 const (
 	TagAAC                          Tag = 0x7c
 	TagAC3                          Tag = 0x6a
@@ -241,8 +238,7 @@ func (t *Tag) UnmarshalJSON(b []byte) (err error) {
 	return
 }
 
-// Parse parses a length-prefixed descriptor list; n is the number of bytes
-// consumed (2-byte length prefix plus the descriptors).
+// Parse reads a length-prefixed descriptor list; n includes the 2-byte prefix.
 func Parse(bs []byte) (ds []Descriptor, n int, err error) {
 	i := bytesiter.New(bs)
 	if ds, err = parseDescriptors(i); err != nil {
@@ -251,9 +247,7 @@ func Parse(bs []byte) (ds []Descriptor, n int, err error) {
 	return ds, i.Offset(), nil
 }
 
-// ParseN parses a descriptor loop of exactly length bytes at the start of bs,
-// without a leading 2-byte length prefix — the form a CAT uses, where the loop
-// is bounded by the section length instead.
+// ParseN reads a descriptor loop of length bytes with no length prefix (CAT, TSDT).
 func ParseN(bs []byte, length int) (ds []Descriptor, n int, err error) {
 	i := bytesiter.New(bs)
 	if ds, err = parseDescriptorsN(i, length); err != nil {
@@ -315,9 +309,7 @@ func parseDescriptorsN(i *bytesiter.Iterator, length int) (o []Descriptor, err e
 				offsetDescriptorEnd := offsetBody + int(h.Length)
 				var perr error
 				if o[idx], perr = h.parseDescriptor(i, offsetDescriptorEnd); perr != nil {
-					// A body the parser rejects is the encoder's data, not a torn loop —
-					// unless the bytes are not there at all (the iterator's bound cut the
-					// last descriptor short), which NextBytes turns back into an error
+					// A rejected body is the encoder's data, not a torn loop; only bytes that are truly missing stay an error.
 					i.Seek(offsetBody)
 					var raw []byte
 					if raw, err = i.NextBytes(int(h.Length)); err != nil {
@@ -326,11 +318,9 @@ func parseDescriptorsN(i *bytesiter.Iterator, length int) (o []Descriptor, err e
 					}
 					o[idx] = &Malformed{Header: h, Raw: raw, Err: perr}
 				}
-				// The body parser may stop short of the declared length
+				// Realign: a body parser may stop short of the declared length, or read past it.
 				i.Seek(offsetDescriptorEnd)
-			} else if h.Tag >= userDefinedTagsStart && h.Tag != 0xff {
-				// A zero-length descriptor is valid wire: represent it instead of
-				// leaving a nil entry in the returned slice
+			} else if h.Tag >= userDefinedTagsStart && h.Tag != tagForbidden {
 				o[idx] = &UserDefined{Header: h}
 			} else {
 				o[idx] = &Unknown{Header: h}
@@ -340,8 +330,6 @@ func parseDescriptorsN(i *bytesiter.Iterator, length int) (o []Descriptor, err e
 	return
 }
 
-// Append appends the serialized descriptors with no length prefix; the caller
-// bounds them by the section length, as CAT and TSDT do.
 func Append(dst []byte, ds []Descriptor) []byte {
 	for _, d := range ds {
 		dst = d.Append(dst)
@@ -349,47 +337,40 @@ func Append(dst []byte, ds []Descriptor) []byte {
 	return dst
 }
 
-// AppendWithLength appends the 2-byte descriptors length prefix followed by
-// the serialized descriptors.
 func AppendWithLength(dst []byte, ds []Descriptor) []byte {
 	length := uint16(CalcLength(ds))
 	dst = append(dst, byte(length>>8)|0xf0, byte(length))
 	return Append(dst, ds)
 }
 
-// CalcLength returns the total serialized size of a descriptor list,
-// including the 2-byte tag+length prefix of each entry.
+// Unlike Descriptor.CalcLength, this includes each entry's 2-byte prefix.
 func CalcLength(ds []Descriptor) (length int) {
 	for _, d := range ds {
-		length += 2 // tag and length
+		length += headerLen
 		length += d.CalcLength()
 	}
 	return
 }
 
-// Descriptor is a parsed DVB or MPEG descriptor. Concrete types carry the
-// parsed fields; all serialize through CalcLength and Append.
 type Descriptor interface {
-	// CalcLength returns the value of the descriptor_length field: the body
-	// size without the 2-byte tag+length prefix.
+	// Body size, without the 2-byte prefix that Append writes.
 	CalcLength() int
-	// Append appends the serialized descriptor (tag, length, body) to dst.
 	Append(dst []byte) []byte
 	Tag() Tag
 }
 
-// Header is the 2-byte tag+length prefix common to every descriptor.
 type Header struct {
-	Tag    Tag   `json:"descriptor_tag"` // the tag defines the structure of the contained data following the descriptor length.
+	Tag    Tag   `json:"descriptor_tag"`
 	Length uint8 `json:"descriptor_length"`
 }
 
-// userDefinedTagsStart is the bottom of the user-defined tag range
-// (0x80-0xfe); 0xff is forbidden by the spec.
-const userDefinedTagsStart = 0x80
+const (
+	headerLen            = 2
+	userDefinedTagsStart = 0x80
+	tagForbidden         = 0xff
+)
 
-// parseDescriptor dispatches via a switch on purpose: an indirect call through
-// a parser LUT defeats escape analysis and forces the iterator to the heap.
+// Switch, not a parser LUT: an indirect call forces the iterator to escape to the heap.
 func (dh Header) parseDescriptor(i *bytesiter.Iterator, offsetEnd int) (d Descriptor, err error) {
 	switch dh.Tag {
 	case TagAAC:
@@ -595,7 +576,7 @@ func (dh Header) parseDescriptor(i *bytesiter.Iterator, offsetEnd int) (d Descri
 	case TagVideoWindow:
 		return newDescriptorVideoWindow(i, dh, offsetEnd)
 	default:
-		if dh.Tag >= userDefinedTagsStart && dh.Tag != 0xff {
+		if dh.Tag >= userDefinedTagsStart && dh.Tag != tagForbidden {
 			return newDescriptorUserDefined(i, dh, offsetEnd)
 		}
 		return newDescriptorUnknown(i, dh, offsetEnd)

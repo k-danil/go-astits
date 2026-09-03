@@ -3,10 +3,9 @@ package descriptor
 import (
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
 )
 
-// MPEG2AACAudio is the MPEG-2 systems MPEG-2_AAC_audio_descriptor (ISO/IEC 13818-1).
 type MPEG2AACAudio struct {
 	Header                Header `json:"_header"`
 	Profile               uint8  `json:"MPEG-2_AAC_profile"`

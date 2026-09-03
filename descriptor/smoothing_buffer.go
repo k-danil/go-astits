@@ -3,13 +3,12 @@ package descriptor
 import (
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
 )
 
-// SmoothingBuffer is the MPEG-2 systems smoothing_buffer_descriptor (ISO/IEC 13818-1).
 type SmoothingBuffer struct {
 	SbLeakRate uint32 `json:"sb_leak_rate"` // In units of 400 bits/s
-	SbSize     uint32 `json:"sb_size"`      // In bytes
+	SbSize     uint32 `json:"sb_size"`
 	Header     Header `json:"_header"`
 }
 

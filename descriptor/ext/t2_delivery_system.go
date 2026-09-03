@@ -4,13 +4,9 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
 )
 
-// T2DeliverySystem represents a T2 delivery system extension
-// descriptor: the DVB-T2 tuning parameters mapping a transport stream to a data
-// PLP. The block after T2SystemID is present only when HasExtension.
-// Chapter: 6.4.5.3 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type T2DeliverySystem struct {
 	Cells              []T2Cell `json:"_cells"`
 	T2SystemID         uint16   `json:"T2_system_id"`
@@ -24,15 +20,13 @@ type T2DeliverySystem struct {
 	HasExtension       bool     `json:"_has_extension"`
 }
 
-// T2Cell is one cell of a T2 delivery system descriptor. CentreFrequencies
-// holds one frequency, or several when the descriptor's TFSFlag is set.
+// More than one CentreFrequency requires the descriptor's TFSFlag.
 type T2Cell struct {
 	CentreFrequencies []uint32    `json:"_centre_frequencies"`
 	Subcells          []T2Subcell `json:"_subcells"`
 	CellID            uint16      `json:"cell_id"`
 }
 
-// T2Subcell is one subcell of a T2 cell
 type T2Subcell struct {
 	CellIDExtension     uint8  `json:"cell_id_extension"`
 	TransposerFrequency uint32 `json:"transposer_frequency"`

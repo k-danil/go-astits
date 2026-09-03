@@ -11,35 +11,49 @@ const (
 	PCRSize    = 6
 )
 
-// ClockReference represents a clock reference
-// Base is based on a 90 kHz clock and extension is based on a 27 MHz clock
-type ClockReference uint64
+const (
+	// PTS and DTS tick at ClockHz/PTSTicks (90 kHz).
+	ClockHz   = 27_000_000
+	PTSTicks  = 300
+	ClockWrap = (1 << 33) * PTSTicks
+)
 
-// NewClockReference builds a new clock reference
+// A count of ClockHz ticks; PTS and DTS are multiples of PTSTicks.
+type ClockReference int64
+
+// base is the 33-bit 90 kHz field, extension the 27 MHz remainder (0..299); a
+// PTS or DTS has none.
 func NewClockReference(base, extension uint64) ClockReference {
-	return ClockReference((base << 9) | extension&0x1ff)
+	return ClockReference(base*PTSTicks + extension)
 }
 
-// Duration converts the clock reference into duration
-func (cr *ClockReference) Duration() time.Duration {
-	return time.Duration(cr.Base()*1e9/90000) + time.Duration(cr.Extension()*1e9/27000000)
+func (cr ClockReference) Base() uint64 {
+	return uint64(cr) / PTSTicks
 }
 
-func (cr *ClockReference) Base() uint64 {
-	return uint64(*cr) >> 9
+func (cr ClockReference) Extension() uint64 {
+	return uint64(cr) % PTSTicks
 }
 
-func (cr *ClockReference) Extension() uint64 {
-	return uint64(*cr) & 0x1ff
+func (cr ClockReference) Duration() time.Duration {
+	// cr*1e9 overflows int64 near the wrap: split at the microsecond (27 ticks).
+	const ticksPerMicro = ClockHz / 1_000_000
+	return time.Duration(cr/ticksPerMicro)*time.Microsecond + time.Duration(cr%ticksPerMicro)*time.Microsecond/ticksPerMicro
 }
 
-// Time converts the clock reference into time
-func (cr *ClockReference) Time() time.Time {
-	return time.Unix(0, cr.Duration().Nanoseconds())
+// cr - o as the shortest signed distance across ClockWrap.
+func (cr ClockReference) Diff(o ClockReference) ClockReference {
+	d := cr - o
+	switch {
+	case d >= ClockWrap/2:
+		d -= ClockWrap
+	case d < -ClockWrap/2:
+		d += ClockWrap
+	}
+	return d
 }
 
-// ParsePCR parses a Program Clock Reference
-// Program clock reference, stored as 33 bits base, 6 bits reserved, 9 bits extension.
+// PCR is 33 bits base, 6 reserved, 9 extension.
 func (cr *ClockReference) ParsePCR(bs []byte) (n int, err error) {
 	if len(bs) < PCRSize {
 		return 0, ErrShortPacket
@@ -49,7 +63,7 @@ func (cr *ClockReference) ParsePCR(bs []byte) (n int, err error) {
 	return PCRSize, nil
 }
 
-func (cr *ClockReference) PutPCR(bs []byte) (n int) {
+func (cr ClockReference) PutPCR(bs []byte) (n int) {
 	var bb [8]byte
 	binary.BigEndian.PutUint64(bb[:], cr.Extension()|cr.Base()<<15|0x7e<<8)
 	copy(bs, bb[2:])
@@ -60,14 +74,13 @@ func (cr *ClockReference) ParsePTSDTS(bs []byte) (n int, err error) {
 	if len(bs) < PTSDTSSize {
 		return 0, ErrShortPacket
 	}
-	// PTS is three fields split by marker bits — [32:30], [29:15], [14:0] — and
-	// the last two straddle byte boundaries, hence the word.
+	// PTS: 3 bits [32:30], 15 [29:15], 15 [14:0], each after a marker bit.
 	v := uint64(binary.BigEndian.Uint32(bs[:4]))<<8 | uint64(bs[4])
 	*cr = NewClockReference(v>>33&0x7<<30|v>>17&0x7fff<<15|v>>1&0x7fff, 0)
 	return PTSDTSSize, nil
 }
 
-func (cr *ClockReference) PutPTSDTS(bs []byte, flag uint8) (n int) {
+func (cr ClockReference) PutPTSDTS(bs []byte, flag uint8) (n int) {
 	bs[0] = flag<<4 | uint8(cr.Base()>>29) | 1
 	bs[1] = uint8(cr.Base() >> 22)
 	bs[2] = uint8(cr.Base()>>14) | 1
@@ -85,7 +98,7 @@ func (cr *ClockReference) ParseESCR(bs []byte) (n int, err error) {
 	return ESCRSize, nil
 }
 
-func (cr *ClockReference) PutESCR(bs []byte) (n int) {
+func (cr ClockReference) PutESCR(bs []byte) (n int) {
 	bs[0] = 0xc0 | uint8((cr.Base()>>27)&0x38) | 0x04 | uint8((cr.Base()>>28)&0x03)
 	bs[1] = uint8(cr.Base() >> 20)
 	bs[2] = uint8((cr.Base()>>13)&0x3) | 0x4 | uint8((cr.Base()>>12)&0xf8)

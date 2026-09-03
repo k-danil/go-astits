@@ -4,13 +4,9 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
 )
 
-// FrequencyList represents a frequency list descriptor: the additional
-// frequencies a multiplex is transmitted on. CodingType selects the delivery
-// system the raw centre-frequency values are coded for.
-// Chapter: 6.2.17 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type FrequencyList struct {
 	Frequencies []uint32 `json:"_centre_frequencies"`
 	Header      Header   `json:"_header"`

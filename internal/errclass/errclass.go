@@ -1,6 +1,3 @@
-// Package errclass builds sentinel errors that belong to a broader class:
-// the message stays clean, errors.Is matches both the sentinel and its class
-// through Unwrap.
 package errclass
 
 func New(msg string, class error) error {

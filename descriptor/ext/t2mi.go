@@ -3,12 +3,9 @@ package ext
 import (
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
 )
 
-// T2MI represents a T2-MI extension descriptor: identifies a PID
-// carrying a single T2-MI stream.
-// Chapter: 6.4.13 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type T2MI struct {
 	Reserved               []byte `json:"_reserved"`
 	T2MIStreamID           uint8  `json:"t2mi_stream_id"`
@@ -44,7 +41,7 @@ func (d *T2MI) Append(dst []byte) []byte {
 	if d.PCRISCRCommonClockFlag {
 		pcr = 0x01
 	}
-	// Table 149 NOTE: the reserved_future_use bits shall all be 0.
+	// Table 149: these reserved_future_use bits are 0, unlike the 1-padding elsewhere in this package.
 	dst = append(dst, d.T2MIStreamID&0x07, d.NumT2MIStreamsMinusOne&0x07, pcr)
 	return append(dst, d.Reserved...)
 }

@@ -4,13 +4,12 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
-	"github.com/k-danil/go-astits/v2/internal/util"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/util"
 )
 
 type VideoDepthRangeType uint8
 
-// range_type values (EN 300 468 Table 153)
 const (
 	VideoDepthRangeProductionDisparityHint VideoDepthRangeType = 0x00
 	VideoDepthRangeMultiRegionSEI          VideoDepthRangeType = 0x01
@@ -38,17 +37,11 @@ func (t *VideoDepthRangeType) UnmarshalJSON(b []byte) (err error) {
 	return
 }
 
-// VideoDepthRange represents a video depth range extension descriptor:
-// the intended depth range of plano-stereoscopic 3D video, so receivers can
-// place graphics. For RangeType 0 the two disparity hints apply; for types >= 2
-// the raw RangeSelector bytes apply.
-// Chapter: 6.4.15 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type VideoDepthRange struct {
 	Ranges []DepthRange `json:"_ranges"`
 }
 
-// DepthRange is one depth-range entry. VideoMaxDisparityHint /
-// VideoMinDisparityHint (raw 12-bit signed values) apply for RangeType 0.
+// VideoMaxDisparityHint/VideoMinDisparityHint hold raw 12-bit two's-complement values in a uint16.
 type DepthRange struct {
 	RangeSelector         []byte              `json:"range_selector_byte"`
 	VideoMaxDisparityHint uint16              `json:"video_max_disparity_hint"`

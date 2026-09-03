@@ -3,14 +3,13 @@ package descriptor
 import (
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
 )
 
-// MetadataSTD is the MPEG-2 systems metadata_STD_descriptor (ISO/IEC 13818-1).
 type MetadataSTD struct {
-	InputLeakRate  uint32 `json:"metadata_input_leak_rate"`  // 400 bits/s
-	BufferSize     uint32 `json:"metadata_buffer_size"`      // 1024 bytes
-	OutputLeakRate uint32 `json:"metadata_output_leak_rate"` // 400 bits/s
+	InputLeakRate  uint32 `json:"metadata_input_leak_rate"`  // units of 400 bit/s
+	BufferSize     uint32 `json:"metadata_buffer_size"`      // units of 1024 bytes
+	OutputLeakRate uint32 `json:"metadata_output_leak_rate"` // units of 400 bit/s
 	Header         Header `json:"_header"`
 }
 

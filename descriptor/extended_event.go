@@ -3,12 +3,10 @@ package descriptor
 import (
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/dvbtext"
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/dvbtext"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
 )
 
-// ExtendedEvent represents an extended event descriptor
-// Chapter: 6.2.15 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type ExtendedEvent struct {
 	Text                 dvbtext.Text        `json:"text_char"`
 	Items                []ExtendedEventItem `json:"_items"`
@@ -18,8 +16,6 @@ type ExtendedEvent struct {
 	Number               uint8               `json:"descriptor_number"`
 }
 
-// ExtendedEventItem represents an extended event item descriptor
-// Chapter: 6.2.15 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type ExtendedEventItem struct {
 	Content     dvbtext.Text `json:"item_char"`
 	Description dvbtext.Text `json:"item_description"`

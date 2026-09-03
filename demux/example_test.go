@@ -6,11 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 
-	"github.com/k-danil/go-astits/v2/demux"
-	"github.com/k-danil/go-astits/v2/mux"
-	"github.com/k-danil/go-astits/v2/psi"
-	"github.com/k-danil/go-astits/v2/ts"
+	"github.com/k-danil/go-astits/v3/demux"
+	"github.com/k-danil/go-astits/v3/mux"
+	"github.com/k-danil/go-astits/v3/psi"
+	"github.com/k-danil/go-astits/v3/ts"
+	"github.com/k-danil/go-astits/v3/tsio"
 )
 
 // The canonical demux loop: advance to each event, claim and release PES units,
@@ -115,4 +117,165 @@ func Example() {
 		}
 	}
 	// Output: PMT elementary PID: 0x100
+}
+
+// A torn live feed (UDP, RTP): lock onto the sync byte at any offset, survive
+// damage instead of failing on the first corrupt packet, and hear about it.
+func ExampleWithSyncLock() {
+	var r io.Reader // a datagram reassembler, or any reader
+
+	dmx := demux.New(context.Background(), r,
+		demux.WithSyncLock(),
+		demux.WithSkipErrLimit(-1), demux.WithResyncLimit(-1), // never give up
+		demux.WithRecoverableErrors())
+	defer dmx.Close()
+
+	for ev, err := range dmx.Events() {
+		var re *ts.RecoverableError
+		if errors.As(err, &re) {
+			switch re.Kind { // TR 101 290 counters, for instance
+			case ts.ErrorKindSyncLoss:
+				_ = re.Dropped // bytes lost until the next lock
+			case ts.ErrorKindSyncByte, ts.ErrorKindPacketDrop, ts.ErrorKindCRC:
+			}
+			continue
+		}
+		if err != nil {
+			return
+		}
+		if ev == demux.EventPES {
+			dmx.PES().Close()
+		}
+	}
+}
+
+// Keep only some PIDs: the allow-list is checked right after the header,
+// before any payload work, so the PAT and the PMT PIDs must stay on it or no
+// program can be resolved.
+func ExampleWithKeepPIDs() {
+	var r io.Reader
+
+	keep := ts.NewPIDSet(ts.PIDPAT, 0x1000, 0x100) // PAT, this program's PMT, its video
+	dmx := demux.New(context.Background(), r,
+		demux.WithPacketSize(ts.PacketSize), demux.WithKeepPIDs(&keep))
+	defer dmx.Close()
+
+	for ev, err := range dmx.Events() {
+		if err != nil {
+			return
+		}
+		if ev == demux.EventPES {
+			dmx.PES().Close() // only PID 0x100 gets here
+		}
+	}
+}
+
+// Packet-level work without a copy per packet: the packet is a view into the
+// read window, valid until the next NextPacketTo — copy what must outlive it.
+func ExampleWithZeroCopyPackets() {
+	var r io.Reader
+
+	dmx := demux.New(context.Background(), r,
+		demux.WithPacketSize(ts.PacketSize), demux.WithZeroCopyPackets(1024))
+	defer dmx.Close()
+
+	p := ts.NewPacket()
+	defer p.Close()
+	var kept [][]byte
+	for {
+		if err := dmx.NextPacketTo(p); err != nil {
+			break
+		}
+		if p.Header.PayloadUnitStartIndicator {
+			kept = append(kept, append([]byte(nil), p.Payload...)) // owned copy
+		}
+	}
+	_ = kept
+}
+
+// Two passes over a file: a short prefix scan for the program map, then a
+// rewind and the real pass. Behind a tsio.SeekBuffer the rewind stays inside
+// the buffered window and costs no I/O.
+func ExampleDemuxer_Rewind() {
+	f, err := os.Open("stream.ts")
+	if err != nil {
+		return
+	}
+	defer func() { _ = f.Close() }()
+	sb := tsio.NewSeekBuffer(4 << 20)
+	if err = sb.Reset(f); err != nil {
+		return
+	}
+
+	dmx := demux.New(context.Background(), sb, demux.WithPacketSize(ts.PacketSize))
+	defer dmx.Close()
+	for ev, err := range dmx.Events() {
+		if err != nil {
+			return
+		}
+		if ev == demux.EventPMT {
+			break // the program map is known
+		}
+	}
+
+	if _, err = dmx.Rewind(); err != nil {
+		return
+	}
+	for ev, err := range dmx.Events() { // tables re-emit, the map survives
+		if err != nil {
+			return
+		}
+		if ev == demux.EventPES {
+			dmx.PES().Close()
+		}
+	}
+}
+
+// DVB service information: with WithDVBTables the SI tables are parsed too,
+// and Section hands over the one behind the last table event.
+func ExampleDemuxer_Section() {
+	var r io.Reader
+
+	dmx := demux.New(context.Background(), r,
+		demux.WithPacketSize(ts.PacketSize), demux.WithDVBTables())
+	defer dmx.Close()
+
+	for ev, err := range dmx.Events() {
+		if err != nil {
+			return
+		}
+		switch ev {
+		case demux.EventSDT:
+			pid, s := dmx.Section() // valid until the next Next
+			_, _ = pid, s.Syntax.Data.(*psi.SDT)
+		case demux.EventEIT:
+			_, s := dmx.Section()
+			_ = s.Syntax.Data.(*psi.EIT)
+		case demux.EventPES:
+			dmx.PES().Close()
+		}
+	}
+}
+
+// Per-packet accounting alongside the event loop: the hook sees every packet
+// that reaches unit assembly, for the duration of the call only.
+func ExampleWithPacketHook() {
+	var r io.Reader
+
+	bytesPerPID := map[uint16]int{}
+	dmx := demux.New(context.Background(), r,
+		demux.WithPacketSize(ts.PacketSize),
+		demux.WithPacketHook(func(p *ts.Packet) { bytesPerPID[p.Header.PID] += len(p.Raw()) }),
+		demux.WithMaxUnitSize(4<<20, 64<<10)) // cap a runaway PES at 4 MB, a PSI unit at 64 KB
+	defer dmx.Close()
+
+	for ev, err := range dmx.Events() {
+		if err != nil {
+			return
+		}
+		if ev == demux.EventPES {
+			dmx.PES().Close()
+		}
+	}
+	_ = bytesPerPID
 }

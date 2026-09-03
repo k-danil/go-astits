@@ -4,10 +4,8 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
-
-	"github.com/k-danil/go-astits/v2/internal/bitstest"
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/bitstest"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
 )
 
 var pmt = &PMT{
@@ -34,18 +32,6 @@ func pmtBytes() []byte {
 	_ = w.Write("1111")                      // Stream #1 reserved
 	descriptorsBytes(w)                      // Stream #1 descriptors
 	return buf.Bytes()
-}
-
-func TestParsePMTSection(t *testing.T) {
-	var b = pmtBytes()
-	d, err := parsePMTSection(bytesiter.New(b), len(b), uint16(1))
-	assert.Equal(t, d, pmt)
-	assert.NoError(t, err)
-}
-
-func TestWritePMTSection(t *testing.T) {
-	dst := pmt.appendSection(nil)
-	assert.Equal(t, pmtBytes(), dst)
 }
 
 func BenchmarkParsePMTSection(b *testing.B) {

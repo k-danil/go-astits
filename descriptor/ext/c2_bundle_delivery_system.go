@@ -4,18 +4,13 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
 )
 
-// C2BundleDeliverySystem represents a C2 bundle delivery system
-// extension descriptor: the DVB-C2 tuning parameters of every bundled PLP
-// required to reassemble a channel-bundled transport stream.
-// Chapter: 6.4.5.4 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type C2BundleDeliverySystem struct {
 	Entries []C2BundleEntry `json:"_entries"`
 }
 
-// C2BundleEntry is one bundled PLP of a C2 bundle delivery system descriptor
 type C2BundleEntry struct {
 	C2SystemTuningFrequency     uint32 `json:"C2_System_tuning_frequency"`
 	PLPID                       uint8  `json:"plp_id"`

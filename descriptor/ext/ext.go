@@ -1,29 +1,22 @@
-// Package ext holds the DVB extension_descriptor sub-descriptors (EN 300 468
-// §6.3): the extension_descriptor (main tag 0x7f) selects one of these by a
-// second extension_descriptor_tag byte. Each Body is a payload only; the outer
-// tag and length are owned by the enclosing descriptor.Extension.
 package ext
 
 import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
-	"github.com/k-danil/go-astits/v2/internal/util"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/util"
 )
 
 type Tag uint8
 
-// Body is one extension_descriptor sub-descriptor. Tag reports its
-// extension_descriptor_tag; CalcLength and Append cover the payload only.
+// CalcLength and Append cover the payload: descriptor.Extension writes the descriptor tag, length and extension_descriptor_tag.
 type Body interface {
 	Tag() Tag
 	CalcLength() int
 	Append(dst []byte) []byte
 }
 
-// Extension descriptor tags
-// Chapter: 6.3 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 const (
 	TagImageIcon              Tag = 0x00
 	TagCP                     Tag = 0x02
@@ -108,8 +101,6 @@ func (*DTSHD) Tag() Tag                  { return TagDTSHD }
 func (*DTSNeural) Tag() Tag              { return TagDTSNeural }
 func (*AC4) Tag() Tag                    { return TagAC4 }
 
-// Unknown is an extension_descriptor sub-descriptor whose tag is not typed; it
-// carries the raw payload verbatim.
 type Unknown struct {
 	Data   []byte `json:"_data"`
 	ExtTag Tag    `json:"extension_descriptor_tag"`
@@ -119,8 +110,6 @@ func (u *Unknown) Tag() Tag                 { return u.ExtTag }
 func (u *Unknown) CalcLength() int          { return len(u.Data) }
 func (u *Unknown) Append(dst []byte) []byte { return append(dst, u.Data...) }
 
-// Parse reads the sub-descriptor body for extTag; unrecognised tags become an
-// Unknown holding the remaining bytes up to offsetEnd.
 func Parse(i *bytesiter.Iterator, extTag Tag, offsetEnd int) (b Body, err error) {
 	switch extTag {
 	case TagSupplementaryAudio:

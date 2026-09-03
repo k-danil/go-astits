@@ -4,11 +4,10 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
-	"github.com/k-danil/go-astits/v2/internal/util"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/util"
 )
 
-// SVCExtension is the MPEG-2 systems SVC extension descriptor (ISO/IEC 13818-1).
 type SVCExtension struct {
 	Header              Header `json:"_header"`
 	Width               uint16 `json:"width"`

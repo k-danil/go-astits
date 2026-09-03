@@ -6,13 +6,11 @@ import (
 	"errors"
 	"sync"
 
-	"github.com/k-danil/go-astits/v2/pes"
-	"github.com/k-danil/go-astits/v2/psi"
-	"github.com/k-danil/go-astits/v2/ts"
+	"github.com/k-danil/go-astits/v3/pes"
+	"github.com/k-danil/go-astits/v3/psi"
+	"github.com/k-danil/go-astits/v3/ts"
 )
 
-// PES is a complete parsed PES unit. The library owns the pool: an instance
-// claimed via Demuxer.PES() stays valid across Next calls until Close.
 type PES struct {
 	Data              pes.Data
 	AdaptationField   *ts.PacketAdaptationField
@@ -20,11 +18,11 @@ type PES struct {
 	ContinuityCounter uint8
 	// Truncated: the stream ended (EOF) before closing the unit, Data is what
 	// arrived. Unbounded (length 0) may still be whole; bounded is short.
-	Truncated bool
-	// Offsets of the first and the last packet that carried the unit, as
-	// Packet.Offset (the packet's first byte in the stream).
+	Truncated         bool
 	FirstPacketOffset int64
 	LastPacketOffset  int64
+	FirstPacketTag    uint64
+	LastPacketTag     uint64
 
 	af  ts.PacketAdaptationField
 	buf *dataPayload
@@ -50,7 +48,6 @@ func (d *PES) Close() {
 	poolOfPES.Put(d)
 }
 
-// tableEvent is a pending table emission.
 type tableEvent struct {
 	sec     *psi.Section
 	pid     uint16
@@ -58,12 +55,7 @@ type tableEvent struct {
 	changed bool
 }
 
-// psiCache holds the last unit of a PID that yielded at least one usable
-// section: the raw bytes for the repeat check, the emittable events reused on
-// a repeat, and the section errors re-reported on a repeat (each occurrence
-// of a damaged section is a damage event of its own). A unit of nothing but
-// damaged sections never replaces it, so a good unit coming back after one
-// still dedups as the repeat it is.
+// A unit of nothing but damaged sections never replaces the cache, so a good unit returning after one still dedups.
 type psiCache struct {
 	raw    []byte
 	events []tableEvent
@@ -104,10 +96,6 @@ func tableEventKind(d psi.SectionSyntaxData) (ev Event, ok bool) {
 	return 0, false
 }
 
-// processUnit parses a flushed unit: PSI updates the table state and queues
-// EventTable emissions, PES materializes a pooled unit. Buffer ownership:
-// PSI/garbage buffers return to the pool here, a PES buffer moves into the
-// emitted unit.
 func (dmx *Demuxer) processUnit(u unit) (emitted *PES, err error) {
 	switch {
 	case u.isPSI:
@@ -136,6 +124,7 @@ func (dmx *Demuxer) processUnit(u unit) (emitted *PES, err error) {
 		}
 		d.Truncated = u.truncated && pesTruncated(&d.Data, len(u.buf.bs))
 		d.FirstPacketOffset, d.LastPacketOffset = u.firstOffset, u.lastOffset
+		d.FirstPacketTag, d.LastPacketTag = u.firstTag, u.lastTag
 		if dmx.optRecoverable && d.Data.Header.PacketLength == 0 && !unboundedAllowed(d.Data.Header.StreamID) {
 			dmx.reportRecoverable(ts.RecoverableError{
 				Kind: ts.ErrorKindPES, PID: u.pid, Offset: dmx.pkt.Offset, Err: pes.ErrUnboundedNonVideo,
@@ -167,20 +156,15 @@ const (
 	pesStreamIDExtended  = 0xfd
 )
 
-// unboundedAllowed: §2.4.3.7 allows PES_packet_length 0 for video only; the
-// extended id carries VC-1 and Dirac video too, indistinguishable from its
-// other payloads without the PMT, so it is not reported.
+// §2.4.3.7 allows length 0 for video only; the extended id also carries VC-1/Dirac video, so it is not reported.
 func unboundedAllowed(id pes.StreamID) bool {
 	return id&pesStreamIDVideoMask == pesStreamIDVideo || id == pesStreamIDExtended
 }
 
-// Unbounded counts as truncated: nothing but the next unit start confirms its end.
 func pesTruncated(d *pes.Data, n int) bool {
 	return d.Header.PacketLength == 0 || pes.HeaderSize+int(d.Header.PacketLength) > n
 }
 
-// reportPSIError splits out a CRC32 mismatch (TR 101 290 CRC_error) from other
-// section damage.
 func (dmx *Demuxer) reportPSIError(pid uint16, dropped int, err error) {
 	kind := ts.ErrorKindPSI
 	if errors.Is(err, psi.ErrCRC32Mismatch) {
@@ -192,8 +176,6 @@ func (dmx *Demuxer) reportPSIError(pid uint16, dropped int, err error) {
 }
 
 func (dmx *Demuxer) processPSI(u unit) {
-	// PSI repeat dedup: an identical section carries no new information, so it
-	// is not re-parsed. Without WithPSIRepeats it is not emitted either.
 	if cache := dmx.psiPrev.Get(u.pid); cache != nil && bytes.Equal(cache.raw, u.buf.bs) {
 		poolOfPayload.put(u.buf)
 		dmx.reportSectionErrors(u.pid, cache.errs)
@@ -240,7 +222,6 @@ func (dmx *Demuxer) processPSI(u unit) {
 		case *psi.PAT:
 			dmx.applyPAT(data, &s.Syntax.Header)
 		case *psi.PMT:
-			// Announced for later (current_next_indicator 0): surfaced, not in effect
 			if s.Syntax.Header.CurrentNextIndicator {
 				dmx.pmt = data
 			}
@@ -260,12 +241,7 @@ func (dmx *Demuxer) reportSectionErrors(pid uint16, errs []*psi.SectionError) {
 	}
 }
 
-// applyPAT keeps the program map answering two questions: which PIDs carry
-// PSI, and which programs are in effect. A PAT announced for later
-// (current_next_indicator 0) only adds its PMT PIDs, so their sections are
-// parsed as PSI when they arrive; a PAT in effect that bumps the version
-// rebuilds the map, dropping the PIDs the new layout freed — they may come
-// back as elementary streams. Sections of one version add up in any order.
+// A PAT announced for later still adds its PMT PIDs, so their sections parse as PSI; a version bump on the PAT in effect rebuilds the map, freeing PIDs that may return as elementary streams.
 func (dmx *Demuxer) applyPAT(pat *psi.PAT, h *psi.SectionSyntaxHeader) {
 	if h.CurrentNextIndicator {
 		dmx.pat = pat
@@ -283,7 +259,6 @@ func (dmx *Demuxer) applyPAT(pat *psi.PAT, h *psi.SectionSyntaxHeader) {
 	}
 }
 
-// isPESPayload checks whether the payload is a PES one
 func isPESPayload(bs []byte) bool {
 	if len(bs) < 4 {
 		return false

@@ -4,10 +4,9 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
 )
 
-// VideoWindow is the MPEG-2 systems video_window_descriptor (ISO/IEC 13818-1).
 type VideoWindow struct {
 	Header           Header `json:"_header"`
 	HorizontalOffset uint16 `json:"horizontal_offset"`

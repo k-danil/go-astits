@@ -3,10 +3,9 @@ package descriptor
 import (
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
 )
 
-// TargetBackgroundGrid is the MPEG-2 systems target_background_grid_descriptor (ISO/IEC 13818-1).
 type TargetBackgroundGrid struct {
 	Header                 Header `json:"_header"`
 	HorizontalSize         uint16 `json:"horizontal_size"`

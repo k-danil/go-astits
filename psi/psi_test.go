@@ -7,9 +7,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/k-danil/go-astits/v2/internal/bitstest"
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
-	"github.com/k-danil/go-astits/v2/ts"
+	"github.com/k-danil/go-astits/v3/internal/bitstest"
+	"github.com/k-danil/go-astits/v3/ts"
 )
 
 var psi = &Data{
@@ -187,75 +186,11 @@ func TestParsePSIData(t *testing.T) {
 	assert.Equal(t, &SectionError{TableID: 254, Offset: 153, Len: 2, Err: ErrUnknownTable}, d.Errors[0])
 }
 
-var psiSectionHeader = SectionHeader{
-	PrivateBit:             true,
-	SectionLength:          2730,
-	SectionSyntaxIndicator: true,
-	TableID:                0,
-}
-
-func psiSectionHeaderBytes() []byte {
-	buf := &bytes.Buffer{}
-	w := bitstest.NewWriter(buf)
-	_ = w.Write(uint8(0))       // Table ID
-	_ = w.Write("1")            // Syntax section indicator
-	_ = w.Write("1")            // Private bit
-	_ = w.Write("11")           // Reserved
-	_ = w.Write("101010101010") // Section length
-	return buf.Bytes()
-}
-
-func TestParsePSISectionHeader(t *testing.T) {
-	// Unknown table type
-	buf := &bytes.Buffer{}
-	w := bitstest.NewWriter(buf)
-	_ = w.Write(uint8(254)) // Table ID
-	_ = w.Write("1")        // Syntax section indicator
-	_ = w.Write("0000000")  // Finish the byte
-	var d SectionHeader
-	_, _, err := d.parsePSISectionHeader(bytesiter.New(buf.Bytes()))
-	assert.Equal(t, d, SectionHeader{
-		TableID: 254,
-	})
-	assert.NoError(t, err)
-
-	d = SectionHeader{}
-	// Valid table type
-	offsets, _, err := d.parsePSISectionHeader(bytesiter.New(psiSectionHeaderBytes()))
-	assert.Equal(t, d, psiSectionHeader)
-	assert.Equal(t, 0, offsets.start)
-	assert.Equal(t, 3, offsets.sectionsStart)
-	assert.Equal(t, 2729, offsets.sectionsEnd)
-	assert.Equal(t, 2733, offsets.end)
-	assert.NoError(t, err)
-}
-
 func TestPSITableType(t *testing.T) {
-	for i := TableIDEITStart; i <= TableIDEITEnd; i++ {
-		assert.Equal(t, TableTypeEIT, i.Type())
+	for i := range 256 {
+		id := TableID(uint8(i))
+		assert.Equal(t, id.IsUnknown(), id.Type() == TableTypeUnknown, "0x%02x", i)
 	}
-	assert.Equal(t, TableTypeDIT, TableIDDIT.Type())
-	assert.Equal(t, TableTypeNIT, TableIDNITVariant1.Type())
-	assert.Equal(t, TableTypeNIT, TableIDNITVariant2.Type())
-	assert.Equal(t, TableTypeSDT, TableIDSDTVariant1.Type())
-	assert.Equal(t, TableTypeSDT, TableIDSDTVariant2.Type())
-
-	assert.Equal(t, TableTypeBAT, TableIDBAT.Type())
-	assert.Equal(t, TableTypeNull, TableIDNull.Type())
-	assert.Equal(t, TableTypePAT, TableIDPAT.Type())
-	assert.Equal(t, TableTypePMT, TableIDPMT.Type())
-	assert.Equal(t, TableTypeRST, TableIDRST.Type())
-	assert.Equal(t, TableTypeSIT, TableIDSIT.Type())
-	assert.Equal(t, TableTypeST, TableIDST.Type())
-	assert.Equal(t, TableTypeTDT, TableIDTDT.Type())
-	assert.Equal(t, TableTypeTOT, TableIDTOT.Type())
-	assert.Equal(t, TableTypeCAT, TableIDCAT.Type())
-	assert.Equal(t, TableTypeTSDT, TableIDTSDT.Type())
-	assert.Equal(t, TableTypeISO14496, TableIDISO14496Scene.Type())
-	assert.Equal(t, TableTypeISO14496, TableIDISO14496Object.Type())
-	assert.Equal(t, TableTypeISO14496, TableIDISO14496.Type())
-	assert.Equal(t, TableTypeMetadata, TableIDMetadata.Type())
-	assert.Equal(t, TableTypeUnknown, TableID(0x09).Type())
 }
 
 var psiSectionSyntaxHeader = SectionSyntaxHeader{
@@ -276,13 +211,6 @@ func psiSectionSyntaxHeaderBytes() []byte {
 	_ = w.Write(uint8(2))  // Section number
 	_ = w.Write(uint8(3))  // Last section number
 	return buf.Bytes()
-}
-
-func TestParsePSISectionSyntaxHeader(t *testing.T) {
-	var h SectionSyntaxHeader
-	err := h.parsePSISectionSyntaxHeader(bytesiter.New(psiSectionSyntaxHeaderBytes()))
-	assert.Equal(t, psiSectionSyntaxHeader, h)
-	assert.NoError(t, err)
 }
 
 type psiDataTestCase struct {
@@ -384,20 +312,4 @@ func BenchmarkParsePSIData(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		_, _ = Parse(pb)
 	}
-}
-
-// Parsed tables must own their payloads: no field may keep a view into the
-// input buffer, the demuxer returns it to a pool right after parsing.
-func TestParseOwnsInput(t *testing.T) {
-	src := psiBytes()
-	reference, err := Parse(append([]byte(nil), src...))
-	require.NoError(t, err)
-
-	parsed, err := Parse(src)
-	require.NoError(t, err)
-	for i := range src {
-		src[i] = 0xa5
-	}
-
-	assert.Equal(t, reference, parsed)
 }

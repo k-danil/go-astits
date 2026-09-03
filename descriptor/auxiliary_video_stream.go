@@ -3,10 +3,9 @@ package descriptor
 import (
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
 )
 
-// AuxiliaryVideoStream is the MPEG-2 systems Auxiliary_video_stream_descriptor (ISO/IEC 13818-1).
 type AuxiliaryVideoStream struct {
 	SIRBSP                  []byte `json:"si_rbsp"`
 	Header                  Header `json:"_header"`

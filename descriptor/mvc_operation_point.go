@@ -3,11 +3,10 @@ package descriptor
 import (
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
-	"github.com/k-danil/go-astits/v2/internal/util"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/util"
 )
 
-// MVCOperationPoint is the MPEG-2 systems MVC_operation_point_descriptor (ISO/IEC 13818-1).
 type MVCOperationPoint struct {
 	Levels             []MVCOperationPointLevel `json:"_levels"`
 	Header             Header                   `json:"_header"`

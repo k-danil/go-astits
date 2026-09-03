@@ -6,13 +6,12 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
-	"github.com/k-danil/go-astits/v2/internal/errclass"
-	"github.com/k-danil/go-astits/v2/internal/util"
-	"github.com/k-danil/go-astits/v2/ts"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/errclass"
+	"github.com/k-danil/go-astits/v3/internal/util"
+	"github.com/k-danil/go-astits/v3/ts"
 )
 
-// PSI table IDs
 const (
 	TableTypeBAT      = "BAT"
 	TableTypeCAT      = "CAT"
@@ -34,7 +33,6 @@ const (
 	TableTypeUnknown  = "Unknown"
 )
 
-// ErrCRC32Mismatch reports a section whose CRC32 does not match its content.
 var ErrCRC32Mismatch = errclass.New("astits: CRC32 mismatch", ts.ErrInvalidData)
 
 var (
@@ -43,17 +41,18 @@ var (
 	ErrUnknownTable = errclass.New("astits: unknown table_id", ts.ErrInvalidData)
 )
 
-// ErrTableNotImplemented reports a table type whose serialization is not implemented.
 var ErrTableNotImplemented = errors.New("astits: table serialization is not implemented")
 
-// ErrSectionOverflow reports table data that does not fit the 1021-byte section
-// limit; only PAT may span multiple sections, a PMT must fit one by spec.
 var ErrSectionOverflow = errors.New("astits: section data does not fit a single section")
 
-// maxSectionLength bounds the section_length field (12 bits, capped by spec).
-const maxSectionLength = 1021
+// ISO/IEC 13818-1 §2.4.4.1: 12-bit field, capped at 1021 for PSI sections.
+const (
+	maxSectionLength    = 1021
+	psiSyntaxHeaderLen  = 5
+	crc32Len            = 4
+	sectionReservedBits = 0x30
+)
 
-// TableID identifies a PSI table (PAT, PMT, EIT, NIT, SDT, TOT, ...).
 type TableID uint8
 
 const (
@@ -145,20 +144,16 @@ func (t *TableID) UnmarshalJSON(b []byte) (err error) {
 	return
 }
 
-// Data represents a PSI data
-// https://en.wikipedia.org/wiki/Program-specific_information
 type Data struct {
-	PointerField int       `json:"pointer_field"` // Present at the start of the TS packet payload signaled by the payload_unit_start_indicator bit in the TS header. Used to set packet alignment bytes or content before the start of tabled payload data.
+	PointerField int       `json:"pointer_field"`
 	Sections     []Section `json:"_sections"`
-	// Errors lists the sections of the unit that could not be used; Sections
-	// holds the rest. Parse fails as a whole only when nothing was usable.
+	// Errors lists the sections that could not be used; Sections holds the rest. Parse itself fails only when the unit yielded neither.
 	Errors []*SectionError `json:"-"`
 }
 
-// SectionError is one unusable section of a unit: Len is what it cost.
 type SectionError struct {
 	Err     error
-	Offset  int // section start within the unit
+	Offset  int
 	Len     int // bytes lost with it, up to the end of the unit when the length itself is unusable
 	TableID TableID
 }
@@ -169,42 +164,37 @@ func (e *SectionError) Error() string {
 
 func (e *SectionError) Unwrap() error { return e.Err }
 
-// Section represents a PSI section
 type Section struct {
 	Syntax *SectionSyntax `json:"_syntax"`
-	CRC32  uint32         `json:"_crc32"` // A checksum of the entire table excluding the pointer field, pointer filler bytes and the trailing CRC32.
+	CRC32  uint32         `json:"_crc32"`
 	Header SectionHeader  `json:"_header"`
 }
 
-// SectionHeader represents a PSI section header
 type SectionHeader struct {
-	SectionLength          uint16  `json:"section_length"`           // The number of bytes that follow for the syntax section (with CRC value) and/or table data. These bytes must not exceed a value of 1021.
-	TableID                TableID `json:"table_id"`                 // Table Identifier, that defines the structure of the syntax section and other contained data. As an exception, if this is the byte that immediately follow previous table section and is set to 0xFF, then it indicates that the repeat of table section end here and the rest of TS data payload shall be stuffed with 0xFF. Consequently the value 0xFF shall not be used for the Table Identifier.
-	SectionSyntaxIndicator bool    `json:"section_syntax_indicator"` // A flag that indicates if the syntax section follows the section length. The PAT, PMT, and CAT all set this to 1.
-	PrivateBit             bool    `json:"private_indicator"`        // The PAT, PMT, and CAT all set this to 0. Other tables set this to 1.
-	RandomAccessIndicator  bool    `json:"random_access_indicator"`  // metadata_section only; unused for every other table
-	DecoderConfigFlag      bool    `json:"decoder_config_flag"`      // metadata_section only; unused for every other table
+	SectionLength          uint16  `json:"section_length"`
+	TableID                TableID `json:"table_id"`
+	SectionSyntaxIndicator bool    `json:"section_syntax_indicator"`
+	PrivateBit             bool    `json:"private_indicator"`
+	// Set only for metadata_section; reserved bits in every other table.
+	RandomAccessIndicator bool `json:"random_access_indicator"`
+	DecoderConfigFlag     bool `json:"decoder_config_flag"`
 }
 
-// SectionSyntax represents a PSI section syntax
 type SectionSyntax struct {
 	Data   SectionSyntaxData   `json:"_data"`
 	Header SectionSyntaxHeader `json:"_header"`
 }
 
-// SectionSyntaxHeader represents a PSI section syntax header
 type SectionSyntaxHeader struct {
-	CurrentNextIndicator bool   `json:"current_next_indicator"` // Indicates if data is current in effect or is for future use. If the bit is flagged on, then the data is to be used at the present moment.
-	LastSectionNumber    uint8  `json:"last_section_number"`    // This indicates which table is the last table in the sequence of tables.
-	SectionNumber        uint8  `json:"section_number"`         // This is an index indicating which table this is in a related sequence of tables. The first table starts from 0.
-	VersionNumber        uint8  `json:"version_number"`         // Syntax version number. Incremented when data is changed and wrapped around on overflow for values greater than 32.
-	TableIDExtension     uint16 `json:"table_id_extension"`     // Informational only identifier. The PAT uses this for the transport stream identifier and the PMT uses this for the Program number.
+	CurrentNextIndicator bool   `json:"current_next_indicator"`
+	LastSectionNumber    uint8  `json:"last_section_number"`
+	SectionNumber        uint8  `json:"section_number"`
+	VersionNumber        uint8  `json:"version_number"`
+	TableIDExtension     uint16 `json:"table_id_extension"`
 }
 
-// SectionSyntaxData represents a PSI section syntax data
 type SectionSyntaxData any
 
-// Parse parses a PSI data
 func Parse(bs []byte) (d *Data, err error) {
 	i := bytesiter.New(bs)
 
@@ -241,9 +231,7 @@ func Parse(bs []byte) (d *Data, err error) {
 	return
 }
 
-// parsePSISection parses one section. A section that cannot be used comes back
-// as serr; stop means the unit holds nothing more to parse (stuffing, an
-// unknown table, or a length that cannot be trusted to skip over).
+// stop: nothing more to parse — stuffing, an unknown table, or a length too damaged to skip over.
 func parsePSISection(i *bytesiter.Iterator) (s Section, serr *SectionError, stop bool) {
 	start := i.Offset()
 
@@ -306,7 +294,6 @@ func (s *Section) parseBody(i *bytesiter.Iterator, offsets psiOffsets) (err erro
 	return
 }
 
-// parseCRC32 parses a CRC32
 func parseCRC32(i *bytesiter.Iterator) (c uint32, err error) {
 	var bs []byte
 	if bs, err = i.NextBytesNoCopy(4); err != nil || len(bs) < 4 {
@@ -317,10 +304,7 @@ func parseCRC32(i *bytesiter.Iterator) (c uint32, err error) {
 	return
 }
 
-// StopsParsing reports whether sections from this table id on are stuffing:
-// parsing must stop there. Besides 0xFF stuffing, an unrecognized table_id is
-// treated as end-of-known-data: this demuxer only surfaces known tables, and
-// stopping conservatively avoids mis-reading padding/torn tails as a section.
+// An unknown table_id is treated as end-of-data: stopping avoids reading padding or a torn tail as a section.
 func (t TableID) StopsParsing() bool {
 	return t == TableIDNull || t.IsUnknown()
 }
@@ -330,7 +314,6 @@ type psiOffsets struct {
 	sectionsStart, sectionsEnd int
 }
 
-// parsePSISectionHeader parses a PSI section header
 func (h *SectionHeader) parsePSISectionHeader(i *bytesiter.Iterator) (offsets psiOffsets, stop bool, err error) {
 	offsets.start = i.Offset()
 
@@ -368,7 +351,7 @@ func (h *SectionHeader) parsePSISectionHeader(i *bytesiter.Iterator) (offsets ps
 	offsets.end = offsets.sectionsStart + int(h.SectionLength)
 	offsets.sectionsEnd = offsets.end
 	if h.TableID.hasCRC32() {
-		offsets.sectionsEnd -= 4
+		offsets.sectionsEnd -= crc32Len
 	}
 	if offsets.sectionsEnd < offsets.sectionsStart {
 		err = fmt.Errorf("astits: section length %d is too short: %w", h.SectionLength, ts.ErrInvalidData)
@@ -376,9 +359,6 @@ func (h *SectionHeader) parsePSISectionHeader(i *bytesiter.Iterator) (offsets ps
 	return
 }
 
-// TableID.Type() returns the psi table type based on the table id
-// Page: 28 | https://www.dvb.org/resources/public/standards/a38_dvb-si_specification.pdf
-// (barbashov) the link above can be broken, alternative: https://dvb.org/wp-content/uploads/2019/12/a038_tm1217r37_en300468v1_17_1_-_rev-134_-_si_specification.pdf
 func (t TableID) Type() string {
 	switch {
 	case t == TableIDBAT:
@@ -420,7 +400,6 @@ func (t TableID) Type() string {
 	}
 }
 
-// hasPSISyntaxHeader checks whether the section has a syntax header
 func (t TableID) hasPSISyntaxHeader() bool {
 	return t == TableIDPAT ||
 		t == TableIDCAT ||
@@ -434,7 +413,6 @@ func (t TableID) hasPSISyntaxHeader() bool {
 		(t >= TableIDEITStart && t <= TableIDEITEnd)
 }
 
-// hasCRC32 checks whether the table has a CRC32
 func (t TableID) hasCRC32() bool {
 	return t.hasPSISyntaxHeader() || t == TableIDTOT || t == TableIDMetadata
 }
@@ -465,7 +443,6 @@ func (t TableID) IsUnknown() bool {
 	return true
 }
 
-// parsePSISectionSyntax parses a PSI section syntax
 func parsePSISectionSyntax(i *bytesiter.Iterator, h *SectionHeader, offsetSectionsEnd int) (s *SectionSyntax, err error) {
 	s = &SectionSyntax{}
 
@@ -483,7 +460,6 @@ func parsePSISectionSyntax(i *bytesiter.Iterator, h *SectionHeader, offsetSectio
 	return
 }
 
-// parsePSISectionSyntaxHeader parses a PSI section syntax header
 func (h *SectionSyntaxHeader) parsePSISectionSyntaxHeader(i *bytesiter.Iterator) (err error) {
 	var bs []byte
 	if bs, err = i.NextBytesNoCopy(2); err != nil || len(bs) < 2 {
@@ -493,7 +469,6 @@ func (h *SectionSyntaxHeader) parsePSISectionSyntaxHeader(i *bytesiter.Iterator)
 
 	h.TableIDExtension = binary.BigEndian.Uint16(bs)
 
-	// Get next byte
 	var b byte
 	if b, err = i.NextByte(); err != nil {
 		err = fmt.Errorf("astits: fetching next byte failed: %w", err)
@@ -520,7 +495,6 @@ func (h *SectionSyntaxHeader) parsePSISectionSyntaxHeader(i *bytesiter.Iterator)
 	return
 }
 
-// parsePSISectionSyntaxData parses a PSI section data
 func parsePSISectionSyntaxData(i *bytesiter.Iterator, h *SectionHeader, sh *SectionSyntaxHeader, offsetSectionsEnd int) (d SectionSyntaxData, err error) {
 	switch h.TableID {
 	case TableIDBAT:
@@ -607,7 +581,6 @@ func parsePSISectionSyntaxData(i *bytesiter.Iterator, h *SectionHeader, sh *Sect
 	return
 }
 
-// Append appends the serialized PSI data (pointer field, sections) to dst.
 func (d *Data) Append(dst []byte) ([]byte, error) {
 	dst = append(dst, uint8(d.PointerField))
 	for i := 0; i < d.PointerField; i++ {
@@ -624,9 +597,6 @@ func (d *Data) Append(dst []byte) ([]byte, error) {
 	return dst, nil
 }
 
-// sectionBody is a PSI table that serializes its section body — the bytes between
-// the syntax header and the CRC. Every serializable table implements it; a table
-// whose Data does not is reported as ErrTableNotImplemented.
 type sectionBody interface {
 	CalcSectionLength() int
 	appendSection(dst []byte) []byte
@@ -634,18 +604,16 @@ type sectionBody interface {
 
 func (s *Section) calcPSISectionLength(body sectionBody) (ret uint16) {
 	if s.Header.TableID.hasPSISyntaxHeader() {
-		ret += 5 // PSI syntax header length
+		ret += psiSyntaxHeaderLen
 	}
 	ret += uint16(body.CalcSectionLength())
 	if s.Header.TableID.hasCRC32() {
-		ret += 4
+		ret += crc32Len
 	}
 	return ret
 }
 
 func (s *Section) appendSection(dst []byte) ([]byte, error) {
-	// A zero-length section (a parsed stuffing table) carries no syntax; anything
-	// with a body, syntax header or CRC has a non-nil Syntax.
 	var body sectionBody
 	if s.Syntax != nil {
 		var ok bool
@@ -663,7 +631,7 @@ func (s *Section) appendSection(dst []byte) ([]byte, error) {
 	}
 	crcStart := len(dst)
 
-	reserved := byte(0x30) // both reserved bits set, except metadata_section carries flags here
+	reserved := byte(sectionReservedBits)
 	if s.Header.TableID == TableIDMetadata {
 		reserved = util.B2U(s.Header.RandomAccessIndicator)<<5 | util.B2U(s.Header.DecoderConfigFlag)<<4
 	}
@@ -672,8 +640,7 @@ func (s *Section) appendSection(dst []byte) ([]byte, error) {
 		util.B2U(s.Header.SectionSyntaxIndicator)<<7|util.B2U(s.Header.PrivateBit)<<6|reserved|byte(sectionLength>>8)&0xf,
 		byte(sectionLength))
 
-	// A zero-length section has no syntax header, body or CRC to follow; anything
-	// with a syntax header or CRC (long form) is non-zero even with an empty body.
+	// body is nil exactly when sectionLength is 0 (a stuffing table): dropping this guard dereferences it.
 	if sectionLength > 0 {
 		if s.Header.TableID.hasPSISyntaxHeader() {
 			dst = s.Syntax.Header.appendSectionSyntaxHeader(dst)

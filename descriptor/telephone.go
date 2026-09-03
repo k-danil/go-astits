@@ -3,13 +3,9 @@ package descriptor
 import (
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
 )
 
-// Telephone represents a telephone descriptor: a telephone number (split into
-// its prefix/area/operator/national/core parts) for narrowband interactive
-// channels.
-// Chapter: 6.2.42 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type Telephone struct {
 	CountryPrefix         []byte `json:"country_prefix_char"`
 	InternationalAreaCode []byte `json:"international_area_code_char"`

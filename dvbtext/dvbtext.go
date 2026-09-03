@@ -1,13 +1,11 @@
-// Package dvbtext implements the SI text coding of ETSI EN 300 468 annex A
-// and the three-byte ISO 639/3166 codes of the SI descriptors.
 package dvbtext
 
 import (
 	"encoding/json"
 	"errors"
 
-	"github.com/k-danil/go-astits/v2/internal/errclass"
-	"github.com/k-danil/go-astits/v2/ts"
+	"github.com/k-danil/go-astits/v3/internal/errclass"
+	"github.com/k-danil/go-astits/v3/ts"
 )
 
 var (
@@ -15,13 +13,11 @@ var (
 	ErrInvalidText        = errclass.New("astits: invalid DVB text", ts.ErrInvalidData)
 )
 
-// Text marshals to JSON as the decoded string: a round trip preserves the
-// text, not the wire bytes.
+// JSON round trip preserves the decoded text, not the wire bytes.
 type Text []byte
 
 func (t Text) Decode() (string, error) { return decode(t, strict) }
 
-// String is Decode without the errors: undecodable bytes are dropped.
 func (t Text) String() string {
 	s, _ := decode(t, lenient)
 	return s
@@ -38,7 +34,6 @@ func (t *Text) UnmarshalJSON(bs []byte) (err error) {
 	return
 }
 
-// Encode picks the default character table when the text fits it, UTF-8 otherwise.
 func Encode(s string) (t Text) {
 	var ok bool
 	if t, ok = encodeLatin(s); ok {

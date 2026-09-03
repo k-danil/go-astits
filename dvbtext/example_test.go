@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/dvbtext"
+	"github.com/k-danil/go-astits/v3/dvbtext"
 )
 
 // A service name as it arrives in an SDT: the leading 0x01 selects

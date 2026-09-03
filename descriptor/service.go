@@ -4,15 +4,13 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/dvbtext"
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
-	"github.com/k-danil/go-astits/v2/internal/util"
+	"github.com/k-danil/go-astits/v3/dvbtext"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/util"
 )
 
 type ServiceType uint8
 
-// Service types
-// Chapter: 6.2.33, Table 87 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 const (
 	ServiceTypeDigitalTelevisionService                    ServiceType = 0x01
 	ServiceTypeDigitalRadioSoundService                    ServiceType = 0x02
@@ -88,8 +86,6 @@ func (t *ServiceType) UnmarshalJSON(b []byte) (err error) {
 	return
 }
 
-// Service represents a service descriptor
-// Chapter: 6.2.33 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type Service struct {
 	Name     dvbtext.Text `json:"service_name"`
 	Provider dvbtext.Text `json:"service_provider_name"`
@@ -137,7 +133,7 @@ func newDescriptorService(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor
 }
 
 func (d *Service) CalcLength() int {
-	return 3 + len(d.Name) + len(d.Provider) // type and lengths
+	return 1 + 1 + 1 + len(d.Name) + len(d.Provider)
 }
 
 func (d *Service) Append(dst []byte) []byte {

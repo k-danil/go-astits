@@ -1,6 +1,4 @@
-// Package bitstest is a minimal bit writer for building test fixtures
-// (bit-string literals like "0101"); production code serializes bytes directly.
-// The API shape follows asticode/go-astikit (MIT, same author as the upstream fork).
+// Package bitstest: API shape follows asticode/go-astikit (MIT).
 package bitstest
 
 import "io"
@@ -34,8 +32,6 @@ func (w *Writer) WriteBits(v uint64, n int) {
 	}
 }
 
-// Write serializes v MSB-first: a string is a bit pattern of '1' and non-'1'
-// runes, integers take their full width, a bool is a single bit.
 func (w *Writer) Write(v any) error {
 	switch t := v.(type) {
 	case string:
@@ -62,7 +58,6 @@ func (w *Writer) Write(v any) error {
 	return nil
 }
 
-// WriteN serializes the n low bits of v MSB-first.
 func (w *Writer) WriteN(v any, n int) error {
 	switch t := v.(type) {
 	case uint8:

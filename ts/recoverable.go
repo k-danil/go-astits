@@ -5,9 +5,7 @@ import (
 	"fmt"
 )
 
-// PIDUnset marks a stream-level RecoverableError (sync loss, repaired sync
-// byte, dropped packet) that is not bound to a PID; a real PID is 13 bits, so
-// 0xFFFF never collides.
+// A real PID is 13 bits, so 0xFFFF never collides.
 const PIDUnset uint16 = 0xFFFF
 
 type ErrorKind uint8
@@ -47,13 +45,11 @@ func (k ErrorKind) String() (s string) {
 	return
 }
 
-// RecoverableError is a non-fatal parse failure the demuxer skipped over:
-// iteration continues past it. It unwraps to the underlying error, so
-// errors.Is(err, ErrInvalidData) and the specific sentinels still match.
+// A parse failure the demuxer skipped; iteration continues past it.
 type RecoverableError struct {
 	Err     error
-	Offset  int64 // best-effort: stream byte offset where the failure was detected, not the unit start
-	Dropped int64 // bytes lost to this event; 0 is a violation that lost nothing
+	Offset  int64 // where the failure was detected, not the unit start
+	Dropped int64 // 0 = a violation that lost nothing, not "unknown"
 	Kind    ErrorKind
 	PID     uint16
 }
@@ -69,8 +65,6 @@ func (e *RecoverableError) Error() (s string) {
 
 func (e *RecoverableError) Unwrap() error { return e.Err }
 
-// IsRecoverable reports whether err is a RecoverableError, i.e. a non-terminal
-// failure the demuxer skipped so iteration can continue past it.
 func IsRecoverable(err error) (ok bool) {
 	var re *RecoverableError
 	ok = errors.As(err, &re)

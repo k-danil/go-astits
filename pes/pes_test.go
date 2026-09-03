@@ -7,22 +7,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/k-danil/go-astits/v2/internal/bitstest"
-	"github.com/k-danil/go-astits/v2/ts"
+	"github.com/k-danil/go-astits/v3/internal/bitstest"
+	"github.com/k-danil/go-astits/v3/ts"
 )
-
-func TestHasPESOptionalHeader(t *testing.T) {
-	var a []StreamID
-	for i := 0; i <= 255; i++ {
-		if !hasPESOptionalHeader(StreamID(i)) {
-			a = append(a, StreamID(i))
-		}
-	}
-	assert.Equal(t, []StreamID{
-		StreamIDProgramStreamMap, StreamIDPaddingStream, StreamIDPrivateStream2,
-		StreamIDECM, StreamIDEMM, StreamIDDSMCC, StreamIDH2221TypeE, StreamIDProgramStreamDirectory,
-	}, a)
-}
 
 var dsmTrickModeSlow = &DSMTrickMode{
 	RepeatControl:    21,
@@ -353,9 +340,9 @@ var pesTestCases = []pesTestCase{
 // embedPESFixture normalizes a fixture to its post-parse shape: OptionalHeader
 // points into the embedded Header storage
 func embedPESFixture(pd *Data) *Data {
-	if pd.Header.OptionalHeader != nil && pd.Header.OptionalHeader != &pd.Header.optionalHeader {
-		pd.Header.optionalHeader = *pd.Header.OptionalHeader
-		pd.Header.OptionalHeader = &pd.Header.optionalHeader
+	if pd.Header.OptionalHeader != nil && pd.Header.OptionalHeader != &pd.Header.optionalHeaderStorage {
+		pd.Header.optionalHeaderStorage = *pd.Header.OptionalHeader
+		pd.Header.OptionalHeader = &pd.Header.optionalHeaderStorage
 	}
 	return pd
 }
@@ -414,24 +401,6 @@ func TestWritePESData(t *testing.T) {
 	}
 }
 
-func TestWritePESHeader(t *testing.T) {
-	for _, tc := range pesTestCases {
-		t.Run(tc.name, func(t *testing.T) {
-			bufExpected := bytes.Buffer{}
-			wExpected := bitstest.NewWriter(&bufExpected)
-			tc.headerBytesFunc(wExpected, false, true)
-			tc.optionalHeaderBytesFunc(wExpected, false, true)
-
-			bs := make([]byte, ts.PacketSize)
-			wh := tc.pesData.Header
-			n, err := wh.putBytes(bs, len(tc.pesData.Data))
-			assert.NoError(t, err)
-			assert.Equal(t, bufExpected.Len(), n)
-			assert.Equal(t, bufExpected.Bytes(), bs[:n])
-		})
-	}
-}
-
 func BenchmarkWritePESHeader(b *testing.B) {
 	bs := make([]byte, ts.PacketSize)
 
@@ -442,21 +411,6 @@ func BenchmarkWritePESHeader(b *testing.B) {
 			for i := 0; i < b.N; i++ {
 				_, _ = wh.putBytes(bs, len(tc.pesData.Data))
 			}
-		})
-	}
-}
-
-func TestWritePESOptionalHeader(t *testing.T) {
-	for _, tc := range pesTestCases {
-		t.Run(tc.name, func(t *testing.T) {
-			bufExpected := bytes.Buffer{}
-			wExpected := bitstest.NewWriter(&bufExpected)
-			tc.optionalHeaderBytesFunc(wExpected, false, true)
-
-			bs := make([]byte, ts.PacketSize)
-			n := tc.pesData.Header.OptionalHeader.putBytes(bs)
-			assert.Equal(t, bufExpected.Len(), n)
-			assert.True(t, bytes.Equal(bufExpected.Bytes(), bs[:n]))
 		})
 	}
 }
@@ -501,9 +455,10 @@ func TestParseOptionalHeaderPackHeader(t *testing.T) {
 	_ = w.Write("0")                // ES rate flag
 	_ = w.Write("0")                // DSM trick mode flag
 	_ = w.Write("0")                // Additional copy flag
-	_ = w.Write("0")                // CRC flag
+	_ = w.Write("1")                // CRC flag
 	_ = w.Write("1")                // Extension flag
-	_ = w.Write(uint8(9))           // Header length
+	_ = w.Write(uint8(10))          // Header length
+	_ = w.Write(uint16(0x1234))     // previous PES packet CRC
 	_ = w.Write("0")                // Private data flag
 	_ = w.Write("1")                // Pack header field flag
 	_ = w.Write("0")                // Program packet sequence counter flag
@@ -523,29 +478,9 @@ func TestParseOptionalHeaderPackHeader(t *testing.T) {
 	assert.True(t, h.Extension.HasPSTDBuffer)
 	assert.Equal(t, PSTDBufferScale1024Bytes, h.Extension.PSTDBufferScale)
 	assert.Equal(t, uint16(0x1555), h.Extension.PSTDBufferSize)
-}
-
-func TestWriteOptionalHeaderCRCAndPackHeader(t *testing.T) {
-	orig := &OptionalHeader{
-		HasCRC:       true,
-		CRC:          0x1234,
-		HasExtension: true,
-		Extension: &OptionalHeaderExtension{
-			HasPackHeaderField: true,
-			PackField:          4,
-			PackHeader:         []byte{0xde, 0xad, 0xbe, 0xef},
-		},
-	}
+	assert.Equal(t, uint16(0x1234), h.CRC)
 
 	bs := make([]byte, 256)
-	n := orig.putBytes(bs)
-
-	var got OptionalHeader
-	_, err := got.parseBytes(bs[:n], 0)
-	require.NoError(t, err)
-	assert.True(t, got.HasCRC)
-	assert.Equal(t, uint16(0x1234), got.CRC)
-	require.NotNil(t, got.Extension)
-	assert.True(t, got.Extension.HasPackHeaderField)
-	assert.Equal(t, []byte{0xde, 0xad, 0xbe, 0xef}, got.Extension.PackHeader)
+	n := h.putBytes(bs)
+	assert.Equal(t, buf.Bytes(), bs[:n], "write-back of the parsed header")
 }

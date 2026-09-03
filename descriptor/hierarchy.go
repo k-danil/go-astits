@@ -4,13 +4,12 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
-	"github.com/k-danil/go-astits/v2/internal/util"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/util"
 )
 
 type HierarchyType uint8
 
-// hierarchy_type values (ISO/IEC 13818-1 Table 2-50)
 const (
 	HierarchyTypeSpatialScalability    HierarchyType = 1
 	HierarchyTypeSNRScalability        HierarchyType = 2
@@ -56,7 +55,6 @@ func (t *HierarchyType) UnmarshalJSON(b []byte) (err error) {
 	return
 }
 
-// Hierarchy is the MPEG-2 systems hierarchy_descriptor (ISO/IEC 13818-1).
 type Hierarchy struct {
 	Header                      Header        `json:"_header"`
 	HierarchyType               HierarchyType `json:"hierarchy_type"`

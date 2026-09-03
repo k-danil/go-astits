@@ -4,11 +4,9 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
 )
 
-// Registration represents a registration descriptor
-// Page: 84 | http://ecee.colorado.edu/~ecen5653/ecen5653/papers/iso13818-1.pdf
 type Registration struct {
 	AdditionalIdentificationInfo []byte `json:"additional_identification_info"`
 	FormatIdentifier             uint32 `json:"format_identifier"`

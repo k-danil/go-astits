@@ -4,13 +4,10 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/dvbtext"
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/dvbtext"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
 )
 
-// DataBroadcast represents a data broadcast descriptor: the type of a data
-// component plus an optional text description.
-// Chapter: 6.2.11 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type DataBroadcast struct {
 	Selector        []byte       `json:"selector_byte"`
 	Text            dvbtext.Text `json:"text_char"`

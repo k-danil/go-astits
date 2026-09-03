@@ -4,12 +4,9 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
 )
 
-// CAIdentifier represents a CA identifier descriptor: it lists the CA system
-// ids a bouquet, service or event is associated with.
-// Chapter: 6.2.5 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type CAIdentifier struct {
 	Header    Header   `json:"_header"`
 	SystemIDs []uint16 `json:"CA_system_id"`

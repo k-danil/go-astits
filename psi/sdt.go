@@ -5,12 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/descriptor"
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
-	"github.com/k-danil/go-astits/v2/internal/util"
+	"github.com/k-danil/go-astits/v3/descriptor"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/util"
 )
 
-// RunningStatus is a DVB running_status (EN 300 468 Table 6).
 type RunningStatus uint8
 
 const (
@@ -48,26 +47,21 @@ func (t *RunningStatus) UnmarshalJSON(b []byte) (err error) {
 	return
 }
 
-// SDT represents an SDT data
-// Page: 33 | Chapter: 5.2.3 | Link: https://www.dvb.org/resources/public/standards/a38_dvb-si_specification.pdf
-// (barbashov) the link above can be broken, alternative: https://dvb.org/wp-content/uploads/2019/12/a038_tm1217r37_en300468v1_17_1_-_rev-134_-_si_specification.pdf
 type SDT struct {
 	Services          []SDTService `json:"_services"`
 	OriginalNetworkID uint16       `json:"original_network_id"`
 	TransportStreamID uint16       `json:"transport_stream_id"`
 }
 
-// SDTService represents an SDT data service
 type SDTService struct {
 	Descriptors            []descriptor.Descriptor `json:"_descriptors"`
 	ServiceID              uint16                  `json:"service_id"`
-	HasEITPresentFollowing bool                    `json:"EIT_present_following_flag"` // When true indicates that EIT present/following information for the service is present in the current TS
-	HasEITSchedule         bool                    `json:"EIT_schedule_flag"`          // When true indicates that EIT schedule information for the service is present in the current TS
-	HasFreeCSAMode         bool                    `json:"free_CA_mode"`               // When true indicates that access to one or more streams may be controlled by a CA system.
+	HasEITPresentFollowing bool                    `json:"EIT_present_following_flag"`
+	HasEITSchedule         bool                    `json:"EIT_schedule_flag"`
+	HasFreeCSAMode         bool                    `json:"free_CA_mode"`
 	RunningStatus          RunningStatus           `json:"running_status"`
 }
 
-// parseSDTSection parses an SDT section
 func parseSDTSection(i *bytesiter.Iterator, offsetSectionsEnd int, tableIDExtension uint16) (d *SDT, err error) {
 	d = &SDT{TransportStreamID: tableIDExtension}
 
@@ -79,7 +73,6 @@ func parseSDTSection(i *bytesiter.Iterator, offsetSectionsEnd int, tableIDExtens
 
 	d.OriginalNetworkID = binary.BigEndian.Uint16(bs)
 
-	// Reserved for future use
 	i.Skip(1)
 
 	for i.Offset() < offsetSectionsEnd {
@@ -111,7 +104,7 @@ func parseSDTSection(i *bytesiter.Iterator, offsetSectionsEnd int, tableIDExtens
 
 		s.HasFreeCSAMode = uint8(b&0x10) > 0
 
-		// We need to rewind since the current byte is used by the descriptor as well
+		// The low bits of this byte are descriptors_loop_length; rewind for descriptor.Parse.
 		i.Skip(-1)
 
 		var dn int
@@ -127,21 +120,21 @@ func parseSDTSection(i *bytesiter.Iterator, offsetSectionsEnd int, tableIDExtens
 }
 
 func (d *SDT) CalcSectionLength() int {
-	n := 3 // original_network_id + reserved_future_use
+	n := 2 + 1
 	for _, s := range d.Services {
-		n += 5 + descriptor.CalcLength(s.Descriptors) // service_id + 2 flag bytes + descriptors_loop_length_lo
+		n += 2 + 2 + 1 + descriptor.CalcLength(s.Descriptors)
 	}
 	return n
 }
 
 func (d *SDT) appendSection(dst []byte) []byte {
-	dst = append(dst, byte(d.OriginalNetworkID>>8), byte(d.OriginalNetworkID), 0xff) // ONID + reserved_future_use
+	dst = append(dst, byte(d.OriginalNetworkID>>8), byte(d.OriginalNetworkID), 0xff)
 	for _, s := range d.Services {
 		loopLen := descriptor.CalcLength(s.Descriptors)
 		dst = append(dst,
 			byte(s.ServiceID>>8), byte(s.ServiceID),
-			0xfc|util.B2U(s.HasEITSchedule)<<1|util.B2U(s.HasEITPresentFollowing),       // reserved(6) + EIT_schedule + EIT_present_following
-			byte(s.RunningStatus)<<5|util.B2U(s.HasFreeCSAMode)<<4|byte(loopLen>>8)&0xf, // running_status(3) + free_CA(1) + descriptors_loop_length(12)
+			0xfc|util.B2U(s.HasEITSchedule)<<1|util.B2U(s.HasEITPresentFollowing),
+			byte(s.RunningStatus)<<5|util.B2U(s.HasFreeCSAMode)<<4|byte(loopLen>>8)&0xf,
 			byte(loopLen))
 		dst = descriptor.Append(dst, s.Descriptors)
 	}

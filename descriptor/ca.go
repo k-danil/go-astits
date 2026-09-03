@@ -4,13 +4,9 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
 )
 
-// CA represents a CA (conditional access) descriptor: it names a CA system and
-// the PID carrying its management messages — EMM when the descriptor sits in a
-// CAT, ECM when it sits in a PMT.
-// Chapter: 2.6.16 | Link: ISO/IEC 13818-1
 type CA struct {
 	Private  []byte `json:"private_data_byte"`
 	Header   Header `json:"_header"`

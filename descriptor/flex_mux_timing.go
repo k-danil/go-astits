@@ -4,10 +4,9 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
 )
 
-// FlexMuxTiming is the MPEG-2 systems FlexMuxTiming_descriptor (ISO/IEC 13818-1).
 type FlexMuxTiming struct {
 	FCRResolution uint32 `json:"FCRResolution"` // cycles per second
 	Header        Header `json:"_header"`

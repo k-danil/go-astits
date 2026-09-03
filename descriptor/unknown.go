@@ -3,11 +3,9 @@ package descriptor
 import (
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
 )
 
-// Unknown holds the raw body of a standard-range descriptor whose tag this
-// package does not model.
 type Unknown struct {
 	Header  Header `json:"_header"`
 	Content []byte `json:"_content"`

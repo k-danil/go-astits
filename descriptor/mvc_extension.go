@@ -3,11 +3,10 @@ package descriptor
 import (
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
-	"github.com/k-danil/go-astits/v2/internal/util"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/util"
 )
 
-// MVCExtension is the MPEG-2 systems MVC_extension_descriptor (ISO/IEC 13818-1).
 type MVCExtension struct {
 	AverageBitrate            uint16 `json:"average_bitrate"` // in kbit/s
 	MaximumBitrate            uint16 `json:"maximum_bitrate"` // in kbit/s

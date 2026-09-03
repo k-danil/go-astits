@@ -5,15 +5,12 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/k-danil/go-astits/v2/descriptor"
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
-	"github.com/k-danil/go-astits/v2/internal/dvb"
-	"github.com/k-danil/go-astits/v2/internal/util"
+	"github.com/k-danil/go-astits/v3/descriptor"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/dvb"
+	"github.com/k-danil/go-astits/v3/internal/util"
 )
 
-// EIT represents an EIT data
-// Page: 36 | Chapter: 5.2.4 | Link: https://www.dvb.org/resources/public/standards/a38_dvb-si_specification.pdf
-// (barbashov) the link above can be broken, alternative: https://dvb.org/wp-content/uploads/2019/12/a038_tm1217r37_en300468v1_17_1_-_rev-134_-_si_specification.pdf
 type EIT struct {
 	Events                   []EITEvent `json:"_events"`
 	OriginalNetworkID        uint16     `json:"original_network_id"`
@@ -23,17 +20,15 @@ type EIT struct {
 	SegmentLastSectionNumber uint8      `json:"segment_last_section_number"`
 }
 
-// EITEvent represents an EIT data event
 type EITEvent struct {
 	Descriptors    []descriptor.Descriptor `json:"_descriptors"`
 	Duration       time.Duration           `json:"duration"`
 	StartTime      time.Time               `json:"start_time"`
 	EventID        uint16                  `json:"event_id"`
-	HasFreeCSAMode bool                    `json:"free_CA_mode"` // When true indicates that access to one or more streams may be controlled by a CA system.
+	HasFreeCSAMode bool                    `json:"free_CA_mode"`
 	RunningStatus  RunningStatus           `json:"running_status"`
 }
 
-// parseEITSection parses an EIT section
 func parseEITSection(i *bytesiter.Iterator, offsetSectionsEnd int, tableIDExtension uint16) (d *EIT, err error) {
 	d = &EIT{ServiceID: tableIDExtension}
 
@@ -90,7 +85,7 @@ func parseEITSection(i *bytesiter.Iterator, offsetSectionsEnd int, tableIDExtens
 
 		e.HasFreeCSAMode = b&0x10 > 0
 
-		// We need to rewind since the current byte is used by the descriptor as well
+		// The low bits of this byte are descriptors_loop_length; rewind for descriptor.Parse.
 		i.Skip(-1)
 
 		var dn int
@@ -106,9 +101,9 @@ func parseEITSection(i *bytesiter.Iterator, offsetSectionsEnd int, tableIDExtens
 }
 
 func (d *EIT) CalcSectionLength() int {
-	n := 6 // transport_stream_id + original_network_id + segment_last_section_number + last_table_id
+	n := 2 + 2 + 1 + 1
 	for _, e := range d.Events {
-		n += 12 + descriptor.CalcLength(e.Descriptors) // event_id(2) + start_time(5) + duration(3) + 2 flag/length bytes
+		n += 2 + 5 + 3 + 2 + descriptor.CalcLength(e.Descriptors)
 	}
 	return n
 }
@@ -124,7 +119,7 @@ func (d *EIT) appendSection(dst []byte) []byte {
 		dst = dvb.AppendTime(dst, e.StartTime)
 		dst = dvb.AppendDurationSeconds(dst, e.Duration)
 		dst = append(dst,
-			byte(e.RunningStatus)<<5|util.B2U(e.HasFreeCSAMode)<<4|byte(loopLen>>8)&0xf, // running_status(3) + free_CA(1) + descriptors_loop_length(12)
+			byte(e.RunningStatus)<<5|util.B2U(e.HasFreeCSAMode)<<4|byte(loopLen>>8)&0xf,
 			byte(loopLen))
 		dst = descriptor.Append(dst, e.Descriptors)
 	}

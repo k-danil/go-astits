@@ -5,53 +5,51 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/descriptor"
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
-	"github.com/k-danil/go-astits/v2/internal/util"
-	"github.com/k-danil/go-astits/v2/pes"
+	"github.com/k-danil/go-astits/v3/descriptor"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/util"
+	"github.com/k-danil/go-astits/v3/pes"
 )
 
-// StreamType is a PMT elementary-stream type (a video, audio or data codec).
 type StreamType uint8
 
-// Stream types
 const (
 	StreamTypeMPEG1Video                 StreamType = 0x01
 	StreamTypeMPEG2Video                 StreamType = 0x02
-	StreamTypeMPEG1Audio                 StreamType = 0x03 // ISO/IEC 11172-3
-	StreamTypeMPEG2HalvedSampleRateAudio StreamType = 0x04 // ISO/IEC 13818-3
+	StreamTypeMPEG1Audio                 StreamType = 0x03
+	StreamTypeMPEG2HalvedSampleRateAudio StreamType = 0x04
 	StreamTypeMPEG2Audio                 StreamType = 0x04
 	StreamTypePrivateSection             StreamType = 0x05
 	StreamTypePrivateData                StreamType = 0x06
-	StreamTypeMPEG2PacketizedData        StreamType = 0x06 // Rec. ITU-T H.222 | ISO/IEC 13818-1 i.e., DVB subtitles/VBI and AC-3
-	StreamTypeADTS                       StreamType = 0x0F // ISO/IEC 13818-7 Audio with ADTS transport syntax
+	StreamTypeMPEG2PacketizedData        StreamType = 0x06
+	StreamTypeADTS                       StreamType = 0x0F
 	StreamTypeAACAudio                   StreamType = 0x0f
 	StreamTypeMPEG4Video                 StreamType = 0x10
 	StreamTypeAACLATMAudio               StreamType = 0x11
 	StreamTypeMetadata                   StreamType = 0x15
-	StreamTypeH264Video                  StreamType = 0x1B // Rec. ITU-T H.264 | ISO/IEC 14496-10
-	StreamTypeMPEG4Audio                 StreamType = 0x1C // ISO/IEC 14496-3 without a transport syntax (DST, ALS, SLS)
-	StreamTypeAuxiliaryVideo             StreamType = 0x1E // ISO/IEC 23002-3
-	StreamTypeSVCVideo                   StreamType = 0x1F // AVC Annex G sub-bitstream
-	StreamTypeMVCVideo                   StreamType = 0x20 // AVC Annex H sub-bitstream
-	StreamTypeJPEG2000Video              StreamType = 0x21 // Rec. ITU-T T.800 | ISO/IEC 15444-1
-	StreamTypeMPEG2AdditionalViewVideo   StreamType = 0x22 // stereoscopic 3D additional view, H.262
-	StreamTypeH264AdditionalViewVideo    StreamType = 0x23 // stereoscopic 3D additional view, H.264
-	StreamTypeH265Video                  StreamType = 0x24 // Rec. ITU-T H.265 | ISO/IEC 23008-2
+	StreamTypeH264Video                  StreamType = 0x1B
+	StreamTypeMPEG4Audio                 StreamType = 0x1C
+	StreamTypeAuxiliaryVideo             StreamType = 0x1E
+	StreamTypeSVCVideo                   StreamType = 0x1F
+	StreamTypeMVCVideo                   StreamType = 0x20
+	StreamTypeJPEG2000Video              StreamType = 0x21
+	StreamTypeMPEG2AdditionalViewVideo   StreamType = 0x22
+	StreamTypeH264AdditionalViewVideo    StreamType = 0x23
+	StreamTypeH265Video                  StreamType = 0x24
 	StreamTypeHEVCVideo                  StreamType = 0x24
-	StreamTypeHEVCTemporalVideo          StreamType = 0x25 // HEVC temporal video subset
-	StreamTypeMVCDVideo                  StreamType = 0x26 // AVC Annex I sub-bitstream
-	StreamTypeHEVCEnhancementG           StreamType = 0x28 // HEVC Annex G enhancement sub-partition, TemporalId 0
-	StreamTypeHEVCTemporalEnhancementG   StreamType = 0x29 // HEVC Annex G temporal enhancement sub-partition
-	StreamTypeHEVCEnhancementH           StreamType = 0x2A // HEVC Annex H enhancement sub-partition, TemporalId 0
-	StreamTypeHEVCTemporalEnhancementH   StreamType = 0x2B // HEVC Annex H temporal enhancement sub-partition
-	StreamTypeMPEGHAudioMain             StreamType = 0x2D // ISO/IEC 23008-3 with MHAS transport syntax, main stream
-	StreamTypeMPEGHAudioAuxiliary        StreamType = 0x2E // ISO/IEC 23008-3 with MHAS transport syntax, auxiliary stream
-	StreamTypeJPEGXSVideo                StreamType = 0x32 // ISO/IEC 21122
-	StreamTypeVVCVideo                   StreamType = 0x33 // Rec. ITU-T H.266 | ISO/IEC 23090-3
-	StreamTypeVVCTemporalVideo           StreamType = 0x34 // VVC temporal video subset
-	StreamTypeEVCVideo                   StreamType = 0x35 // ISO/IEC 23094-1, or an EVC temporal video sub-bitstream
-	StreamTypeLCEVCVideo                 StreamType = 0x36 // ISO/IEC 23094-2
+	StreamTypeHEVCTemporalVideo          StreamType = 0x25
+	StreamTypeMVCDVideo                  StreamType = 0x26
+	StreamTypeHEVCEnhancementG           StreamType = 0x28
+	StreamTypeHEVCTemporalEnhancementG   StreamType = 0x29
+	StreamTypeHEVCEnhancementH           StreamType = 0x2A
+	StreamTypeHEVCTemporalEnhancementH   StreamType = 0x2B
+	StreamTypeMPEGHAudioMain             StreamType = 0x2D
+	StreamTypeMPEGHAudioAuxiliary        StreamType = 0x2E
+	StreamTypeJPEGXSVideo                StreamType = 0x32
+	StreamTypeVVCVideo                   StreamType = 0x33
+	StreamTypeVVCTemporalVideo           StreamType = 0x34
+	StreamTypeEVCVideo                   StreamType = 0x35
+	StreamTypeLCEVCVideo                 StreamType = 0x36
 	StreamTypeCAVSVideo                  StreamType = 0x42
 	StreamTypeVC1Video                   StreamType = 0xea
 	StreamTypeDIRACVideo                 StreamType = 0xd1
@@ -62,23 +60,19 @@ const (
 	StreamTypeEAC3Audio                  StreamType = 0x87
 )
 
-// PMT represents a PMT data
-// https://en.wikipedia.org/wiki/Program-specific_information
 type PMT struct {
 	ElementaryStreams  []ElementaryStream      `json:"_elementary_streams"`
-	ProgramDescriptors []descriptor.Descriptor `json:"_program_descriptors"` // Program descriptors
+	ProgramDescriptors []descriptor.Descriptor `json:"_program_descriptors"`
 	ProgramNumber      uint16                  `json:"program_number"`
-	PCRPID             uint16                  `json:"PCR_PID"` // The packet identifier that contains the program clock reference used to improve the random access accuracy of the stream's timing that is derived from the program timestamp. If this is unused. then it is set to 0x1FFF (all bits on).
+	PCRPID             uint16                  `json:"PCR_PID"`
 }
 
-// ElementaryStream represents a PMT elementary stream
 type ElementaryStream struct {
-	ElementaryStreamDescriptors []descriptor.Descriptor `json:"_elementary_stream_descriptors"` // Elementary stream descriptors
-	ElementaryPID               uint16                  `json:"elementary_PID"`                 // The packet identifier that contains the stream type data.
-	StreamType                  StreamType              `json:"stream_type"`                    // This defines the structure of the data contained within the elementary packet identifier.
+	ElementaryStreamDescriptors []descriptor.Descriptor `json:"_elementary_stream_descriptors"`
+	ElementaryPID               uint16                  `json:"elementary_PID"`
+	StreamType                  StreamType              `json:"stream_type"`
 }
 
-// parsePMTSection parses a PMT section
 func parsePMTSection(i *bytesiter.Iterator, offsetSectionsEnd int, tableIDExtension uint16) (d *PMT, err error) {
 	d = &PMT{ProgramNumber: tableIDExtension}
 
@@ -137,8 +131,6 @@ func (d *PMT) CalcSectionLength() int {
 }
 
 func (d *PMT) appendSection(dst []byte) []byte {
-	// A PMT must fit a single section by spec (section_number shall be 0x00);
-	// oversize data is rejected by the section length guard.
 
 	dst = append(dst, 0xe0|byte(d.PCRPID>>8)&0x1f, byte(d.PCRPID))
 	dst = descriptor.AppendWithLength(dst, d.ProgramDescriptors)
@@ -277,7 +269,7 @@ func (t StreamType) ToPESStreamID() pes.StreamID {
 		return 0xfd
 	case StreamTypeMPEG2Audio, StreamTypeAACAudio, StreamTypeAACLATMAudio, StreamTypeMPEG4Audio:
 		return 0xc0
-	case StreamTypeAC3Audio, StreamTypeEAC3Audio: // m2ts_mode???
+	case StreamTypeAC3Audio, StreamTypeEAC3Audio:
 		return 0xfd
 	case StreamTypePrivateSection, StreamTypePrivateData, StreamTypeMetadata:
 		return 0xfc

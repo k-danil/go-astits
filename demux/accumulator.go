@@ -4,61 +4,54 @@ import (
 	"bytes"
 	"encoding/binary"
 
-	"github.com/k-danil/go-astits/v2/internal/pidmap"
-	"github.com/k-danil/go-astits/v2/psi"
-	"github.com/k-danil/go-astits/v2/ts"
+	"github.com/k-danil/go-astits/v3/internal/pidmap"
+	"github.com/k-danil/go-astits/v3/psi"
+	"github.com/k-danil/go-astits/v3/ts"
 )
 
-// Accumulator buffer sizing: exact hints from the unit's first bytes where the
-// format provides them, otherwise the slot's sticky-max class with a floor.
-// The 64K floor for unbounded PES (video) absorbs cold-start growth: measured
-// on a 1-hour SD stream it leaves 1.7% of bytes to growth copies.
 const (
-	unboundedPESFloorClass = 6 // 64 KB
-	defaultFloorClass      = 1 // 2 KB
+	unboundedPESFloorClass = 6
+	defaultFloorClass      = 1
 )
 
-// pidSlot accumulates one payload unit of a PID into a contiguous buffer:
-// packets are one-shot scratch, their payloads are copied out immediately.
+// Packets are one-shot scratch: their payloads must be copied out, never retained.
 type pidSlot struct {
 	buf *dataPayload
 
 	// Two AF storages toggled per unit: the flushed unit's pointer must stay
 	// intact while the next unit's start overwrites the other one.
-	af    [2]ts.PacketAdaptationField
-	afIdx uint8
-	hasAF bool
-	cc    uint8 // CC of the unit's first packet
+	af      [2]ts.PacketAdaptationField
+	afIdx   uint8
+	hasAF   bool
+	firstCC uint8
 
 	lastCC     uint8
 	seenPacket bool
 	lastWasDup bool
-	lastLen    int // payload length of the last packet appended, 0 once the unit is gone
+	lastLen    int
 
-	firstOffset int64 // packet that started the unit
-	lastOffset  int64 // last packet that fed it
+	firstOffset int64
+	lastOffset  int64
+	firstTag    uint64
+	lastTag     uint64
 
-	psiScan int // psiComplete resumes here: the next section header to inspect
+	psiScan int
 
-	sticky  uint8 // sticky-max size class over the slot's lifetime
+	sticky  uint8
 	started bool
 	isPSI   bool
 	packets uint64
 }
 
-// accumulator replaces the per-PID packet lists: it owns per-PID slots and
-// flushes completed units as contiguous buffers.
 type accumulator struct {
 	slots      pidmap.Map[pidSlot]
 	programMap *pidmap.Map[uint16]
 
-	// One-entry slot cache: a run of packets on one PID (the common case on a
-	// single-program stream) skips the hashed lookup. Invalidated whenever
-	// slots may reallocate.
+	// lastSlot points into slots.Vals: reassign it after any GetOrAdd, which may reallocate.
 	lastPID   uint16
 	lastSlot  *pidSlot
-	report    func(ts.RecoverableError) // nil keeps the silent fast path
-	maxPES    int                       // unit size limits on the WithMaxUnitSize scale
+	report    func(ts.RecoverableError)
+	maxPES    int
 	maxPSI    int
 	dvbTables bool
 
@@ -78,14 +71,13 @@ func (a *accumulator) init(programMap *pidmap.Map[uint16], dvbTables bool, repor
 	a.dvbTables = dvbTables
 }
 
-// unit is a flushed payload unit handed to the parse stage. buf ownership
-// moves to the receiver. truncated marks an EOF drain: the stream never
-// closed the unit, so its end is not confirmed.
 type unit struct {
 	buf         *dataPayload
 	af          *ts.PacketAdaptationField
 	firstOffset int64
 	lastOffset  int64
+	firstTag    uint64
+	lastTag     uint64
 	cc          uint8
 	pid         uint16
 	isPSI       bool
@@ -98,9 +90,7 @@ func (a *accumulator) isPSIPID(pid uint16) bool {
 		(a.dvbTables && (pid == ts.PIDCAT || pid == ts.PIDTSDT || (pid >= 0x10 && pid <= 0x14) || (pid >= 0x1e && pid <= 0x1f)))
 }
 
-// add consumes the packet's payload and appends completed units (zero, one,
-// or — for a torn PSI flushed by the same packet that completes the next
-// section — two) to out. Buffer ownership moves with the units.
+// One packet can yield two units: the start indicator closes the previous one and the section it opens can complete in the same packet.
 func (a *accumulator) add(p *ts.Packet, out []unit) []unit {
 	slot := a.lastSlot
 	if slot == nil || p.Header.PID != a.lastPID {
@@ -118,8 +108,6 @@ func (a *accumulator) add(p *ts.Packet, out []unit) []unit {
 	}
 
 	if p.Header.TransportErrorIndicator || p.Header.TransportScramblingControl != ts.ScramblingControlNotScrambled {
-		// The unit start still closes the previous unit; the unusable payload
-		// itself opens none
 		if !p.Header.PayloadUnitStartIndicator {
 			reason := ts.ErrScrambled
 			if p.Header.TransportErrorIndicator {
@@ -137,9 +125,7 @@ func (a *accumulator) add(p *ts.Packet, out []unit) []unit {
 		return out
 	}
 
-	// §2.4.3.4 lets the indicator stay set on every PCR-PID packet until the
-	// next PCR, so only the unit start it announces is exempt from the counter
-	// checks; a mid-unit indicator packet with a continuous counter is payload
+	// §2.4.3.4: the indicator may stay set on every PCR-PID packet, so only the unit start it announces skips the counter checks.
 	discontinuity := p.Header.HasAdaptationField && p.AdaptationField.DiscontinuityIndicator
 	jumpAllowed := discontinuity && p.Header.PayloadUnitStartIndicator
 	if !jumpAllowed && slot.seenPacket && p.Header.ContinuityCounter == slot.lastCC {
@@ -171,9 +157,7 @@ func (a *accumulator) add(p *ts.Packet, out []unit) []unit {
 		}
 		slot.start(p, a.isPSIPID(p.Header.PID))
 	} else if !slot.started {
-		// A headless prefix (stream picked up mid-unit) accumulates too and
-		// flushes on the next PayloadUnitStartIndicator, matching the packet
-		// list behavior; the parse stage rejects it if it is garbage.
+		// A headless prefix (joined mid-unit) accumulates too; the parse stage rejects it if it is garbage.
 		slot.start(p, a.isPSIPID(p.Header.PID))
 	}
 	// After finish/start: a tear inside finish clears seenPacket, and the
@@ -191,9 +175,8 @@ func (a *accumulator) add(p *ts.Packet, out []unit) []unit {
 	slot.buf.bs = append(slot.buf.bs, p.Payload...)
 	slot.lastLen = len(p.Payload)
 	slot.lastOffset = p.Offset
+	slot.lastTag = p.Tag
 
-	// A PSI unit completes by section lengths, without waiting for the next
-	// PayloadUnitStartIndicator
 	if slot.isPSI && slot.psiComplete() {
 		if u, ok := a.finish(slot, p.Header.PID, p.Offset); ok {
 			out = append(out, u)
@@ -202,9 +185,7 @@ func (a *accumulator) add(p *ts.Packet, out []unit) []unit {
 	return out
 }
 
-// checkDuplicate compares a repeated packet with the last payload appended,
-// while that payload is still the tail of the unit; without it the repeat is
-// taken on the counter alone.
+// lastLen must still describe the buffer tail: never call after appending the repeat.
 func (a *accumulator) checkDuplicate(slot *pidSlot, p *ts.Packet) {
 	if a.report == nil || !slot.started || slot.lastLen == 0 || slot.lastLen > len(slot.buf.bs) {
 		return
@@ -224,7 +205,6 @@ func (a *accumulator) limitFor(slot *pidSlot) int {
 	return a.maxPES
 }
 
-// overLimit: -1 is never over.
 func overLimit(size, limit int) bool {
 	return limit >= 0 && size > limit
 }
@@ -240,8 +220,6 @@ func (a *accumulator) finish(slot *pidSlot, pid uint16, offset int64) (u unit, o
 	return slot.flush(pid)
 }
 
-// tear drops the slot's unit; lost is what the offending packet carried on
-// top of the buffer, so Dropped covers everything the unit cost.
 func (a *accumulator) tear(slot *pidSlot, pid uint16, offset int64, reason error, lost int) {
 	if !slot.started {
 		return
@@ -256,12 +234,12 @@ func (a *accumulator) tear(slot *pidSlot, pid uint16, offset int64, reason error
 	slot.seenPacket = false
 }
 
-// start begins a new unit from a PayloadUnitStartIndicator packet.
 func (s *pidSlot) start(p *ts.Packet, isPSI bool) {
 	s.started = true
 	s.isPSI = isPSI
-	s.cc = p.Header.ContinuityCounter
+	s.firstCC = p.Header.ContinuityCounter
 	s.firstOffset = p.Offset
+	s.firstTag = p.Tag
 	s.psiScan = 0
 	if p.Header.HasAdaptationField {
 		s.afIdx ^= 1
@@ -277,8 +255,6 @@ func (s *pidSlot) start(p *ts.Packet, isPSI bool) {
 	s.buf.bs = s.buf.bs[:0]
 }
 
-// classFor picks the starting size class: exact hint when the first bytes
-// carry the unit length, sticky-max with a floor otherwise.
 func (s *pidSlot) classFor(payload []byte, isPSI bool) uint8 {
 	if isPSI {
 		return maxClass(s.sticky, defaultFloorClass)
@@ -287,7 +263,6 @@ func (s *pidSlot) classFor(payload []byte, isPSI bool) uint8 {
 		if pl := binary.BigEndian.Uint16(payload[4:6]); pl > 0 {
 			return maxClass(classOf(int(pl)+6), s.sticky)
 		}
-		// Unbounded PES is video: start high to absorb cold-start growth
 		return maxClass(s.sticky, unboundedPESFloorClass)
 	}
 	return maxClass(s.sticky, defaultFloorClass)
@@ -301,15 +276,13 @@ func (s *pidSlot) grow(need int) {
 	s.buf = grown
 }
 
-// flush hands the accumulated unit over; the slot remembers the size class
-// for the next unit of this PID.
 func (s *pidSlot) flush(pid uint16) (u unit, ok bool) {
 	if !s.started || len(s.buf.bs) == 0 {
 		s.release()
 		return
 	}
 	s.sticky = maxClass(s.sticky, classOf(len(s.buf.bs)))
-	u = unit{buf: s.buf, cc: s.cc, pid: pid, isPSI: s.isPSI, firstOffset: s.firstOffset, lastOffset: s.lastOffset}
+	u = unit{buf: s.buf, cc: s.firstCC, pid: pid, isPSI: s.isPSI, firstOffset: s.firstOffset, lastOffset: s.lastOffset, firstTag: s.firstTag, lastTag: s.lastTag}
 	if s.hasAF {
 		u.af = &s.af[s.afIdx]
 	}
@@ -328,19 +301,16 @@ func (s *pidSlot) release() {
 	s.lastLen = 0
 }
 
-// psiSectionHeaderLen is table_id plus the 16 bits holding section_length.
 const psiSectionHeaderLen = 3
 
-// psiComplete reports whether the accumulated buffer already holds all its
-// sections: a scan over lengths, resumed from where the last call stopped so
-// a unit costs one pass however many packets feed it.
+// psiScan carries across calls; start() resets it per unit.
 func (s *pidSlot) psiComplete() bool {
 	bs := s.buf.bs
 	if s.psiScan == 0 {
 		if len(bs) == 0 {
 			return false
 		}
-		s.psiScan = 1 + int(bs[0]) // pointer filler bytes
+		s.psiScan = 1 + int(bs[0]) // pointer_field
 	}
 	for s.psiScan < len(bs) {
 		if psi.TableID(bs[s.psiScan]).StopsParsing() {
@@ -354,9 +324,6 @@ func (s *pidSlot) psiComplete() bool {
 	return s.psiScan == len(bs)
 }
 
-// drain flushes the unfinished unit of the lowest PID that has one: EOF tails
-// come out in ascending PID order. A tail over its size limit is torn and the
-// next PID is tried, so one oversized tail does not hide the others.
 func (a *accumulator) drain() (u unit, ok bool) {
 	for {
 		minIdx := -1
@@ -379,7 +346,6 @@ func (a *accumulator) drain() (u unit, ok bool) {
 	}
 }
 
-// close releases every slot buffer.
 func (a *accumulator) close() {
 	for i := range a.slots.Vals {
 		a.slots.Vals[i].release()

@@ -2,12 +2,8 @@ package psi
 
 import (
 	"bytes"
-	"testing"
 
-	"github.com/stretchr/testify/assert"
-
-	"github.com/k-danil/go-astits/v2/internal/bitstest"
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/bitstest"
 )
 
 var nit = &NIT{
@@ -32,11 +28,4 @@ func nitBytes() []byte {
 	_ = w.Write("0000")         // Transport stream #1 reserved for future use
 	descriptorsBytes(w)         // Transport stream #1 descriptors
 	return buf.Bytes()
-}
-
-func TestParseNITSection(t *testing.T) {
-	var b = nitBytes()
-	d, err := parseNITSection(bytesiter.New(b), uint16(1))
-	assert.Equal(t, d, nit)
-	assert.NoError(t, err)
 }

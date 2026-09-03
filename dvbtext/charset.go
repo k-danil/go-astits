@@ -37,7 +37,7 @@ const (
 	lenient mode = false
 )
 
-// 8859-12 was never published, hence the hole at index 12.
+// Holes: part 11 is decoded by decodeThai below, part 12 was never published.
 var iso8859Tables = [16]*charmap.Charmap{
 	1:  charmap.ISO8859_1,
 	2:  charmap.ISO8859_2,

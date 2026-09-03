@@ -5,8 +5,8 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/internal/bitstest"
-	"github.com/k-danil/go-astits/v2/ts"
+	"github.com/k-danil/go-astits/v3/internal/bitstest"
+	"github.com/k-danil/go-astits/v3/ts"
 )
 
 const syncByte byte = '\x47'
@@ -152,7 +152,7 @@ func packetAdaptationFieldBytes(discontinuity bool) []byte {
 	return buf.Bytes()
 }
 
-var pcr = ts.NewClockReference(5726623061, 341)
+var pcr = ts.NewClockReference(5726623061, 85)
 
 var dtsClockReference = ts.NewClockReference(5726623060, 0)
 

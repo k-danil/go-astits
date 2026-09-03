@@ -3,10 +3,9 @@ package descriptor
 import (
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
 )
 
-// ContentLabeling represents a content labelling descriptor (ISO/IEC 13818-1).
 type ContentLabeling struct {
 	ContentReferenceID                  []byte `json:"content_reference_id_byte"`
 	TimeBaseAssociationData             []byte `json:"time_base_association_data"`

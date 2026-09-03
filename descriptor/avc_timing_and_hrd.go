@@ -4,11 +4,10 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
-	"github.com/k-danil/go-astits/v2/internal/util"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/util"
 )
 
-// AVCTimingAndHRD is the MPEG-2 systems AVC timing and HRD descriptor (ISO/IEC 13818-1).
 type AVCTimingAndHRD struct {
 	N                           uint32 `json:"N"`
 	K                           uint32 `json:"K"`

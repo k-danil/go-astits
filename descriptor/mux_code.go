@@ -3,10 +3,9 @@ package descriptor
 import (
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
 )
 
-// MuxCode is the MPEG-2 systems Muxcode descriptor (ISO/IEC 13818-1).
 type MuxCode struct {
 	MuxCodeTableEntries []byte `json:"MuxCodeTableEntry"`
 	Header              Header `json:"_header"`

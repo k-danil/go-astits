@@ -4,14 +4,12 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
-	"github.com/k-danil/go-astits/v2/internal/util"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/util"
 )
 
 type VBIDataServiceID uint8
 
-// VBI data service id
-// Chapter: 6.2.47 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 const (
 	VBIDataServiceIDEBUTeletext          VBIDataServiceID = 0x1
 	VBIDataServiceIDInvertedTeletext     VBIDataServiceID = 0x2
@@ -47,41 +45,37 @@ func (t *VBIDataServiceID) UnmarshalJSON(b []byte) (err error) {
 	return
 }
 
-// VBIData represents a VBI data descriptor
-// Chapter: 6.2.47 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type VBIData struct {
 	Header   Header           `json:"_header"`
 	Services []VBIDataService `json:"_services"`
 }
 
-// VBIDataService represents a vbi data service descriptor. For the reserved
-// DataServiceIDs (those without a per-line structure) the raw payload is kept
-// in Reserved instead of being decoded into Descriptors.
+// VBIDataService fills either Descriptors (line-carrying data service ids) or Reserved (the rest), never both.
 type VBIDataService struct {
 	Descriptors   []VBIDataDescriptor `json:"_descriptors"`
 	Reserved      []byte              `json:"_reserved"`
 	DataServiceID VBIDataServiceID    `json:"data_service_id"`
 }
 
-// DescriptorVBIDataItem represents a vbi data descriptor item
-// Chapter: 6.2.47 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type VBIDataDescriptor struct {
 	FieldParity bool  `json:"field_parity"`
 	LineOffset  uint8 `json:"line_offset"`
 }
 
-// vbiServiceHasLines reports whether a data_service_id carries the per-line
-// field_parity/line_offset structure (vs. an opaque reserved payload).
+const (
+	vbiDataServiceIDReserved0 VBIDataServiceID = 0x0
+	vbiDataServiceIDReserved3 VBIDataServiceID = 0x3
+)
+
 func vbiServiceHasLines(dataServiceID VBIDataServiceID) bool {
 	return dataServiceID <= VBIDataServiceIDMonochrome442Samples &&
-		dataServiceID != 0x0 && dataServiceID != 0x3
+		dataServiceID != vbiDataServiceIDReserved0 && dataServiceID != vbiDataServiceIDReserved3
 }
 
 func newDescriptorVBIData(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
 	d := &VBIData{Header: h}
 	dd = d
 
-	// Loop: services are variable-size (id, length, payload)
 	for i.Offset() < offsetEnd {
 		var svc VBIDataService
 
@@ -123,9 +117,9 @@ func newDescriptorVBIData(i *bytesiter.Iterator, h Header, offsetEnd int) (dd De
 func (d *VBIData) CalcLength() int {
 	var ret int
 	for _, item := range d.Services {
-		ret += 2 // service id and length
+		ret += 1 + 1
 		if vbiServiceHasLines(item.DataServiceID) {
-			ret += len(item.Descriptors) // each descriptor is 1 byte
+			ret += len(item.Descriptors)
 		} else {
 			ret += len(item.Reserved)
 		}
@@ -138,7 +132,7 @@ func (d *VBIData) Append(dst []byte) []byte {
 	for _, item := range d.Services {
 		dst = append(dst, uint8(item.DataServiceID))
 		if vbiServiceHasLines(item.DataServiceID) {
-			dst = append(dst, uint8(len(item.Descriptors))) // each descriptor is 1 byte
+			dst = append(dst, uint8(len(item.Descriptors)))
 			for _, desc := range item.Descriptors {
 				dst = append(dst, 0xc0|util.B2U(desc.FieldParity)<<5|desc.LineOffset&0x1f)
 			}

@@ -3,10 +3,9 @@ package descriptor
 import (
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
 )
 
-// MultiplexBufferUtilization is the MPEG-2 systems multiplex_buffer_utilization_descriptor (ISO/IEC 13818-1).
 type MultiplexBufferUtilization struct {
 	Header     Header `json:"_header"`
 	LowerBound uint16 `json:"lower_bound"`

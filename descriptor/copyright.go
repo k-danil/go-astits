@@ -4,10 +4,9 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
 )
 
-// Copyright is the MPEG-2 systems copyright_descriptor (ISO/IEC 13818-1).
 type Copyright struct {
 	AdditionalCopyrightInfo []byte `json:"additional_copyright_info"`
 	CopyrightIdentifier     uint32 `json:"copyright_identifier"`

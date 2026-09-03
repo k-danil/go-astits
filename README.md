@@ -5,7 +5,8 @@ on hot-path performance of MPEG-TS demuxing and remuxing (live video and archive
 cost of upstream compatibility. The API and semantics have diverged from the original for
 good; this module is not and will never be a drop-in replacement.
 
-Module path: `github.com/k-danil/go-astits/v2`.
+Module path: `github.com/k-danil/go-astits/v3` (v3 is a breaking release, see
+[Migrating to v3](#migrating-to-v3)).
 
 ## Layout
 
@@ -13,18 +14,21 @@ Dependency arrows point strictly downwards, no cycles:
 
 | Package      | Contents                                                                                                                                                       |
 |--------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `ts`         | packet, header, adaptation field: parse + serialization, clock codecs (PCR/PTS/DTS/ESCR), CRC32, packet reader (copy and zero-copy view modes, 188/192/204 autodetect), `Packet.Raw()` |
+| `ts`         | packet, header, adaptation field: parse + serialization; `ClockReference` as 27 MHz ticks with the PCR/PTS/DTS/ESCR codecs; CRC32; the packet reader (windowed, zero-copy views, sync lock, 188/192/204 autodetect); recoverable-error model |
+| `tsio`       | the reader contract (`Peeker`, optional `Tagger`) and its reference implementations: `BytesReader` over a slice or mmap, `SeekBuffer` over a seekable source with an in-buffer seek-back window |
 | `pes`        | PES packets: parse + serialization, full optional header (PTS/DTS, ESCR, ES rate, DSM trick mode, CRC, pack_header, extension)                                  |
 | `psi`        | PSI/SI tables — MPEG-2 Systems + DVB-SI: parse and serialize, every table, byte-exact round-trip                                                                |
 | `descriptor` | MPEG-2 Systems (ISO/IEC 13818-1, Table 2-45) + DVB (EN 300 468 §6) descriptors: parse + serialize, one file per descriptor; DVB extension descriptors in `descriptor/ext`; tags defined outside these two specs degrade to `Unknown` |
 | `dvbtext`    | DVB SI text fields (EN 300 468 annex A): character table selection, decoding to UTF-8 and encoding back; the text and ISO 639/3166 code types carried by the descriptors |
-| `demux`      | demuxer: per-PID byte accumulator, event-based `Next`/`Events`, PSI table state, PSI dedup                                                                     |
+| `demux`      | demuxer: windowed packet walk, per-PID byte accumulator, event-based `Next`/`Events`, PSI table state and dedup, opt-in recoverable errors                       |
 | `mux`        | muxer: PES packetization, table generation and retransmission, raw passthrough                                                                                 |
 
 API conventions: `Parse(bs []byte) (n int, err error)` on slices; `Put(bs []byte)` for
 fixed-size serialization (panics on short buffer, like `binary.BigEndian`); `Append(dst
 []byte) []byte` for variable-size; `CalcLength() int` everywhere; constructors `demux.New` /
-`mux.New`; functional options `WithX`. Outside the standard library it depends only on
+`mux.New`; functional options `WithX`. The public packages ship executable examples (`go doc`
+or `example_test.go`): the demux loop and its options, both `tsio` readers and a `Tagger`,
+direct parse and serialization in `ts`/`psi`/`pes`/`descriptor`, the muxer. Outside the standard library it depends only on
 `golang.org/x/text` for the DVB text codecs (`testify` in tests), and uses no `unsafe`:
 direct slice parsing and byte appending throughout, bit-level test fixtures are built with an
 internal ~80-line bit writer.
@@ -32,17 +36,19 @@ internal ~80-line bit writer.
 ## Pros
 
 All rows share one setup: a one-hour SD recording (2.1 Mbit/s, 952 MB `.ts`) walked end to
-end on a single CPU thread (Apple M1 Pro, Go 1.26). Every run reads from an **in-memory
-`bytes.Reader`** (the consumer hands us a chunk already in RAM), builds a fresh demuxer, and
-walks to EOF; alloc and garbage figures are **per full pass** (one hour of content). Upstream
-`asticode/go-astits` v1.15.0 is measured with the identical harness, file, and substrate — it
-is GC-bound at this scale (10–33M allocs/pass), so its throughput varies run to run.
+end on a single CPU thread (Apple M1 Pro, Go 1.26), the chunk already in RAM. The fork's
+rows read it through `tsio.BytesReader` (no copy between the input and the parser); alloc
+and garbage figures are **per full pass** (one hour of content). Upstream
+`asticode/go-astits` v1.15.0 is measured with the identical harness and file over a
+`bytes.Reader` — it is GC-bound at this scale (10–33M allocs/pass), so its throughput varies
+run to run. Over a plain `bytes.Reader` (one bufio copy) the fork's event row is 7.3 GiB/s
+and the packet rows 11–13 GiB/s.
 
-| Path                                                             | This fork                                  | Upstream v1.15.0                | Delta                        |
-|------------------------------------------------------------------|--------------------------------------------|---------------------------------|------------------------------|
-| Packet walk (`NextPacketTo`)                                     | **11 GB/s**, 3 allocs, 2.8 KB              | 2.6 GB/s, 10.5M allocs, 1.2 GB  | ×4.2 / ×3,500,000 / ×420,000 |
-| Same, view mode + skipper (most packets skipped at header level) | **17 GB/s**, 5 allocs, 0.8 MB batch buffer | — (no equivalent)               | —                            |
-| PES + tables via events (`Next`)                                 | **6.4 GB/s**, ~22 allocs, 90 KB garbage    | 0.33 GB/s, 32.9M allocs, 3.9 GB | ×19 / ×1,500,000 / ×43,000   |
+| Path                                                             | This fork                               | Upstream v1.15.0                | Delta                        |
+|------------------------------------------------------------------|-----------------------------------------|---------------------------------|------------------------------|
+| Packet walk (`NextPacketTo`, views into the slice)               | **13.7 GiB/s**, 7 allocs, 4 KB          | 2.6 GB/s, 10.5M allocs, 1.2 GB  | ×5.7 / ×1,500,000 / ×300,000 |
+| Same + skipper (most packets skipped at header level)            | **16.9 GiB/s**, 7 allocs, 4 KB          | — (no equivalent)               | —                            |
+| PES + tables via events (`Next`, sync lock, unbounded limits)    | **8.7 GiB/s**, ~23 allocs, ~50 KB       | 0.33 GB/s, 32.9M allocs, 3.9 GB | ×28 / ×1,400,000 / ×78,000   |
 
 How:
 
@@ -86,12 +92,36 @@ How:
 - **Escape-analysis-friendly dispatch**: descriptor parsing dispatches through a switch, not
   a parser LUT — iterators stay on the stack; demuxer and muxer instances embed their slot
   arrays and scratch buffers, so a short-lived instance costs a handful of allocations.
-- **Zero-copy view mode** (`demux.WithZeroCopyPackets`): batched reads, packets are views
-  into the batch buffer; the accumulator copies payloads out before the refill, so the event
-  API works unchanged in this mode. `Packet.Raw()` returns the view as well, so packet-level
-  passthrough and PID rewrite over `Raw()` run without leaving zero-copy. A `*bufio.Reader`
-  source is not re-buffered: the batch peeks views straight into the reader's own buffer, so
-  a buffered reader — which already holds the bytes — is never copied a second time.
+- **Windowed reads**: the reader is always a `tsio.Peeker` (`*bufio.Reader` qualifies; any other
+  source is wrapped in one sized to the window), and the event API parses a whole window of
+  packets in place per refill — no read call, no copy and no call chain per packet. A window
+  is cut to what the peeker already holds, so a live feed is never waited on for more than one
+  packet, and to 1024 packets, the cancellation cadence. `demux.WithZeroCopyPackets` hands `NextPacketTo` packets as views into the window
+  (valid until the next refill) instead of copying each one out, and sizes the wrapping bufio
+  when there is one; `Packet.Raw()` returns the view, so packet-level passthrough and PID
+  rewrite over `Raw()` stay zero-copy.
+- **Reference readers** (`tsio`): `BytesReader` serves a slice — a chunk in memory, an
+  mmap'd file — with no copy anywhere between the input and the parser; `SeekBuffer` reads a
+  seekable source through a bounded buffer that keeps an in-buffer seek-back window, so a
+  rewind after a prefix scan costs no I/O. Both satisfy `tsio.Peeker`; a live feed brings its
+  own (a datagram reassembler, say). A reader that also implements `tsio.Tagger` stamps each
+  window with an opaque `uint64` — a hardware or software receive timestamp, an RTP sequence —
+  carried untouched as `Packet.Tag` and `PES.FirstPacketTag`/`LastPacketTag`.
+- **Plain readers and sockets**: any `io.Reader` works — a reader that is not a `tsio.Peeker`
+  (or a peeker whose `Size()` is below 204) is wrapped in bufio (13 KB by default; N × 204
+  bytes, at least 409, under `WithZeroCopyPackets(N)`) and, once that buffer is drained, read
+  one packet at a time, so a live socket is never waited on for more than a packet. Three things follow from Go's socket semantics: a read blocked on the socket is not
+  interrupted by the context (cancellation is seen between reads — set a deadline or close the
+  socket to wake the demuxer); a deadline error comes back wrapped and is not terminal, the next
+  call continues where it left off; a datagram socket needs the read-ahead to hold a whole
+  datagram (the default covers 1316/1472-byte and 8 KB datagrams, size `WithZeroCopyPackets` for
+  larger ones), and RTP headers are the caller's to strip — a reassembler is the natural
+  `tsio.Peeker`. The first packet waits longer: 409 bytes for packet-size autodetection (none
+  with `WithPacketSize`), a full 1024-byte scan window under `WithSyncLock`.
+- **Clock references as ticks**: `ts.ClockReference` is an `int64` count of 27 MHz ticks —
+  PCR/OPCR/ESCR exactly, PTS/DTS as multiples of `ts.PTSTicks` — so intervals, offsets and
+  jitter are plain subtractions; `Diff` takes the shortest signed distance across the 33-bit
+  wrap (`ts.ClockWrap`), `Base()`/`Extension()` give the wire fields back.
 - **Multi-format packet reader**: plain TS (188), M2TS (192, with the 4-byte
   TP_extra_header exposed as `Packet.Prefix` / decoded by `ArrivalTimeStamp()`) and
   Reed-Solomon (204) are read transparently. The size is autodetected by locking onto the
@@ -102,7 +132,7 @@ How:
   hysteresis — a lone corrupt sync byte is repaired and reported (sync_byte_error), two in a
   row are a sync loss re-locked only on five consecutive periods (TS_sync_loss; a tail shorter
   than that after a loss is consumed into it), an aligned corrupt packet is dropped — peeking
-  ahead through a `ts.Peeker` of at least 1024 bytes (a raw reader is wrapped in bufio). Off by
+  ahead through a `tsio.Peeker` of at least 1024 bytes (a raw reader is wrapped in bufio). Off by
   default so aligned files stay on the zero-wrap fast path. Tolerance is explicit and strict
   by default: `WithSkipErrLimit` bounds the streak of consecutive damage events (dropped
   packets in either mode, sync losses under sync lock) and `WithResyncLimit` the scan windows
@@ -158,6 +188,37 @@ How:
   `SetCC`, table retransmission from cache; PAT spans sections and packets when needed,
   oversize sections are rejected (`psi.ErrSectionOverflow`) instead of silently corrupted.
 
+## Migrating to v3
+
+Everything that breaks against v2, in one place:
+
+- **Module path** becomes `github.com/k-danil/go-astits/v3`.
+- **`ts.Peeker` is `tsio.Peeker`** (no alias) and gains `Buffered() int` — a peeker without
+  it no longer compiles; a live feed's window is cut to it. `tsio` also brings `BytesReader`,
+  `SeekBuffer` and the optional `Tagger`.
+- **`ts.ClockReference` is a tick count** (`int64`, 27 MHz) instead of a packed
+  `base<<9|ext`. `NewClockReference(base, ext)`, `Base()` and `Extension()` keep their
+  meaning; arithmetic on the value is now correct; `Time()` is gone; the JSON form is the
+  tick count. A PCR extension must be below 300 — the packed form silently accepted 9 bits.
+- **`Demuxer.Section()` returns `(pid uint16, *psi.Section)`**; the typed body sits behind
+  `Section.Syntax.Data`. `PacketCounts()` (packets per PID) replaces `GetStats()`.
+- **Damage limits share one scale**: `WithSkipErrLimit`, `WithResyncLimit` and
+  `WithMaxUnitSize(pes, psi)` take 0 (nothing), -1 (unbounded) or N. `WithMaxUnitSize`
+  defaults to 16 MB / 64 KB.
+- **Recoverable errors** carry `Kind`, `PID`, `Offset`, `Dropped` and `Err`; new kinds
+  `ErrorKindSyncByte`, `ErrorKindPacketDrop`, `ErrorKindTornUnit`, `ErrorKindUnknownUnit`.
+  `psi.Data.Errors` lists unusable sections of a unit, `descriptor.Malformed` keeps a body the
+  parser rejected. Silent-mode output changed where the handling did (see the
+  recoverable-error bullet above).
+- **`demux.PES`** gains `FirstPacketOffset`/`LastPacketOffset`, `FirstPacketTag`/`LastPacketTag`
+  and `Truncated`; `ts.Packet` gains `Tag`.
+- **`Rewind` on a reader that cannot seek** returns -1 and continues from the current
+  position instead of replaying a window.
+- **`descriptor.DataStreamAligment*`** constants are spelled `DataStreamAlignment*`; the
+  `descriptor`, `psi` and root package docs moved into this README.
+- **`ts.PacketBuffer`** exposes `Window`/`Advance`/`Pos`/`Tag`/`Close` and `ts.ReadAhead`;
+  `Packet.ParseAt` parses in place. Not needed by demuxer users.
+
 ## Problems and deliberate trade-offs
 
 - **Incompatible with upstream** in both API and semantics. Compatibility is a non-goal.
@@ -167,8 +228,9 @@ How:
   EOF must be released via `Demuxer.Close()` — otherwise held resources go to the GC instead
   of the pools.
 - **Context cancellation is polled, not immediate**: the packet reader checks `ctx` once per
-  1024 packets, so a cancel is observed within that window rather than at the next call
-  boundary — the per-packet path stays free of a `select`.
+  window, at most 1024 packets, so a cancel is observed within that many packets rather than
+  at the next call boundary — the per-packet path stays free of a `select` — and never
+  interrupts a `Read` blocked on the source (see the sockets bullet).
 - **View mode**: packet memory is valid only until the next batch refill. The event API is
   unaffected (the accumulator copies out), but a `Packet` held from `NextPacketTo` is not.
 - **PSI dedup changes emission semantics** by default: a repeated section with identical
@@ -189,4 +251,8 @@ How:
 
 ## Roadmap
 
-- Packet-level primitives: in-place PCR patching, PID rewrite over `Raw()`.
+- Packet-level primitives: in-place PCR patching over `Raw()`.
+- Packet path over large in-memory input is DRAM-bound (8% gain from dropping the bufio
+  copy against 34% on L2-resident data): software prefetch a few packets ahead.
+- `SeekBuffer` as the demuxer's default wrapper for seekable readers, so `Rewind` after a
+  prefix scan stays in memory; a larger default window (256 packets) for copy mode.

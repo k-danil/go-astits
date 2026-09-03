@@ -4,10 +4,9 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
 )
 
-// ExternalESID is the MPEG-2 systems External_ES_ID_descriptor (ISO/IEC 13818-1).
 type ExternalESID struct {
 	Header       Header `json:"_header"`
 	ExternalESID uint16 `json:"External_ES_ID"`

@@ -3,10 +3,9 @@ package descriptor
 import (
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
 )
 
-// TransportProfile is the MPEG-2 systems Transport_profile_descriptor (ISO/IEC 13818-1).
 type TransportProfile struct {
 	PrivateData []byte `json:"private_data"`
 	Header      Header `json:"_header"`

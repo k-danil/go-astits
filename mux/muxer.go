@@ -6,20 +6,23 @@ import (
 	"errors"
 	"io"
 
-	"github.com/k-danil/go-astits/v2/internal/pidmap"
-	"github.com/k-danil/go-astits/v2/pes"
-	"github.com/k-danil/go-astits/v2/psi"
-	"github.com/k-danil/go-astits/v2/ts"
+	"github.com/k-danil/go-astits/v3/internal/pidmap"
+	"github.com/k-danil/go-astits/v3/pes"
+	"github.com/k-danil/go-astits/v3/psi"
+	"github.com/k-danil/go-astits/v3/ts"
 )
 
 const (
 	pmtStartPID        uint16 = 0x1000
 	programNumberStart uint16 = 1
 	packetMaxPayload          = 184
-	// Widest PES header: 6-byte prefix + optional header (2 flag bytes + a 1-byte
-	// length + up to 255 data bytes). It can exceed a packet, so it is serialized
-	// once and spanned across packets.
+	// A PES header can exceed one packet, so it is serialized once and spanned.
 	maxPESHeader = pes.HeaderSize + 3 + 0xff
+
+	tableVersionWrap = 0b11111
+	ccWrap           = 0b1111
+	afLengthByte     = 1
+	afFlagsByte      = 1
 )
 
 var (
@@ -34,7 +37,7 @@ type Muxer struct {
 	w   io.Writer
 
 	packetSize             int
-	tablesRetransmitPeriod int // period in PES packets
+	tablesRetransmitPeriod int
 
 	pm         pidmap.Map[uint16] // pid -> programNumber
 	pmt        psi.PMT
@@ -50,7 +53,7 @@ type Muxer struct {
 	pmtBytes bytes.Buffer
 
 	pkt       []byte
-	pesHdr    []byte // serialized PES header, spanned across packets
+	pesHdr    []byte
 	stuffAF   ts.PacketAdaptationField
 	pktArr    [ts.PacketSize]byte
 	pesHdrArr [maxPESHeader]byte
@@ -61,12 +64,10 @@ type Muxer struct {
 	esContexts              pidmap.Map[esContext]
 	tablesRetransmitCounter int
 
-	// Inline storage, each paired with a field above to keep a fresh muxer's
-	// tables and small maps off the heap.
-	pmKeysArr [4]uint16    // pm keys
-	pmValsArr [4]uint16    // pm vals
-	esKeysArr [8]uint16    // esContexts keys
-	esValsArr [8]esContext // esContexts vals
+	pmKeysArr [4]uint16
+	pmValsArr [4]uint16
+	esKeysArr [8]uint16
+	esValsArr [8]esContext
 	patArr    [ts.PacketSize]byte
 	pmtArr    [ts.PacketSize]byte
 }
@@ -76,24 +77,19 @@ type esContext struct {
 	cc wrappingCounter
 }
 
-// WithTablesRetransmitPeriod sets how often PAT/PMT are re-emitted, counted in
-// written PES packets.
+// Period is counted in written PES packets (units), not TS packets.
 func WithTablesRetransmitPeriod(newPeriod int) func(*Muxer) {
 	return func(m *Muxer) {
 		m.tablesRetransmitPeriod = newPeriod
 	}
 }
 
-// TODO MuxerOptAutodetectPCRPID selecting first video PID for each PMT, falling back to first audio, falling back to any other
-
-// New creates a muxer writing to w; register streams with AddElementaryStream
-// before writing data.
 func New(ctx context.Context, w io.Writer, opts ...func(*Muxer)) (m *Muxer) {
 	m = &Muxer{
 		ctx: ctx,
 		w:   w,
 
-		packetSize:             ts.PacketSize, // no 192-byte packet support yet
+		packetSize:             ts.PacketSize,
 		tablesRetransmitPeriod: 40,
 
 		pmt: psi.PMT{
@@ -101,9 +97,8 @@ func New(ctx context.Context, w io.Writer, opts ...func(*Muxer)) (m *Muxer) {
 			ProgramNumber:     programNumberStart,
 		},
 
-		// table version is 5-bit field
-		patVersion: newWrappingCounter(0b11111),
-		pmtVersion: newWrappingCounter(0b11111),
+		patVersion: newWrappingCounter(tableVersionWrap),
+		pmtVersion: newWrappingCounter(tableVersionWrap),
 
 		patCC: newWrappingCounter(0b1111),
 		pmtCC: newWrappingCounter(0b1111),
@@ -116,7 +111,6 @@ func New(ctx context.Context, w io.Writer, opts ...func(*Muxer)) (m *Muxer) {
 	m.patData = m.patArr[:0]
 	m.pmtData = m.pmtArr[:0]
 
-	// TODO multiple programs support
 	m.pm.Set(pmtStartPID, programNumberStart)
 	m.pmUpdated = true
 
@@ -124,7 +118,7 @@ func New(ctx context.Context, w io.Writer, opts ...func(*Muxer)) (m *Muxer) {
 		opt(m)
 	}
 
-	// to output tables at the very start
+	// start at the period so the first WriteData emits the tables
 	m.tablesRetransmitCounter = m.tablesRetransmitPeriod
 
 	return
@@ -147,10 +141,8 @@ func (m *Muxer) AddElementaryStream(es psi.ElementaryStream) error {
 
 	*m.esContexts.GetOrAdd(es.ElementaryPID) = esContext{
 		es: &es,
-		cc: newWrappingCounter(0b1111), // CC is 4 bits
+		cc: newWrappingCounter(ccWrap),
 	}
-	// invalidate pmt cache
-	m.pmtBytes.Reset()
 	m.pmtUpdated = true
 	return nil
 }
@@ -170,19 +162,15 @@ func (m *Muxer) RemoveElementaryStream(pid uint16) error {
 
 	m.pmt.ElementaryStreams = append(m.pmt.ElementaryStreams[:foundIdx], m.pmt.ElementaryStreams[foundIdx+1:]...)
 	m.esContexts.Remove(pid)
-	m.pmtBytes.Reset()
 	m.pmtUpdated = true
 	return nil
 }
 
-// SetPCRPID marks pid as one to look PCRs in
 func (m *Muxer) SetPCRPID(pid uint16) {
 	m.pmt.PCRPID = pid
 	m.pmtUpdated = true
 }
 
-// SetCC seeds the continuity counter for a PID so passthrough output continues
-// the source packet sequence without a discontinuity.
 func (m *Muxer) SetCC(pid uint16, cc uint8) error {
 	ctx := m.esContexts.Get(pid)
 	if ctx == nil {
@@ -191,11 +179,7 @@ func (m *Muxer) SetCC(pid uint16, cc uint8) error {
 	return ctx.cc.set(int(cc))
 }
 
-// WriteData writes Data to TS stream
-// Currently only PES packets are supported
-// Be aware that after successful call WriteData will set d.AdaptationField.StuffingLength value to zero
-// It issues several writes per unit (header and payload separately for full mid-unit
-// packets), so wrap an unbuffered destination such as a raw file or socket in bufio.
+// Zeroes d.AdaptationField.StuffingLength on success. Issues several writes per unit, so buffer an unbuffered destination.
 func (m *Muxer) WriteData(d *Data) (bytesWritten int, err error) {
 	ctx := m.esContexts.Get(d.PID)
 	if ctx == nil {
@@ -217,8 +201,6 @@ func (m *Muxer) WriteData(d *Data) (bytesWritten int, err error) {
 		d.PES.Header.StreamID = ctx.es.StreamType.ToPESStreamID()
 	}
 
-	// Serialize the PES header once. Header and payload form one byte stream that
-	// is split across packets; a header wider than a packet spans several of them.
 	var hdrLen int
 	if hdrLen, err = d.PES.Header.PutHeader(m.pesHdr, len(d.PES.Data)); err != nil {
 		return
@@ -231,9 +213,7 @@ func (m *Muxer) WriteData(d *Data) (bytesWritten int, err error) {
 		firstPktLen += 1 + d.AdaptationField.CalcLength()
 	}
 
-	// Emit the PES header, then drain the payload. It usually fits the first
-	// packet; one too wide (a fat AF ate the room) spans several. Either way this
-	// ends on a packet boundary, so the shared bulk and tail phases below finish it.
+	// Ends on a packet boundary either way, so the bulk and tail phases below can finish the unit.
 	payloadWritten := 0
 	if firstAvail := m.packetSize - firstPktLen; hdrLen <= firstAvail {
 		firstPayload := min(len(d.PES.Data), firstAvail-hdrLen)
@@ -267,8 +247,7 @@ func (m *Muxer) WriteData(d *Data) (bytesWritten int, err error) {
 			if writeAf {
 				header.HasAdaptationField = true
 				af = d.AdaptationField
-				// one byte for the adaptation field length field
-				pktLen += 1 + d.AdaptationField.CalcLength()
+				pktLen += afLengthByte + d.AdaptationField.CalcLength()
 				writeAf = false
 			}
 			bytesAvailable := m.packetSize - pktLen
@@ -302,9 +281,7 @@ func (m *Muxer) WriteData(d *Data) (bytesWritten int, err error) {
 		}
 	}
 
-	// Bulk phase: full mid-unit packets — a fixed 4-byte header (only CC
-	// advancing) and a packet-sized payload chunk, no PES header or AF. Between
-	// them only CC changes, so it is patched in place instead of re-encoded.
+	// m.pkt holds this run's header while fastLocked: nothing else may write into it, only the CC is patched.
 	fastHeader := ts.PacketHeader{PID: d.PID, HasPayload: true}
 	fastLocked := false
 	for len(d.PES.Data)-payloadWritten >= bulkChunk {
@@ -347,9 +324,7 @@ func (m *Muxer) WriteData(d *Data) (bytesWritten int, err error) {
 	return
 }
 
-// emitPacket serializes header and af into the front of m.pkt, writes that front,
-// then hdr and payload straight from their own buffers — like the bulk path, so
-// neither is copied into m.pkt first.
+// front is how many bytes of m.pkt (header, AF, stuffing) precede hdr and payload.
 func (m *Muxer) emitPacket(header ts.PacketHeader, af *ts.PacketAdaptationField, front int, hdr, payload []byte) (n int, err error) {
 	header.Put(m.pkt)
 	if header.HasAdaptationField {
@@ -377,8 +352,6 @@ func (m *Muxer) emitPacket(header ts.PacketHeader, af *ts.PacketAdaptationField,
 	return
 }
 
-// Writes given packet to MPEG-TS stream
-// Stuffs with 0xffs if packet turns out to be shorter than target packet length
 func (m *Muxer) WritePacket(p *ts.Packet) (int, error) {
 	if raw := p.Raw(); len(raw) > 0 {
 		return m.w.Write(raw)
@@ -389,15 +362,13 @@ func (m *Muxer) WritePacket(p *ts.Packet) (int, error) {
 	return m.w.Write(m.pkt)
 }
 
-// stuffingAdaptationField reuses the muxer's scratch AF: no allocation per stuffed
-// packet, Reset() guarantees cleanliness between uses
+// Returns the shared scratch AF: the previous one is invalidated.
 func (m *Muxer) stuffingAdaptationField(bytesToStuff int) *ts.PacketAdaptationField {
 	m.stuffAF.Reset()
 	if bytesToStuff == 1 {
 		m.stuffAF.IsOneByteStuffing = true
 	} else {
-		// one byte for length and one for flags
-		m.stuffAF.StuffingLength = uint8(bytesToStuff - 2)
+		m.stuffAF.StuffingLength = uint8(bytesToStuff - afLengthByte - afFlagsByte)
 	}
 	return &m.stuffAF
 }
@@ -416,7 +387,6 @@ func (m *Muxer) retransmitTables(force bool) (n int, err error) {
 	return
 }
 
-// WriteTables writes the PAT and the PMT for the registered program.
 func (m *Muxer) WriteTables() (bytesWritten int, err error) {
 	if err = m.generatePAT(); err != nil {
 		return
@@ -440,9 +410,13 @@ func (m *Muxer) WriteTables() (bytesWritten int, err error) {
 	return
 }
 
-// maxPATProgramsPerSection is how many 4-byte program entries fit a section
-// next to the syntax header and CRC32.
-const maxPATProgramsPerSection = (1021 - 5 - 4) / 4
+const (
+	psiSectionBodyMax        = 1021
+	psiSyntaxHeaderLen       = 5
+	crc32Len                 = 4
+	patProgramSize           = 4
+	maxPATProgramsPerSection = (psiSectionBodyMax - psiSyntaxHeaderLen - crc32Len) / patProgramSize
+)
 
 func (m *Muxer) generatePAT() (err error) {
 	if m.pmUpdated {
@@ -505,8 +479,6 @@ func (m *Muxer) generatePAT() (err error) {
 		}
 	}
 
-	// Only the continuity counter changes between emissions: patch it in place
-	// instead of repacketizing (mirrors the PES fast path).
 	b := m.patBytes.Bytes()
 	for off := 0; off < len(b); off += ts.PacketSize {
 		ts.SetContinuityCounter(b[off:], uint8(m.patCC.inc()))
@@ -540,10 +512,8 @@ func (m *Muxer) generatePMT() (err error) {
 						Data: &m.pmt,
 						Header: psi.SectionSyntaxHeader{
 							CurrentNextIndicator: true,
-							//LastSectionNumber:    0,
-							//SectionNumber:        0,
-							TableIDExtension: m.pmt.ProgramNumber,
-							VersionNumber:    uint8(m.pmtVersion.inc()),
+							TableIDExtension:     m.pmt.ProgramNumber,
+							VersionNumber:        uint8(m.pmtVersion.inc()),
 						},
 					},
 				},
@@ -565,7 +535,7 @@ func (m *Muxer) generatePMT() (err error) {
 				Header: ts.PacketHeader{
 					HasPayload:                true,
 					PayloadUnitStartIndicator: i == 0,
-					PID:                       pmtStartPID, // FIXME multiple programs support
+					PID:                       pmtStartPID,
 				},
 				Payload: m.pmtData[start:stop],
 			}
@@ -576,8 +546,6 @@ func (m *Muxer) generatePMT() (err error) {
 		}
 	}
 
-	// Only the continuity counter changes between emissions: patch it in place
-	// instead of repacketizing (mirrors the PES fast path).
 	b := m.pmtBytes.Bytes()
 	for off := 0; off < len(b); off += ts.PacketSize {
 		ts.SetContinuityCounter(b[off:], uint8(m.pmtCC.inc()))

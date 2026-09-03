@@ -3,11 +3,10 @@ package descriptor
 import (
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
-	"github.com/k-danil/go-astits/v2/internal/util"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/util"
 )
 
-// MPEG4AudioExtension is the MPEG-2 systems MPEG-4_audio_extension_descriptor (ISO/IEC 13818-1).
 type MPEG4AudioExtension struct {
 	AudioProfileLevelIndication []byte `json:"audioProfileLevelIndication"`
 	AudioSpecificConfig         []byte `json:"audioSpecificConfig"`

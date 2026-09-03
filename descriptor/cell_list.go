@@ -4,18 +4,14 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
 )
 
-// CellList represents a cell list descriptor: the cells of a terrestrial
-// network and their coverage areas (raw latitude/longitude and extent fields).
-// Chapter: 6.2.7 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type CellList struct {
 	Cells  []CellListCell `json:"_cells"`
 	Header Header         `json:"_header"`
 }
 
-// CellListCell is one cell of a cell list descriptor
 type CellListCell struct {
 	Subcells              []CellListSubcell `json:"_subcells"`
 	CellID                uint16            `json:"cell_id"`
@@ -25,7 +21,6 @@ type CellListCell struct {
 	CellExtentOfLongitude uint16            `json:"cell_extent_of_longitude"`
 }
 
-// CellListSubcell is one subcell of a cell list cell
 type CellListSubcell struct {
 	SubcellLatitude          uint16 `json:"subcell_latitude"`
 	SubcellLongitude         uint16 `json:"subcell_longitude"`

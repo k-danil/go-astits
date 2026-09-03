@@ -3,11 +3,10 @@ package descriptor
 import (
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
-	"github.com/k-danil/go-astits/v2/internal/util"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/util"
 )
 
-// AudioStream is the MPEG-2 systems audio_stream_descriptor (ISO/IEC 13818-1).
 type AudioStream struct {
 	Header                     Header `json:"_header"`
 	Layer                      uint8  `json:"layer"`

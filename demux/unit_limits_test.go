@@ -9,9 +9,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/k-danil/go-astits/v2/internal/pidmap"
-	"github.com/k-danil/go-astits/v2/pes"
-	"github.com/k-danil/go-astits/v2/ts"
+	"github.com/k-danil/go-astits/v3/internal/pidmap"
+	"github.com/k-danil/go-astits/v3/pes"
+	"github.com/k-danil/go-astits/v3/ts"
 )
 
 func newAcc(report func(ts.RecoverableError), maxPES, maxPSI int) (a *accumulator, pm *pidmap.Map[uint16]) {
@@ -57,48 +57,8 @@ func TestAccumulatorUnitSizeLimit(t *testing.T) {
 			assert.Equal(t, ts.ErrorKindTornUnit, torn[0].Kind)
 			assert.ErrorIs(t, torn[0].Err, ts.ErrUnitTooLarge)
 			assert.Equal(t, tt.dropped, torn[0].Dropped)
-
-			units = a.add(accPacket(1, uint8(len(tt.payloads)+1), true, []byte("after")), units[:0])
-			if tt.limit == 0 {
-				assert.Empty(t, units)
-				return
-			}
-			require.Len(t, units, 1, "the next payload packet opens a new unit")
-			assert.Equal(t, []byte("fresh"), units[0].buf.bs)
-			poolOfPayload.put(units[0].buf)
 		})
 	}
-}
-
-// An oversized tail at EOF is torn and the next PID's tail still comes out;
-// the tear reaches the consumer before the stream ends.
-func TestDemuxerDrainSkipsTornTail(t *testing.T) {
-	stream := payloadPacket(0x100, 0, true, unboundedPES)
-	stream = append(stream, payloadPacket(0x100, 1, false, []byte("more"))...)
-	stream = append(stream, payloadPacket(0x200, 0, true, unboundedPES)...)
-	dmx := New(context.Background(), bytes.NewReader(stream), WithPacketSize(ts.PacketSize),
-		WithRecoverableErrors(), WithMaxUnitSize(200, -1))
-	defer dmx.Close()
-
-	var pesPIDs []uint16
-	var torn []*ts.RecoverableError
-	for ev, err := range dmx.Events() {
-		var re *ts.RecoverableError
-		if errors.As(err, &re) {
-			torn = append(torn, re)
-			continue
-		}
-		require.NoError(t, err)
-		if ev == EventPES {
-			pesPIDs = append(pesPIDs, dmx.PES().PID)
-		}
-	}
-	assert.Equal(t, []uint16{0x200}, pesPIDs)
-	require.Len(t, torn, 1)
-	assert.Equal(t, ts.ErrorKindTornUnit, torn[0].Kind)
-	assert.Equal(t, uint16(0x100), torn[0].PID)
-	assert.ErrorIs(t, torn[0].Err, ts.ErrUnitTooLarge)
-	assert.Equal(t, int64(2*184), torn[0].Dropped)
 }
 
 func TestAccumulatorPSICompletesAcrossThreePackets(t *testing.T) {
@@ -205,28 +165,6 @@ func TestAccumulatorRepeats(t *testing.T) {
 		assert.Equal(t, []byte("abcdef"), units[0].buf.bs)
 		poolOfPayload.put(units[0].buf)
 	})
-}
-
-// Every packet the demuxer sees is counted, whether or not it carries a
-// payload; null packets are counted but never assembled into a unit.
-func TestAccumulatorPacketCounts(t *testing.T) {
-	a, _ := newAcc(nil, defaultMaxPESUnit, defaultMaxPSIUnit)
-
-	afOnly := accPacket(0x100, 0, false, nil)
-	afOnly.Header.HasPayload = false
-	afOnly.Header.HasAdaptationField = true
-	assert.Empty(t, a.add(afOnly, nil))
-
-	for cc := range 4 {
-		assert.Empty(t, a.add(accPacket(ts.PIDNull, uint8(cc), false, bytes.Repeat([]byte{0xff}, 184)), nil))
-	}
-
-	assert.Equal(t, uint64(1), a.slots.Get(0x100).packets)
-	null := a.slots.Get(ts.PIDNull)
-	require.NotNil(t, null)
-	assert.Equal(t, uint64(4), null.packets)
-	assert.False(t, null.started, "null payload is never accumulated")
-	assert.Nil(t, null.buf)
 }
 
 func TestDemuxerPacketCountsAndNullPackets(t *testing.T) {

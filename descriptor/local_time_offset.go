@@ -2,23 +2,19 @@ package descriptor
 
 import (
 	"fmt"
-	"github.com/k-danil/go-astits/v2/dvbtext"
+	"github.com/k-danil/go-astits/v3/dvbtext"
 	"time"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
-	"github.com/k-danil/go-astits/v2/internal/dvb"
-	"github.com/k-danil/go-astits/v2/internal/util"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/dvb"
+	"github.com/k-danil/go-astits/v3/internal/util"
 )
 
-// LocalTimeOffset represents a local time offset descriptor
-// Chapter: 6.2.20 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type LocalTimeOffset struct {
 	Header Header                `json:"_header"`
 	Items  []LocalTimeOffsetItem `json:"_items"`
 }
 
-// LocalTimeOffsetItem represents a local time offset item descriptor
-// Chapter: 6.2.20 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type LocalTimeOffsetItem struct {
 	LocalTimeOffset         time.Duration `json:"local_time_offset"`
 	NextTimeOffset          time.Duration `json:"next_time_offset"`

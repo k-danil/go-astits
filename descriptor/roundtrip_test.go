@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/k-danil/go-astits/v2/descriptor/ext"
+	"github.com/k-danil/go-astits/v3/descriptor/ext"
 )
 
 func randBytes(r *rand.Rand, n int) []byte {

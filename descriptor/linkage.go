@@ -5,13 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
-	"github.com/k-danil/go-astits/v2/internal/util"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/util"
 )
 
 type LinkageType uint8
 
-// linkage_type values (EN 300 468 Table 58)
 const (
 	LinkageTypeInformationService            LinkageType = 0x01
 	LinkageTypeEPGService                    LinkageType = 0x02
@@ -61,11 +60,7 @@ func (t *LinkageType) UnmarshalJSON(b []byte) (err error) {
 	return
 }
 
-// Linkage represents a linkage descriptor: the service that provides extra
-// information about the entity the descriptor sits in. The type-specific
-// linkage info (mobile hand-over / event / extended-event, keyed by
-// LinkageType) plus the trailing private data are kept raw in Data.
-// Chapter: 6.2.19 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
+// Data keeps the type-specific linkage info (hand-over, event) ahead of the private data unparsed, despite the private_data_byte tag.
 type Linkage struct {
 	Data              []byte      `json:"private_data_byte"`
 	Header            Header      `json:"_header"`

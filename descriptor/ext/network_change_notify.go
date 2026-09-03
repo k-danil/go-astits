@@ -4,25 +4,19 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
 )
 
-// NetworkChangeNotify represents a network change notify extension
-// descriptor: scheduled network-change events, grouped by cell.
-// Chapter: 6.4.8 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type NetworkChangeNotify struct {
 	Cells []NetworkChangeCell `json:"_cells"`
 }
 
-// NetworkChangeCell groups the network changes signalled for one cell
 type NetworkChangeCell struct {
 	Changes []NetworkChange `json:"_changes"`
 	CellID  uint16          `json:"cell_id"`
 }
 
-// NetworkChange is one scheduled network-change event. StartTimeOfChange
-// (40-bit MJD+BCD) and ChangeDuration (24-bit BCD) keep their raw values; the
-// invariant-TS ids are present only when InvariantTSPresent.
+// StartTimeOfChange is raw 40-bit MJD+BCD, ChangeDuration raw 24-bit BCD — neither is decoded.
 type NetworkChange struct {
 	StartTimeOfChange    uint64 `json:"start_time_of_change"`
 	ChangeDuration       uint32 `json:"change_duration"`

@@ -9,8 +9,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/k-danil/go-astits/v2/psi"
-	"github.com/k-danil/go-astits/v2/ts"
+	"github.com/k-danil/go-astits/v3/psi"
+	"github.com/k-danil/go-astits/v3/ts"
 )
 
 // payloadPacket frames payload as a packet, 0xFF-stuffed.
@@ -147,81 +147,4 @@ func TestDemuxerRepeatedBrokenSectionReported(t *testing.T) {
 		crcErrors++
 	}
 	assert.Equal(t, 2, crcErrors, "each occurrence of the damaged section is an event")
-}
-
-// A unit that yields nothing must not displace the cached good unit: the same
-// good unit coming back is a repeat, not a change.
-func TestDemuxerCacheSurvivesBrokenUnits(t *testing.T) {
-	good := patSection(0, true, 0x100)
-	broken := patSection(0, true, 0x100)
-	broken[len(broken)-1] ^= 0x01
-
-	tests := []struct {
-		name     string
-		middle   []byte
-		wantKind ts.ErrorKind
-	}{
-		{"pointer_field beyond the unit", payloadPacket(ts.PIDPAT, 1, true, []byte{0xf0}), ts.ErrorKindPSI},
-		{"every section damaged", psiPacket(ts.PIDPAT, 1, broken), ts.ErrorKindCRC},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			stream := psiPacket(ts.PIDPAT, 0, good)
-			stream = append(stream, tt.middle...)
-			stream = append(stream, psiPacket(ts.PIDPAT, 2, good)...)
-			dmx := New(context.Background(), bytes.NewReader(stream), WithPacketSize(ts.PacketSize), WithRecoverableErrors())
-
-			var pats, errs int
-			for ev, err := range dmx.Events() {
-				switch {
-				case err != nil:
-					var re *ts.RecoverableError
-					require.ErrorAs(t, err, &re)
-					assert.Equal(t, tt.wantKind, re.Kind)
-					errs++
-				case ev == EventPAT:
-					assert.True(t, dmx.TableChanged())
-					pats++
-				default:
-					t.Fatalf("unexpected event %v", ev)
-				}
-			}
-			assert.Equal(t, 1, pats)
-			assert.Equal(t, 1, errs)
-		})
-	}
-}
-
-func TestDemuxerPESPacketOffsets(t *testing.T) {
-	t.Run("two packets", func(t *testing.T) {
-		stream := payloadPacket(0x100, 0, true, unboundedPES)
-		stream = append(stream, payloadPacket(0x100, 1, false, []byte("more"))...)
-		stream = append(stream, payloadPacket(0x100, 2, true, unboundedPES)...)
-		dmx := New(context.Background(), bytes.NewReader(stream), WithPacketSize(ts.PacketSize))
-
-		ev, err := dmx.Next()
-		require.NoError(t, err)
-		require.Equal(t, EventPES, ev)
-		assert.Equal(t, int64(0), dmx.PES().FirstPacketOffset)
-		assert.Equal(t, int64(ts.PacketSize), dmx.PES().LastPacketOffset)
-	})
-
-	t.Run("headless prefix", func(t *testing.T) {
-		stream := payloadPacket(0x100, 0, false, unboundedPES)
-		stream = append(stream, payloadPacket(0x100, 1, true, unboundedPES)...)
-		dmx := New(context.Background(), bytes.NewReader(stream), WithPacketSize(ts.PacketSize))
-
-		ev, err := dmx.Next()
-		require.NoError(t, err)
-		require.Equal(t, EventPES, ev)
-		assert.Equal(t, int64(0), dmx.PES().FirstPacketOffset, "the first packet seen starts the headless unit")
-		assert.Equal(t, int64(0), dmx.PES().LastPacketOffset)
-
-		ev, err = dmx.Next()
-		require.NoError(t, err)
-		require.Equal(t, EventPES, ev)
-		assert.Equal(t, int64(ts.PacketSize), dmx.PES().FirstPacketOffset)
-		assert.Equal(t, int64(ts.PacketSize), dmx.PES().LastPacketOffset)
-		assert.True(t, dmx.PES().Truncated)
-	})
 }

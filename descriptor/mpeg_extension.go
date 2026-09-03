@@ -3,10 +3,9 @@ package descriptor
 import (
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
 )
 
-// MPEGExtension is the MPEG-2 systems extension_descriptor (ISO/IEC 13818-1).
 type MPEGExtension struct {
 	Body      []byte `json:"_body"`
 	Header    Header `json:"_header"`

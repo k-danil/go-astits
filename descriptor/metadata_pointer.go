@@ -4,11 +4,10 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
-	"github.com/k-danil/go-astits/v2/internal/util"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/util"
 )
 
-// MetadataPointer is the MPEG-2 systems metadata_pointer_descriptor (ISO/IEC 13818-1).
 type MetadataPointer struct {
 	MetadataLocatorRecord               []byte `json:"metadata_locator_record"`
 	PrivateData                         []byte `json:"private_data"`

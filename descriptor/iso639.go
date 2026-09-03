@@ -4,16 +4,14 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/dvbtext"
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
-	"github.com/k-danil/go-astits/v2/internal/util"
-	"github.com/k-danil/go-astits/v2/ts"
+	"github.com/k-danil/go-astits/v3/dvbtext"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/util"
+	"github.com/k-danil/go-astits/v3/ts"
 )
 
 type AudioType uint8
 
-// Audio types
-// Page: 683 | https://books.google.fr/books?id=6dgWB3-rChYC&printsec=frontcover&hl=fr
 const (
 	AudioTypeUndefined                AudioType = 0x0
 	AudioTypeCleanEffects             AudioType = 0x1
@@ -45,20 +43,17 @@ func (t *AudioType) UnmarshalJSON(b []byte) (err error) {
 	return
 }
 
-// ISO639LanguageAndAudioType represents an ISO639 language descriptor:
-// a list of language+audio-type entries (Chapter 2.6.18 ISO/IEC 13818-1:2015)
 type ISO639LanguageAndAudioType struct {
 	Header Header       `json:"_header"`
 	Items  []ISO639Item `json:"_items"`
 }
 
-// ISO639Item is one language + audio-type entry of an ISO 639 descriptor.
 type ISO639Item struct {
 	Language dvbtext.Code `json:"ISO_639_language_code"`
 	Type     AudioType    `json:"audio_type"`
 }
 
-const iso639ItemLen = 4 // language code + audio type
+const iso639ItemLen = 4
 
 func newDescriptorISO639LanguageAndAudioType(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
 	var bs []byte

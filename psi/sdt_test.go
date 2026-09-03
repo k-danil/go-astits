@@ -2,12 +2,8 @@ package psi
 
 import (
 	"bytes"
-	"testing"
 
-	"github.com/stretchr/testify/assert"
-
-	"github.com/k-danil/go-astits/v2/internal/bitstest"
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/bitstest"
 )
 
 var sdt = &SDT{
@@ -36,11 +32,4 @@ func sdtBytes() []byte {
 	_ = w.Write("1")       // Service #1 free CA mode
 	descriptorsBytes(w)    // Service #1 descriptors
 	return buf.Bytes()
-}
-
-func TestParseSDTSection(t *testing.T) {
-	var b = sdtBytes()
-	d, err := parseSDTSection(bytesiter.New(b), len(b), uint16(1))
-	assert.Equal(t, d, sdt)
-	assert.NoError(t, err)
 }

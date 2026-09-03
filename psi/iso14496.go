@@ -3,13 +3,9 @@ package psi
 import (
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
 )
 
-// ISO14496Section represents an ISO_IEC_14496_section (ISO/IEC 13818-1 §2.11):
-// SL-packetized or FlexMux data carried in sections. The table_id (0x04/0x05/0x08)
-// distinguishes the stream type; the body is defined in ISO/IEC 14496-1 and is
-// carried verbatim.
 type ISO14496Section struct {
 	Data []byte `json:"_data"`
 }

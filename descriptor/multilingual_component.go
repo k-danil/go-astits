@@ -3,21 +3,16 @@ package descriptor
 import (
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/dvbtext"
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/dvbtext"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
 )
 
-// MultilingualComponent represents a multilingual component descriptor: a text
-// description of a component (identified by ComponentTag) in one or more
-// languages.
-// Chapter: 6.2.23 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type MultilingualComponent struct {
 	Items        []MultilingualComponentItem `json:"_items"`
 	Header       Header                      `json:"_header"`
 	ComponentTag uint8                       `json:"component_tag"`
 }
 
-// MultilingualComponentItem is one language variant of a component description
 type MultilingualComponentItem struct {
 	Description dvbtext.Text `json:"text_char"`
 	Language    dvbtext.Code `json:"ISO_639_language_code"`

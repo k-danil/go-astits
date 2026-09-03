@@ -3,11 +3,10 @@ package descriptor
 import (
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
-	"github.com/k-danil/go-astits/v2/internal/util"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/util"
 )
 
-// VideoStream is the MPEG-2 systems video_stream_descriptor (ISO/IEC 13818-1).
 type VideoStream struct {
 	Header                    Header `json:"_header"`
 	FrameRateCode             uint8  `json:"frame_rate_code"`

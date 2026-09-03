@@ -28,8 +28,7 @@ func main() {
 	generateTables(file, slicingTables())
 }
 
-// slicingTables builds the slicing-by-N tables: table 0 is the classic
-// byte-wise CRC table, table k is the CRC of a byte followed by k zero bytes.
+// Table 0 is the byte-wise CRC table; table k is the CRC of a byte followed by k zero bytes.
 func slicingTables() (t [tables][256]uint32) {
 	for i := range uint32(256) {
 		var k uint32

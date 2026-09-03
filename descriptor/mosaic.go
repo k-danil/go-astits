@@ -5,13 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
-	"github.com/k-danil/go-astits/v2/internal/util"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/util"
 )
 
 type MosaicCellLinkage uint8
 
-// cell_linkage_info values (EN 300 468 Table 73)
 const (
 	MosaicCellLinkageUndefined   MosaicCellLinkage = 0x00
 	MosaicCellLinkageBouquet     MosaicCellLinkage = 0x01
@@ -45,10 +44,6 @@ func (t *MosaicCellLinkage) UnmarshalJSON(b []byte) (err error) {
 	return
 }
 
-// Mosaic represents a mosaic descriptor: how a mosaic video component is
-// partitioned into cells and what each logical cell links to (bouquet, service,
-// event, …) keyed by CellLinkageInfo.
-// Chapter: 6.2.21 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type Mosaic struct {
 	Cells                             []MosaicCell `json:"_cells"`
 	Header                            Header       `json:"_header"`
@@ -57,8 +52,7 @@ type Mosaic struct {
 	MosaicEntryPoint                  bool         `json:"mosaic_entry_point"`
 }
 
-// MosaicCell is one logical cell of a mosaic descriptor. The linkage ids are
-// present according to CellLinkageInfo (1: bouquet; 2/3: service; 4: event).
+// Only the ID fields selected by CellLinkageInfo are populated.
 type MosaicCell struct {
 	ElementaryCellIDs           []uint8           `json:"elementary_cell_ids"`
 	OriginalNetworkID           uint16            `json:"original_network_id"`

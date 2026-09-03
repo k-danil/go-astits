@@ -3,14 +3,10 @@ package ext
 import (
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/dvbtext"
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/dvbtext"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
 )
 
-// DTSHD represents a DTS-HD audio stream extension descriptor: the
-// core and up to four extension substreams present, each described by a
-// DTSHDSubstream. A nil substream pointer means that substream is absent.
-// Chapter: G.3 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type DTSHD struct {
 	AdditionalInfo []byte          `json:"additional_info"`
 	CoreSubstream  *DTSHDSubstream `json:"substream_core"`
@@ -20,7 +16,6 @@ type DTSHD struct {
 	Substream3     *DTSHDSubstream `json:"substream_3"`
 }
 
-// DTSHDSubstream is one substream of a DTS-HD descriptor
 type DTSHDSubstream struct {
 	Assets            []DTSHDAsset `json:"_assets"`
 	ChannelCount      uint8        `json:"channel_count"`
@@ -29,9 +24,7 @@ type DTSHDSubstream struct {
 	SampleResolution  bool         `json:"sample_resolution"`
 }
 
-// DTSHDAsset carries bit_rate or bit_rate_scaled in BitRate per
-// PostEncodeBRScalingFlag; ComponentType and Language are present per their
-// flags.
+// BitRate holds bit_rate, or bit_rate_scaled when PostEncodeBRScalingFlag.
 type DTSHDAsset struct {
 	Language                dvbtext.Code `json:"ISO_639_language_code"`
 	BitRate                 uint16       `json:"bit_rate"`

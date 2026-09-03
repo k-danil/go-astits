@@ -3,11 +3,9 @@ package ts
 import (
 	"errors"
 
-	"github.com/k-danil/go-astits/v2/internal/errclass"
+	"github.com/k-danil/go-astits/v3/internal/errclass"
 )
 
-// ErrInvalidData is the class of every corrupt-input parse failure across the
-// module: errors.Is(err, ErrInvalidData) matches any of them.
 var ErrInvalidData = errors.New("astits: invalid data")
 
 var (

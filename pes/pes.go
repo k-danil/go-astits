@@ -7,23 +7,19 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/k-danil/go-astits/v2/internal/errclass"
-	"github.com/k-danil/go-astits/v2/internal/util"
-	"github.com/k-danil/go-astits/v2/ts"
+	"github.com/k-danil/go-astits/v3/internal/errclass"
+	"github.com/k-danil/go-astits/v3/internal/util"
+	"github.com/k-danil/go-astits/v3/ts"
 )
 
-// The two bits leading a PES optional header are fixed at '10' by the spec, so
-// anything else means the header is misaligned or corrupt, not merely odd.
+// The spec fixes these two bits at '10', so anything else is a misaligned or corrupt header.
 const optionalHeaderMarker = 0b10
 
 var (
 	ErrInvalidMarkerBits = errclass.New("astits: invalid PES optional header marker bits", ts.ErrInvalidData)
-	// ErrUnboundedNonVideo: PES_packet_length 0 is allowed only for video
-	// elementary streams (H.222.0 §2.4.3.7).
 	ErrUnboundedNonVideo = errclass.New("astits: unbounded PES packet on a non-video stream", ts.ErrInvalidData)
 )
 
-// P-STD buffer scales
 type PSTDBufferScale uint8
 
 const (
@@ -53,7 +49,6 @@ func (t *PSTDBufferScale) UnmarshalJSON(b []byte) (err error) {
 	return
 }
 
-// PTS DTS indicator
 type PTSDTSIndicator uint8
 
 const (
@@ -87,7 +82,6 @@ func (t *PTSDTSIndicator) UnmarshalJSON(b []byte) (err error) {
 	return
 }
 
-// Stream IDs
 type StreamID uint8
 
 const (
@@ -173,7 +167,6 @@ func (t *StreamID) fromStreamNumber(num string, base, mask StreamID) (err error)
 	return
 }
 
-// Trick mode controls
 type TrickModeControl uint8
 
 const (
@@ -209,7 +202,6 @@ func (t *TrickModeControl) UnmarshalJSON(b []byte) (err error) {
 	return
 }
 
-// PES scrambling controls
 type ScramblingControl uint8
 
 const (
@@ -243,7 +235,6 @@ func (t *ScramblingControl) UnmarshalJSON(b []byte) (err error) {
 	return
 }
 
-// Field IDs
 type FieldID uint8
 
 const (
@@ -277,7 +268,6 @@ func (t *FieldID) UnmarshalJSON(b []byte) (err error) {
 	return
 }
 
-// Frequency truncations
 type FrequencyTruncation uint8
 
 const (
@@ -316,24 +306,18 @@ const (
 	dsmTrickModeLength = 1
 )
 
-// Data represents a PES data
-// https://en.wikipedia.org/wiki/Packetized_elementary_stream
-// http://dvd.sourceforge.net/dvdinfo/pes-hdr.html
-// http://happy.emu.id.au/lab/tut/dttb/dtbtut4b.htm
 type Data struct {
 	Data   []byte `json:"PES_packet_data_byte"`
 	Header Header `json:"_header"`
 }
 
-// Header represents a packet PES header
 type Header struct {
-	OptionalHeader *OptionalHeader `json:"_optional_header"`
-	optionalHeader OptionalHeader  // storage for OptionalHeader — no allocation per PES
-	PacketLength   uint16          `json:"PES_packet_length"` // Specifies the number of bytes remaining in the packet after this field. Can be zero. If the PES packet length is set to zero, the PES packet can be of any length. A value of zero for the PES packet length can be used only when the PES packet payload is a video elementary stream.
-	StreamID       StreamID        `json:"stream_id"`         // Examples: Audio streams (0xC0-0xDF), Video streams (0xE0-0xEF)
+	OptionalHeader        *OptionalHeader `json:"_optional_header"`
+	optionalHeaderStorage OptionalHeader
+	PacketLength          uint16   `json:"PES_packet_length"`
+	StreamID              StreamID `json:"stream_id"`
 }
 
-// OptionalHeader represents a PES optional header
 type OptionalHeader struct {
 	DSMTrickMode           *DSMTrickMode            `json:"DSM_trick_mode"`
 	Extension              *OptionalHeaderExtension `json:"_extension"`
@@ -343,7 +327,7 @@ type OptionalHeader struct {
 	ESRate                 uint32                   `json:"ES_rate"`
 	CRC                    uint16                   `json:"previous_PES_packet_CRC"`
 	AdditionalCopyInfo     uint8                    `json:"additional_copy_info"`
-	DataAlignmentIndicator bool                     `json:"data_alignment_indicator"` // True indicates that the PES packet header is immediately followed by the video start code or audio syncword
+	DataAlignmentIndicator bool                     `json:"data_alignment_indicator"`
 	HasAdditionalCopyInfo  bool                     `json:"additional_copy_info_flag"`
 	HasCRC                 bool                     `json:"PES_CRC_flag"`
 	HasDSMTrickMode        bool                     `json:"DSM_trick_mode_flag"`
@@ -379,12 +363,9 @@ type OptionalHeaderExtension struct {
 	StreamIDExtension               uint8             `json:"stream_id_extension"`
 }
 
-// TREF shares the PTS/DTS wire layout; its top nibble is reserved, not a prefix.
-// H.222.0 §2.4.3.7
+// TREF's top nibble is reserved, not a prefix (H.222.0 §2.4.3.7).
 const trefReservedPrefix = 0b1111
 
-// DSMTrickMode represents a DSM trick mode
-// https://books.google.fr/books?id=vwUrAwAAQBAJ&pg=PT501&lpg=PT501&dq=dsm+trick+mode+control&source=bl&ots=fI-9IHXMRL&sig=PWnhxrsoMWNQcl1rMCPmJGNO9Ds&hl=fr&sa=X&ved=0ahUKEwjogafD8bjXAhVQ3KQKHeHKD5oQ6AEINDAB#v=onepage&q=dsm%20trick%20mode%20control&f=false
 type DSMTrickMode struct {
 	FieldID             FieldID             `json:"field_id"`
 	FrequencyTruncation FrequencyTruncation `json:"frequency_truncation"`
@@ -398,13 +379,11 @@ func (h *Header) IsVideoStream() bool {
 		h.StreamID == 0xfd
 }
 
-// Parse parses a PES data
 func (d *Data) Parse(bs []byte) error {
 	return d.parse(bs, false)
 }
 
-// ParseTruncated is Parse for a unit the stream cut short: a declared length
-// beyond bs clamps Data to the bytes present instead of failing.
+// Parse, but a declared length beyond bs clamps Data instead of failing.
 func (d *Data) ParseTruncated(bs []byte) error {
 	return d.parse(bs, true)
 }
@@ -436,8 +415,7 @@ func (d *Data) parse(bs []byte, clamp bool) (err error) {
 	return
 }
 
-// hasPESOptionalHeader reports whether the PES packet carries the optional
-// header. Per H.222.0 Table 2-21 it is absent for these stream_ids only.
+// H.222.0 Table 2-21: the optional header is absent for these stream_ids only.
 func hasPESOptionalHeader(streamID StreamID) bool {
 	switch streamID {
 	case StreamIDProgramStreamMap, StreamIDPaddingStream, StreamIDPrivateStream2,
@@ -447,7 +425,6 @@ func hasPESOptionalHeader(streamID StreamID) bool {
 	return true
 }
 
-// parseBytes parses a PES header starting at bs[o]
 func (h *Header) parseBytes(bs []byte, o int) (dataStart, dataEnd int, err error) {
 	if o+HeaderSize-3 > len(bs) {
 		return 0, 0, ts.ErrShortPacket
@@ -464,8 +441,8 @@ func (h *Header) parseBytes(bs []byte, o int) (dataStart, dataEnd int, err error
 	}
 
 	if hasPESOptionalHeader(h.StreamID) {
-		h.optionalHeader = OptionalHeader{}
-		h.OptionalHeader = &h.optionalHeader
+		h.optionalHeaderStorage = OptionalHeader{}
+		h.OptionalHeader = &h.optionalHeaderStorage
 		if dataStart, err = h.OptionalHeader.parseBytes(bs, o); err != nil {
 			err = fmt.Errorf("astits: parsing PES optional header failed: %w", err)
 			return
@@ -476,7 +453,6 @@ func (h *Header) parseBytes(bs []byte, o int) (dataStart, dataEnd int, err error
 	return
 }
 
-// parseBytes parses a PES optional header starting at bs[o]
 func (h *OptionalHeader) parseBytes(bs []byte, o int) (dataStart int, err error) {
 	if o+3 > len(bs) {
 		return 0, ts.ErrShortPacket
@@ -659,7 +635,6 @@ func (h *OptionalHeaderExtension) parseBytes(bs []byte, o int) (err error) {
 	return
 }
 
-// parseDSMTrickMode parses a DSM trick mode
 func parseDSMTrickMode(i byte) (m *DSMTrickMode) {
 	m = &DSMTrickMode{}
 	m.TrickModeControl = TrickModeControl(i >> 5)
@@ -676,10 +651,7 @@ func parseDSMTrickMode(i byte) (m *DSMTrickMode) {
 	return
 }
 
-// CalcDataLength returns how many total and payload bytes Put would write for
-// the same arguments. The counts must stay identical to Put so a muxer can
-// finalize the AF stuffing before serializing the PES. Only the first packet
-// of a unit carries the PES header.
+// Must return exactly what Put would write: callers size the adaptation-field stuffing from it.
 func (h *Header) CalcDataLength(payloadLeft []byte, isPayloadStart bool, bytesAvailable int) (totalBytes, payloadBytes int) {
 	headerBytes := 0
 	if isPayloadStart {
@@ -698,9 +670,7 @@ func (h *Header) CalcDataLength(payloadLeft []byte, isPayloadStart bool, bytesAv
 	return
 }
 
-// first packet will contain PES header with optional PES header and payload, if possible
-// all consequential packets will contain just payload
-// for the last packet caller must add AF with stuffing, see calcPESDataLength
+// Only the first packet of a unit carries the PES header; the caller stuffs the last packet's adaptation field (see CalcDataLength).
 func (h *Header) Put(bs []byte, payloadLeft []byte, isPayloadStart bool) (totalBytesWritten, payloadBytesWritten int, err error) {
 	if isPayloadStart {
 		var n int
@@ -720,11 +690,7 @@ func (h *Header) Put(bs []byte, payloadLeft []byte, isPayloadStart bool) (totalB
 	return
 }
 
-// PutHeader serializes just the PES header (start code, stream_id, PES packet
-// length and, when present, the optional header) into bs, sizing PES_packet_length
-// for payloadLen total payload bytes. It returns the number of header bytes
-// written; a muxer that spans the header across TS packets serializes it once
-// here and then chunks header+payload together.
+// Serializes only the header, sizing PES_packet_length for payloadLen payload bytes.
 func (h *Header) PutHeader(bs []byte, payloadLen int) (n int, err error) {
 	return h.putBytes(bs, payloadLen)
 }
@@ -863,8 +829,6 @@ func (h *OptionalHeader) putBytes(bs []byte) (n int) {
 }
 
 func (h *OptionalHeaderExtension) putBytes(bs []byte) (n int) {
-	// exp 10110001
-	// act 10111111
 	bs[0] = util.B2U(h.HasPrivateData) << 7
 	bs[0] |= util.B2U(h.HasPackHeaderField) << 6
 	bs[0] |= util.B2U(h.HasProgramPacketSequenceCounter) << 5
@@ -874,7 +838,6 @@ func (h *OptionalHeaderExtension) putBytes(bs []byte) (n int) {
 	n = 1
 
 	if h.HasPrivateData {
-		// like WriteBytesN: exactly 16 bytes, the remainder padded with zeros
 		c := copy(bs[n:n+16], h.PrivateData)
 		for i := n + c; i < n+16; i++ {
 			bs[i] = 0

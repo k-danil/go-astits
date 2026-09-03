@@ -4,21 +4,17 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/dvbtext"
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/dvbtext"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
 )
 
-// TargetRegionName represents a target region name extension
-// descriptor: the names of target regions within a country, in one language.
-// Chapter: 6.4.12 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type TargetRegionName struct {
 	Regions     []NamedRegion `json:"_regions"`
 	CountryCode dvbtext.Code  `json:"country_code"`
 	Language    dvbtext.Code  `json:"ISO_639_language_code"`
 }
 
-// NamedRegion carries SecondaryRegionCode for RegionDepth >= 2 and
-// TertiaryRegionCode for RegionDepth == 3.
+// RegionDepth gates the codes: >=2 secondary, ==3 tertiary; PrimaryRegionCode is always present.
 type NamedRegion struct {
 	RegionName          dvbtext.Text `json:"region_name"`
 	TertiaryRegionCode  uint16       `json:"tertiary_region_code"`

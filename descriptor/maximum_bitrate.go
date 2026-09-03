@@ -3,10 +3,9 @@ package descriptor
 import (
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
 )
 
-// MaximumBitrate represents a maximum bitrate descriptor
 type MaximumBitrate struct {
 	Bitrate uint32 `json:"bit_rate"` // In bytes/second
 	Header  Header `json:"_header"`

@@ -3,13 +3,10 @@ package descriptor
 import (
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/dvbtext"
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/dvbtext"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
 )
 
-// CountryAvailability represents a country availability descriptor: whether a
-// service is intended to be available (or not) in the listed countries.
-// Chapter: 6.2.10 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type CountryAvailability struct {
 	Countries        []dvbtext.Code `json:"country_code"`
 	Header           Header         `json:"_header"`

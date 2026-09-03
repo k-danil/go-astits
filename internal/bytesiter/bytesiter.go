@@ -1,11 +1,9 @@
-// Package bytesiter is a minimal byte iterator for the cold parse paths
-// (PSI tables, descriptors, DVB time): hot paths parse slices directly.
-// The API shape follows asticode/go-astikit (MIT, same author as the upstream fork).
+// Package bytesiter: API shape follows asticode/go-astikit (MIT).
 package bytesiter
 
 import (
-	"github.com/k-danil/go-astits/v2/internal/errclass"
-	"github.com/k-danil/go-astits/v2/ts"
+	"github.com/k-danil/go-astits/v3/internal/errclass"
+	"github.com/k-danil/go-astits/v3/ts"
 )
 
 var ErrNoBytesLeft = errclass.New("astits: not enough bytes", ts.ErrInvalidData)
@@ -29,7 +27,6 @@ func (i *Iterator) NextByte() (b byte, err error) {
 	return
 }
 
-// NextBytesNoCopy returns the next n bytes as a view into the underlying slice.
 func (i *Iterator) NextBytesNoCopy(n int) (bs []byte, err error) {
 	if n < 0 || i.offset < 0 || i.offset+n > i.limit {
 		return nil, ErrNoBytesLeft
@@ -66,9 +63,7 @@ func (i *Iterator) Len() int {
 	return i.limit
 }
 
-// Limit caps reads at end (clamped to the backing slice) and returns the
-// previous cap, so a nested scope restores it. A section body parsed under its
-// own end cannot read into the next section, whatever its inner lengths claim.
+// Limit caps reads at end and returns the previous cap for the caller to restore, so a section body cannot read past its own end whatever its inner lengths claim.
 func (i *Iterator) Limit(end int) (prev int) {
 	prev = i.limit
 	i.limit = min(end, len(i.bs))
@@ -79,7 +74,6 @@ func (i *Iterator) HasBytesLeft() bool {
 	return i.offset < i.limit
 }
 
-// Bytes returns the unread remainder without advancing.
 func (i *Iterator) Bytes() []byte {
 	if i.offset < 0 || i.offset >= i.limit {
 		return nil

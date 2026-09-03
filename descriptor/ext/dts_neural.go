@@ -3,12 +3,9 @@ package ext
 import (
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
 )
 
-// DTSNeural represents a DTS Neural extension descriptor: identifies
-// audio streams processed with DTS Neural Surround, via ConfigID.
-// Chapter: L.1 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type DTSNeural struct {
 	AdditionalInfo []byte `json:"additional_info"`
 	ConfigID       uint8  `json:"config_id"`

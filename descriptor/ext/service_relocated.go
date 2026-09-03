@@ -4,13 +4,9 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
 )
 
-// ServiceRelocated represents a service relocated extension
-// descriptor: the previous identifiers of a service that has moved, so an IRD
-// can track it to its new location.
-// Chapter: 6.4.9 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type ServiceRelocated struct {
 	OldOriginalNetworkID uint16 `json:"old_original_network_id"`
 	OldTransportStreamID uint16 `json:"old_transport_stream_id"`

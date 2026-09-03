@@ -4,10 +4,9 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
 )
 
-// SL is the MPEG-2 systems SL_descriptor (ISO/IEC 13818-1).
 type SL struct {
 	ESID   uint16 `json:"ES_ID"`
 	Header Header `json:"_header"`

@@ -4,22 +4,14 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
 )
 
-// SHDeliverySystem represents an SH delivery system extension
-// descriptor: the DVB-SH physical parameters — a diversity mode plus a loop of
-// modulation elements, each either TDM (ModulationType 0) or OFDM
-// (ModulationType 1) and optionally an interleaver block.
-// Chapter: 6.4.5.2 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type SHDeliverySystem struct {
 	Modulations   []SHModulation `json:"_modulations"`
 	DiversityMode uint8          `json:"diversity_mode"`
 }
 
-// SHModulation is one modulation element of an SH delivery system descriptor.
-// Which of the TDM / OFDM fields are meaningful is selected by ModulationType;
-// the interleaver fields are present only when InterleaverPresence.
 type SHModulation struct {
 	ModulationType      uint8 `json:"modulation_type"`
 	InterleaverPresence bool  `json:"interleaver_presence"`

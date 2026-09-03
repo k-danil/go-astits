@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/k-danil/go-astits/v2/descriptor"
+	"github.com/k-danil/go-astits/v3/descriptor"
 )
 
 // randDVBTime returns a UTC time at DVB resolution (whole seconds) in a range

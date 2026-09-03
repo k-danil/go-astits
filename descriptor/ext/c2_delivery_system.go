@@ -4,13 +4,9 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
 )
 
-// C2DeliverySystem represents a C2 delivery system extension
-// descriptor: the DVB-C2 tuning parameters mapping a transport stream to a data
-// PLP.
-// Chapter: 6.4.5.1 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type C2DeliverySystem struct {
 	C2SystemTuningFrequency     uint32 `json:"C2_System_tuning_frequency"`
 	PLPID                       uint8  `json:"plp_id"`

@@ -5,16 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
 )
 
-// ParseTime parses a DVB time
-// This field is coded as 16 bits giving the 16 LSBs of MJD followed by 24 bits coded as 6 digits in 4 - bit Binary
-// Coded Decimal (BCD). If the start time is undefined (e.g. for an event in a NVOD reference service) all bits of the
-// field are set to "1".
-// I apologize for the computation which is really messy but details are given in the documentation
-// Page: 160 | Annex C | Link: https://www.dvb.org/resources/public/standards/a38_dvb-si_specification.pdf
-// (barbashov) the link above can be broken, alternative: https://dvb.org/wp-content/uploads/2019/12/a038_tm1217r37_en300468v1_17_1_-_rev-134_-_si_specification.pdf
 func ParseTime(i *bytesiter.Iterator) (t time.Time, err error) {
 	var bs []byte
 	if bs, err = i.NextBytesNoCopy(2); err != nil || len(bs) < 2 {
@@ -22,11 +15,15 @@ func ParseTime(i *bytesiter.Iterator) (t time.Time, err error) {
 		return
 	}
 
-	day := mjdEpoch.Add(time.Duration(binary.BigEndian.Uint16(bs)) * 24 * time.Hour)
+	mjd := binary.BigEndian.Uint16(bs)
+	day := mjdEpoch.Add(time.Duration(mjd) * 24 * time.Hour)
 
 	if bs, err = i.NextBytesNoCopy(3); err != nil || len(bs) < 3 {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return
+	}
+	if mjd == undefinedMJD && bs[0] == undefinedBCD && bs[1] == undefinedBCD && bs[2] == undefinedBCD {
+		return time.Time{}, nil
 	}
 	t = day.Add(time.Duration(parseDurationByte(bs[0]))*time.Hour +
 		time.Duration(parseDurationByte(bs[1]))*time.Minute +
@@ -35,8 +32,6 @@ func ParseTime(i *bytesiter.Iterator) (t time.Time, err error) {
 	return
 }
 
-// ParseDurationMinutes parses a minutes duration
-// 16 bit field containing the duration of the event in hours, minutes. format: 4 digits, 4 - bit BCD = 18 bit
 func ParseDurationMinutes(i *bytesiter.Iterator) (d time.Duration, err error) {
 	var bs []byte
 	if bs, err = i.NextBytesNoCopy(2); err != nil || len(bs) < 2 {
@@ -47,8 +42,6 @@ func ParseDurationMinutes(i *bytesiter.Iterator) (d time.Duration, err error) {
 	return
 }
 
-// ParseDurationSeconds parses a seconds duration
-// 24 bit field containing the duration of the event in hours, minutes, seconds. format: 6 digits, 4 - bit BCD = 24 bit
 func ParseDurationSeconds(i *bytesiter.Iterator) (d time.Duration, err error) {
 	var bs []byte
 	if bs, err = i.NextBytesNoCopy(3); err != nil || len(bs) < 3 {
@@ -59,15 +52,21 @@ func ParseDurationSeconds(i *bytesiter.Iterator) (d time.Duration, err error) {
 	return
 }
 
-// parseDurationByte parses a duration byte
 func parseDurationByte(i byte) time.Duration {
 	return time.Duration(i>>4*10 + i&0xf)
 }
 
-// mjdEpoch is 1858-11-17 UTC, day zero of the Modified Julian Date scale.
 var mjdEpoch = time.Date(1858, time.November, 17, 0, 0, 0, 0, time.UTC)
 
+const (
+	undefinedMJD = 0xffff
+	undefinedBCD = 0xff
+)
+
 func AppendTime(dst []byte, t time.Time) []byte {
+	if t.IsZero() {
+		return append(dst, undefinedMJD>>8, undefinedMJD&0xff, undefinedBCD, undefinedBCD, undefinedBCD)
+	}
 	t = t.UTC()
 	d := t.Sub(t.Truncate(24 * time.Hour))
 	mjd := int(t.Add(-d).Sub(mjdEpoch) / (24 * time.Hour))

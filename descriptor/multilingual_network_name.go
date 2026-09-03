@@ -1,19 +1,15 @@
 package descriptor
 
 import (
-	"github.com/k-danil/go-astits/v2/dvbtext"
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/dvbtext"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
 )
 
-// MultilingualNetworkName represents a multilingual network name descriptor:
-// the network name in text form in one or more languages.
-// Chapter: 6.2.24 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type MultilingualNetworkName struct {
 	Items  []MultilingualNetworkNameItem `json:"_items"`
 	Header Header                        `json:"_header"`
 }
 
-// MultilingualNetworkNameItem is one language variant of a network name
 type MultilingualNetworkNameItem struct {
 	Name     dvbtext.Text `json:"network_name"`
 	Language dvbtext.Code `json:"ISO_639_language_code"`

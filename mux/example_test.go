@@ -4,11 +4,11 @@ import (
 	"context"
 	"io"
 
-	"github.com/k-danil/go-astits/v2/demux"
-	"github.com/k-danil/go-astits/v2/mux"
-	"github.com/k-danil/go-astits/v2/pes"
-	"github.com/k-danil/go-astits/v2/psi"
-	"github.com/k-danil/go-astits/v2/ts"
+	"github.com/k-danil/go-astits/v3/demux"
+	"github.com/k-danil/go-astits/v3/mux"
+	"github.com/k-danil/go-astits/v3/pes"
+	"github.com/k-danil/go-astits/v3/psi"
+	"github.com/k-danil/go-astits/v3/ts"
 )
 
 // Build a single-program stream: register the elementary streams, write the
@@ -33,8 +33,11 @@ func ExampleMuxer() {
 	_, _ = m.WriteData(&mux.Data{
 		PID: 0x100,
 		PES: &pes.Data{
-			Header: pes.Header{StreamID: 0xe0}, // a video stream id
-			Data:   accessUnit,
+			Header: pes.Header{
+				StreamID:       0xe0, // a video stream id
+				OptionalHeader: &pes.OptionalHeader{PTSDTSIndicator: pes.PTSDTSIndicatorOnlyPTS, PTS: ts.NewClockReference(90000, 0)},
+			},
+			Data: accessUnit,
 		},
 	})
 }
@@ -62,4 +65,21 @@ func ExampleMuxer_WritePacket() {
 			return
 		}
 	}
+}
+
+// Tables are re-sent every N written PES units, not every N packets; a
+// passthrough that splices its own packets in seeds the continuity counters
+// so the receiver sees no gap.
+func ExampleWithTablesRetransmitPeriod() {
+	var w io.Writer
+
+	m := mux.New(context.Background(), w, mux.WithTablesRetransmitPeriod(50))
+	if err := m.AddElementaryStream(psi.ElementaryStream{ElementaryPID: 0x100, StreamType: psi.StreamTypeH264Video}); err != nil {
+		return
+	}
+	m.SetPCRPID(0x100)
+	if err := m.SetCC(0x100, 9); err != nil { // continue where the source left off
+		return
+	}
+	_, _ = m.WriteTables()
 }

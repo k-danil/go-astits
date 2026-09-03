@@ -1,4 +1,4 @@
-module github.com/k-danil/go-astits/v2
+module github.com/k-danil/go-astits/v3
 
 go 1.26
 

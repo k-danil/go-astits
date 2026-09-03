@@ -4,18 +4,14 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
 )
 
-// NVODReference represents an NVOD reference descriptor: the services that
-// together form a near-video-on-demand service.
-// Chapter: 6.2.26 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type NVODReference struct {
 	Items  []NVODReferenceItem `json:"_items"`
 	Header Header              `json:"_header"`
 }
 
-// NVODReferenceItem represents one entry of an NVOD reference descriptor
 type NVODReferenceItem struct {
 	TransportStreamID uint16 `json:"transport_stream_id"`
 	OriginalNetworkID uint16 `json:"original_network_id"`

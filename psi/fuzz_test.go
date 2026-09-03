@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/k-danil/go-astits/v2/internal/bitstest"
+	"github.com/k-danil/go-astits/v3/internal/bitstest"
 )
 
 func FuzzParse(f *testing.F) {

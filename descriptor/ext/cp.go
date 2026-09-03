@@ -4,12 +4,9 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
 )
 
-// CP represents a content protection (CP) extension descriptor: the CP
-// system and the PID carrying its program-related information.
-// Chapter: 6.4.2 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type CP struct {
 	PrivateData []byte `json:"private_data"`
 	CPSystemID  uint16 `json:"CP_system_id"`

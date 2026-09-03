@@ -6,10 +6,9 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/k-danil/go-astits/v2/internal/util"
+	"github.com/k-danil/go-astits/v3/internal/util"
 )
 
-// Scrambling Controls
 type ScramblingControl uint8
 
 const (
@@ -60,26 +59,23 @@ var poolOfPacket = sync.Pool{
 	},
 }
 
-// Packet represents a packet
-// https://en.wikipedia.org/wiki/MPEG_transport_stream
 type Packet struct {
 	bs  [RSPacketSize]byte
-	raw []byte // the on-wire bytes: a subslice of bs in copy mode, a batch view in zero-copy mode
+	raw []byte
 
 	Header          PacketHeader          `json:"_header"`
 	PrefixLen       uint8                 `json:"_prefix_len"`      // 4 for M2TS, 0 otherwise; the sync byte starts at this offset in Raw.
-	Prefix          uint32                `json:"_prefix"`          // the 192-byte M2TS TP_extra_header; meaningful only when PrefixLen is 4. See ArrivalTimeStamp.
+	Prefix          uint32                `json:"_prefix"`          // M2TS TP_extra_header; meaningful only when PrefixLen is 4
 	AdaptationField PacketAdaptationField `json:"adaptation_field"` // meaningful only when Header.HasAdaptationField
-	Payload         []byte                `json:"data_byte"`        // This is only the payload content
+	Payload         []byte                `json:"data_byte"`
 
-	// Offset is the byte offset of the raw packet start (including any M2TS prefix)
-	// within the demuxed stream, counted from the Demuxer's first packet. Packets
-	// dropped by a PacketSkipper advance it too, so it stays a valid byte map.
+	// Byte offset of the packet start (M2TS prefix included) from the Demuxer's first packet; packets dropped by a skipper advance it too.
 	Offset int64 `json:"_offset"`
+	// reader's stamp for the window (tsio.Tagger); 0 when untagged
+	Tag uint64 `json:"_tag"`
 }
 
-// UpdateHeader re-serializes Header into the packet bytes; call it after
-// mutating a header field (e.g. a PID rewrite) so Raw reflects the change.
+// Mutating Header does not touch the packet bytes; call this to write them back.
 func (p *Packet) UpdateHeader() {
 	bs := p.raw
 	if bs == nil {
@@ -88,32 +84,30 @@ func (p *Packet) UpdateHeader() {
 	p.Header.Put(bs[p.PrefixLen:])
 }
 
-// PacketHeader represents a packet header
 type PacketHeader struct {
-	ContinuityCounter          uint8             `json:"continuity_counter"` // Sequence number of payload packets (0x00 to 0x0F) within each stream (except PID 8191)
+	ContinuityCounter          uint8             `json:"continuity_counter"`
 	HasAdaptationField         bool              `json:"_has_adaptation_field"`
 	HasPayload                 bool              `json:"_has_payload"`
-	PayloadUnitStartIndicator  bool              `json:"payload_unit_start_indicator"` // Set when a PES, PSI, or DVB-MIP packet begins immediately following the header.
-	PID                        uint16            `json:"PID"`                          // Packet Identifier, describing the payload data.
-	TransportErrorIndicator    bool              `json:"transport_error_indicator"`    // Set when a demodulator can't correct errors from FEC data; indicating the packet is corrupt.
-	TransportPriority          bool              `json:"transport_priority"`           // Set when the current packet has a higher priority than other packets with the same PID.
+	PayloadUnitStartIndicator  bool              `json:"payload_unit_start_indicator"`
+	PID                        uint16            `json:"PID"`
+	TransportErrorIndicator    bool              `json:"transport_error_indicator"`
+	TransportPriority          bool              `json:"transport_priority"`
 	TransportScramblingControl ScramblingControl `json:"transport_scrambling_control"`
 }
 
-// PacketAdaptationField represents a packet adaptation field
 type PacketAdaptationField struct {
 	AdaptationExtensionField          *PacketAdaptationExtensionField `json:"adaptation_field_extension"`
-	OPCR                              ClockReference                  `json:"OPCR"`              // Original Program clock reference. Helps when one TS is copied into another
-	PCR                               ClockReference                  `json:"PCR"`               // Program clock reference
+	OPCR                              ClockReference                  `json:"OPCR"`
+	PCR                               ClockReference                  `json:"PCR"`
 	TransportPrivateData              []byte                          `json:"private_data_byte"` // a view into the packet buffer after parse; CopyFrom takes an owned copy
 	TransportPrivateDataLength        uint8                           `json:"transport_private_data_length"`
 	Length                            uint8                           `json:"adaptation_field_length"`
-	StuffingLength                    uint8                           `json:"_stuffing_length"`                     // Only used in writePacketAdaptationField to request stuffing
-	SpliceCountdown                   int8                            `json:"splice_countdown"`                     // TS packets from this one until the splicing point; negative once it has passed.
-	IsOneByteStuffing                 bool                            `json:"_is_one_byte_stuffing"`                // Only used for one byte stuffing - if true, adaptation field will be written as one uint8(0). Not part of TS format
-	DiscontinuityIndicator            bool                            `json:"discontinuity_indicator"`              // Set if current TS packet is in a discontinuity state with respect to either the continuity counter or the program clock reference
-	RandomAccessIndicator             bool                            `json:"random_access_indicator"`              // Set when the stream may be decoded without errors from this point
-	ElementaryStreamPriorityIndicator bool                            `json:"elementary_stream_priority_indicator"` // Set when this stream should be considered "high priority"
+	StuffingLength                    uint8                           `json:"_stuffing_length"`
+	SpliceCountdown                   int8                            `json:"splice_countdown"`
+	IsOneByteStuffing                 bool                            `json:"_is_one_byte_stuffing"` // serializer knob, not a wire field
+	DiscontinuityIndicator            bool                            `json:"discontinuity_indicator"`
+	RandomAccessIndicator             bool                            `json:"random_access_indicator"`
+	ElementaryStreamPriorityIndicator bool                            `json:"elementary_stream_priority_indicator"`
 	HasPCR                            bool                            `json:"PCR_flag"`
 	HasOPCR                           bool                            `json:"OPCR_flag"`
 	HasSplicingCountdown              bool                            `json:"splicing_point_flag"`
@@ -121,21 +115,12 @@ type PacketAdaptationField struct {
 	HasAdaptationExtensionField       bool                            `json:"adaptation_field_extension_flag"`
 }
 
-// Reset clears everything parse may NOT overwrite: pointers/slices must not outlive
-// their packet, and when af.Length == 0 the flags byte is not parsed at all — a stale
-// HasPCR used to produce phantom PCRs. PCR/OPCR values behind cleared Has-flags are
-// garbage: reading them without checking the flag is forbidden anyway.
+// Parse leaves the flags untouched when af.Length == 0, so a stale HasPCR would yield a phantom PCR.
 func (af *PacketAdaptationField) Reset() {
 	*af = PacketAdaptationField{}
 }
 
-// CopyFrom stores an owned copy of src, so the receiver survives reuse of the
-// packet buffer src's private data and AF descriptors still view. The
-// private-data copy reuses the receiver's own backing across calls; callers
-// must not CopyFrom into an af whose TransportPrivateData still views a read
-// buffer (the pooled slot/PES receivers never do — they are populated only by
-// CopyFrom). The extension struct is allocated per parse and shared as is;
-// only its descriptors are copied, on the rare packets that carry any.
+// Takes an owned copy of src. The private-data copy appends into the receiver's own backing, so the receiver's TransportPrivateData must never be a view into a read buffer. The extension struct is shared as is; only its descriptors are copied.
 func (af *PacketAdaptationField) CopyFrom(src *PacketAdaptationField) {
 	priv := af.TransportPrivateData[:0]
 	*af = *src
@@ -149,40 +134,33 @@ func (af *PacketAdaptationField) CopyFrom(src *PacketAdaptationField) {
 	}
 }
 
-// PacketAdaptationExtensionField represents a packet adaptation extension field
 type PacketAdaptationExtensionField struct {
-	DTSNextAccessUnit      ClockReference `json:"DTS_next_AU"`    // The PES DTS of the splice point. Split up as 3 bits, 1 marker bit (0x1), 15 bits, 1 marker bit, 15 bits, and 1 marker bit, for 33 data bits total.
-	AFDescriptors          []byte         `json:"AF_descriptors"` // Raw af_descriptor() payload (H.222.0 Annex U), kept verbatim; present when HasAFDescriptors.
-	PiecewiseRate          uint32         `json:"piecewise_rate"` // The rate of the stream, measured in 188-byte packets, to define the end-time of the LTW.
-	LegalTimeWindowOffset  uint16         `json:"ltw_offset"`     // Extra information for rebroadcasters to determine the state of buffers when packets may be missing.
+	DTSNextAccessUnit      ClockReference `json:"DTS_next_AU"`
+	AFDescriptors          []byte         `json:"AF_descriptors"` // raw af_descriptor() bytes (H.222.0 Annex U), unparsed
+	PiecewiseRate          uint32         `json:"piecewise_rate"` // in 188-byte packets
+	LegalTimeWindowOffset  uint16         `json:"ltw_offset"`
 	LegalTimeWindowIsValid bool           `json:"ltw_valid_flag"`
 	HasLegalTimeWindow     bool           `json:"ltw_flag"`
 	HasPiecewiseRate       bool           `json:"piecewise_rate_flag"`
 	HasSeamlessSplice      bool           `json:"seamless_splice_flag"`
 	HasAFDescriptors       bool           `json:"_has_af_descriptors"` // af_descriptor_not_present_flag == 0
 	Length                 uint8          `json:"adaptation_field_extension_length"`
-	SpliceType             uint8          `json:"splice_type"` // Indicates the parameters of the H.262 splice.
+	SpliceType             uint8          `json:"splice_type"`
 }
 
-// NewPacket returns a zeroed packet from the pool; return it with Close when
-// done. The demuxer manages its own packets — use this for hand-built ones.
+// Pooled; return it with Close.
 func NewPacket() (p *Packet) {
 	p, _ = poolOfPacket.Get().(*Packet)
 	p.Reset()
 	return
 }
 
-// Raw returns the on-wire packet bytes (copy-mode buffer or zero-copy view);
-// nil for hand-built packets, whose bytes exist only once serialized via Put.
-// A packet whose sync byte was repaired under sync lock carries the restored
-// 0x47, one byte off the wire.
+// nil for a hand-built packet. A sync byte repaired under sync lock reads 0x47 here, one byte off the wire.
 func (p *Packet) Raw() []byte {
 	return p.raw
 }
 
-// ArrivalTimeStamp decodes the 192-byte M2TS TP_extra_header carried in Prefix:
-// a 2-bit copy_permission_indicator and a 30-bit 27 MHz arrival_time_stamp. ok
-// is false when the packet has no such prefix.
+// 2-bit copy_permission_indicator + 30-bit 27 MHz arrival_time_stamp.
 func (p *Packet) ArrivalTimeStamp() (copyPermission uint8, ats uint32, ok bool) {
 	if p.PrefixLen < m2tsPrefixSize {
 		return
@@ -191,8 +169,6 @@ func (p *Packet) ArrivalTimeStamp() (copyPermission uint8, ats uint32, ok bool) 
 	return uint8(v >> 30), v & 0x3fffffff, true
 }
 
-// SetAdaptationField stores an owned copy in the packet's embedded field,
-// mirroring post-parse state.
 func (p *Packet) SetAdaptationField(src *PacketAdaptationField) {
 	p.Header.HasAdaptationField = src != nil
 	if src == nil {
@@ -201,13 +177,12 @@ func (p *Packet) SetAdaptationField(src *PacketAdaptationField) {
 	p.AdaptationField.CopyFrom(src)
 }
 
-// Close returns the packet to the pool. Do not use the packet afterwards.
+// Do not use p afterwards.
 func (p *Packet) Close() {
 	poolOfPacket.Put(p)
 }
 
-// Reset deliberately keeps bs: it is fully overwritten by the next read before any
-// parse, and zeroing it per packet doubles the per-packet memory traffic.
+// bs is left alone: the next read overwrites it in full before any parse.
 func (p *Packet) Reset() {
 	p.raw = nil
 	p.Header = PacketHeader{}
@@ -216,22 +191,21 @@ func (p *Packet) Reset() {
 	p.Prefix = 0
 	p.PrefixLen = 0
 	p.Offset = 0
+	p.Tag = 0
 }
 
-// adaptation_field_control '00' is reserved: H.222.0 §2.4.3.3, decoders shall discard.
-const adaptationFieldControlMask = 0x30
+// p keeps viewing bs, so it is valid only as long as bs is.
+func (p *Packet) ParseAt(bs []byte, offset int64, s PacketSkipper, keep *PIDSet) (skip bool, err error) {
+	p.Offset = offset
+	p.raw = bs
+	return p.parse(bs, s, keep)
+}
 
-// parse parses a packet from bs. Direct slice parsing: no BytesIterator on the hot
-// per-packet path — its per-field call overhead was a significant share of the cost.
 func (p *Packet) parse(bs []byte, s PacketSkipper, keep *PIDSet) (skip bool, err error) {
 	if len(bs) < PacketSize {
 		return false, ErrShortPacket
 	}
 
-	// Only the 192-byte M2TS format carries a leading prefix (the 4-byte
-	// TP_extra_header); the sync byte begins the 188-byte TS packet after it.
-	// Any other extra bytes (e.g. the 204-byte Reed-Solomon parity) are a
-	// trailing suffix and the TS packet starts at bs[0].
 	prefixLen := 0
 	if len(bs) == M2TSPacketSize {
 		prefixLen = m2tsPrefixSize
@@ -239,7 +213,6 @@ func (p *Packet) parse(bs []byte, s PacketSkipper, keep *PIDSet) (skip bool, err
 	}
 	p.PrefixLen = uint8(prefixLen)
 
-	// One big-endian 32-bit load covers the sync byte (top) and the 3 header bytes.
 	h := binary.BigEndian.Uint32(bs[prefixLen:])
 	if byte(h>>24) != syncByte {
 		return false, ErrPacketMustStartWithASyncByte
@@ -247,13 +220,6 @@ func (p *Packet) parse(bs []byte, s PacketSkipper, keep *PIDSet) (skip bool, err
 
 	p.Header.parseBytes(h)
 
-	// Reserved packets are discarded like filtered ones, outside the damage
-	// budget; the header is parsed so the drop can name the PID.
-	if h&adaptationFieldControlMask == 0 {
-		return true, ErrReservedAdaptationFieldControl
-	}
-
-	// Inline PID allow-list: cheaper than a PacketSkipper call in the hot path.
 	if keep != nil && !keep.Has(p.Header.PID) {
 		return true, nil
 	}
@@ -262,7 +228,7 @@ func (p *Packet) parse(bs []byte, s PacketSkipper, keep *PIDSet) (skip bool, err
 	}
 
 	payloadAt := prefixLen + 1 + 3
-	end := prefixLen + PacketSize // TS content ends here; a trailing RS suffix is excluded
+	end := prefixLen + PacketSize // excludes a trailing RS suffix
 
 	if p.Header.HasAdaptationField {
 		p.AdaptationField.Reset()
@@ -273,17 +239,20 @@ func (p *Packet) parse(bs []byte, s PacketSkipper, keep *PIDSet) (skip bool, err
 		payloadAt += an
 	}
 
-	// The else is load-bearing: packets come from a pool, so a Payload left
-	// unwritten keeps the previous packet's bytes.
+	// Pooled packets: without the else, Payload keeps the previous packet's bytes.
 	if p.Header.HasPayload {
 		p.Payload = bs[payloadAt:end]
 	} else {
 		p.Payload = nil
+		// adaptation_field_control '00' is reserved; decoders shall discard (H.222.0 §2.4.3.3).
+		if !p.Header.HasAdaptationField {
+			return true, ErrReservedAdaptationFieldControl
+		}
 	}
 	return
 }
 
-// Parse parses a 4-byte packet header starting at the sync byte.
+// bs starts at the sync byte.
 func (ph *PacketHeader) Parse(bs []byte) (n int, err error) {
 	if len(bs) < HeaderSize {
 		return 0, ErrShortPacket
@@ -292,8 +261,7 @@ func (ph *PacketHeader) Parse(bs []byte) (n int, err error) {
 	return HeaderSize, nil
 }
 
-// h is the big-endian 4-byte TS header: [sync|b0|b1|b2]. It is loaded once and
-// the fields are sliced out of the register, no per-field memory reads.
+// h is the big-endian 4-byte TS header: [sync|b0|b1|b2].
 func (ph *PacketHeader) parseBytes(h uint32) {
 	b0, b2 := uint8(h>>16), uint8(h)
 	ph.TransportErrorIndicator = b0&0x80 > 0
@@ -306,7 +274,7 @@ func (ph *PacketHeader) parseBytes(h uint32) {
 	ph.ContinuityCounter = b2 & 0xf
 }
 
-// Parse parses an adaptation field starting at its length byte.
+// bs starts at the adaptation field length byte.
 func (af *PacketAdaptationField) Parse(bs []byte) (n int, err error) {
 	if len(bs) == 0 {
 		return 0, ErrShortPacket
@@ -367,8 +335,6 @@ func (af *PacketAdaptationField) Parse(bs []byte) (n int, err error) {
 				if end > len(bs) {
 					return o, ErrShortPacket
 				}
-				// A view into the packet buffer, like Payload; CopyFrom takes an
-				// owned copy for anything retained past the packet's lifetime.
 				af.TransportPrivateData = bs[o:end]
 				o = end
 			}
@@ -384,8 +350,7 @@ func (af *PacketAdaptationField) Parse(bs []byte) (n int, err error) {
 		}
 	}
 
-	// The whole field is 1+Length bytes; the declared length must cover the
-	// parsed body, the remainder is stuffing.
+	// The field is 1+Length bytes; the body must fit inside it, the rest is stuffing.
 	end := bodyStart + int(af.Length)
 	if end > len(bs) || end < o {
 		return o, ErrShortPacket
@@ -395,7 +360,7 @@ func (af *PacketAdaptationField) Parse(bs []byte) (n int, err error) {
 	return end, nil
 }
 
-// Parse parses an adaptation extension field starting at its length byte.
+// bs starts at the extension length byte.
 func (afe *PacketAdaptationExtensionField) Parse(bs []byte) (n int, err error) {
 	if len(bs) == 0 {
 		return 0, ErrShortPacket
@@ -459,8 +424,7 @@ func (afe *PacketAdaptationExtensionField) Parse(bs []byte) (n int, err error) {
 	return o, nil
 }
 
-// Put assembles the whole packet in bs; len(bs) is the target packet size,
-// the tail is stuffed with 0xff.
+// len(bs) is the target packet size; the tail is stuffed with 0xff.
 func (p *Packet) Put(bs []byte) (n int, err error) {
 	p.Header.Put(bs)
 	n = HeaderSize
@@ -492,15 +456,12 @@ func (p *Packet) Put(bs []byte) (n int, err error) {
 	return len(bs), nil
 }
 
-// Put serializes the 4-byte packet header (including the sync byte) into bs.
 func (ph *PacketHeader) Put(bs []byte) (n int) {
 	ph.putBytes(bs)
 	return HeaderSize
 }
 
-// SetContinuityCounter patches the 4-bit continuity counter of a header already
-// written by Put, leaving the other fields untouched — for serializers emitting
-// a run of packets that differ only in CC.
+// Patches the CC of a header already written by Put.
 func SetContinuityCounter(header []byte, cc uint8) {
 	header[HeaderSize-1] = header[HeaderSize-1]&0xf0 | cc&0xf
 }
@@ -531,8 +492,6 @@ func (af *PacketAdaptationField) CalcLength() int {
 	return int(length)
 }
 
-// Put serializes the adaptation field directly into bs, mirroring the wire
-// format of the former BitsWriter path byte for byte.
 func (af *PacketAdaptationField) Put(bs []byte) (n int, err error) {
 	if af.IsOneByteStuffing {
 		bs[0] = 0

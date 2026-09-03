@@ -4,28 +4,24 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
-	"github.com/k-danil/go-astits/v2/ts"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/ts"
 )
 
 const (
-	patSectionEntryBytesSize = 4 // 16 bits + 3 reserved + 13 bits = 32 bits
+	patSectionEntryBytesSize = 4
 )
 
-// PAT represents a PAT data
-// https://en.wikipedia.org/wiki/Program-specific_information
 type PAT struct {
 	Programs          []PATProgram `json:"_programs"`
 	TransportStreamID uint16       `json:"transport_stream_id"`
 }
 
-// PATProgram represents a PAT program
 type PATProgram struct {
-	ProgramMapID  uint16 `json:"program_map_PID"` // The packet identifier that contains the associated PMT
-	ProgramNumber uint16 `json:"program_number"`  // Relates to the Table ID extension in the associated PMT. A value of 0 is reserved for a NIT packet identifier.
+	ProgramMapID  uint16 `json:"program_map_PID"`
+	ProgramNumber uint16 `json:"program_number"`
 }
 
-// parsePATSection parses a PAT section
 func parsePATSection(i *bytesiter.Iterator, offsetSectionsEnd int, tableIDExtension uint16) (d *PAT, err error) {
 	// The syntax header may have overrun a lying section length
 	n := (offsetSectionsEnd - i.Offset()) / patSectionEntryBytesSize

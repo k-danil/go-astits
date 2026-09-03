@@ -4,11 +4,10 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
-	"github.com/k-danil/go-astits/v2/internal/util"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/util"
 )
 
-// HEVCVideo is the MPEG-2 systems HEVC_video_descriptor (ISO/IEC 13818-1).
 type HEVCVideo struct {
 	Copied44Bits                   uint64 `json:"copied_44bits"`
 	ProfileCompatibilityIndication uint32 `json:"profile_compatibility_indication"`

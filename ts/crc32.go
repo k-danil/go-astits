@@ -2,7 +2,7 @@ package ts
 
 import "encoding/binary"
 
-//go:generate go run github.com/k-danil/go-astits/v2/internal/cmd/crc32_table
+//go:generate go run github.com/k-danil/go-astits/v3/internal/cmd/crc32_table
 
 const (
 	CRC32Seed = uint32(0xffffffff)
@@ -14,10 +14,7 @@ func ComputeCRC32(bs []byte) uint32 {
 	return UpdateCRC32(CRC32Seed, bs)
 }
 
-// Slicing-by-16 over the generated static tables: ~7x the byte-wise loop on
-// PSI-sized inputs (M1 Pro, 4 KB: 1.9 µs vs 14.3 µs). MPEG-2 CRC32 is the
-// non-reflected form, so the state runs MSB-first and words load big-endian —
-// reflected slicing code (zlib-style) does not port here as is.
+// MPEG-2 CRC32 is the non-reflected form: MSB-first state, big-endian loads — zlib-style reflected slicing does not port here as is.
 func UpdateCRC32(crc uint32, bs []byte) uint32 {
 	t := &tableCRC32
 	for len(bs) >= crc32SliceBytes {

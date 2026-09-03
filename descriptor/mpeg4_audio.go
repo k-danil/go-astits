@@ -3,10 +3,9 @@ package descriptor
 import (
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
 )
 
-// MPEG4Audio is the MPEG-2 systems MPEG-4_audio_descriptor (ISO/IEC 13818-1).
 type MPEG4Audio struct {
 	Header          Header `json:"_header"`
 	ProfileAndLevel uint8  `json:"profile_and_level"`

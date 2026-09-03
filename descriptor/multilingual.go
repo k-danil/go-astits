@@ -3,8 +3,8 @@ package descriptor
 import (
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/dvbtext"
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/dvbtext"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
 )
 
 func readLangText(i *bytesiter.Iterator, lang *dvbtext.Code, text *dvbtext.Text) (err error) {

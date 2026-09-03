@@ -3,10 +3,9 @@ package descriptor
 import (
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
 )
 
-// FmxBufferSize is the MPEG-2 systems FmxBufferSize_descriptor (ISO/IEC 13818-1).
 type FmxBufferSize struct {
 	Body   []byte `json:"FlexMuxBufferDescriptor"` // FlexMux buffer sub-descriptors, defined in ISO/IEC 14496-1
 	Header Header `json:"_header"`

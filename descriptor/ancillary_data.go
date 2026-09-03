@@ -3,12 +3,9 @@ package descriptor
 import (
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
 )
 
-// AncillaryData represents an ancillary data descriptor: a bitmask of the
-// ancillary data types present in an audio elementary stream.
-// Chapter: 6.2.2 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type AncillaryData struct {
 	Header     Header `json:"_header"`
 	Identifier uint8  `json:"ancillary_data_identifier"`

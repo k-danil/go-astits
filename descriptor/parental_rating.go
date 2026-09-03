@@ -2,32 +2,33 @@ package descriptor
 
 import (
 	"fmt"
-	"github.com/k-danil/go-astits/v2/dvbtext"
+	"github.com/k-danil/go-astits/v3/dvbtext"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
 )
 
-// ParentalRating represents a parental rating descriptor
-// Chapter: 6.2.28 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type ParentalRating struct {
 	Header Header               `json:"_header"`
 	Items  []ParentalRatingItem `json:"_items"`
 }
 
-// ParentalRatingItem represents a parental rating item descriptor
-// Chapter: 6.2.28 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type ParentalRatingItem struct {
 	CountryCode dvbtext.Code `json:"country_code"`
 	Rating      uint8        `json:"rating"`
 }
 
-// MinimumAge returns the minimum age for the parental rating
+const (
+	ratingUndefined          = 0x00
+	ratingBroadcasterDefined = 0x10
+	ratingAgeOffset          = 3
+)
+
+// MinimumAge returns 0 when the rating is undefined or broadcaster-defined.
 func (d ParentalRatingItem) MinimumAge() int {
-	// Undefined (0x00) or broadcaster-defined (0x10-0xFF) ratings
-	if d.Rating == 0 || d.Rating > 0x0f {
+	if d.Rating == ratingUndefined || d.Rating >= ratingBroadcasterDefined {
 		return 0
 	}
-	return int(d.Rating) + 3
+	return int(d.Rating) + ratingAgeOffset
 }
 
 func newDescriptorParentalRating(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {

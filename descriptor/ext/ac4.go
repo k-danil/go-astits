@@ -3,13 +3,9 @@ package ext
 import (
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
 )
 
-// AC4 represents an AC-4 extension descriptor: configuration of an
-// AC-4 audio elementary stream. The channel-mode/dialog fields are present when
-// AC4ConfigFlag and the TOC when AC4TOCFlag.
-// Chapter: D.7 | Link: https://www.etsi.org/deliver/etsi_en/300400_300499/300468/01.15.01_60/en_300468v011501p.pdf
 type AC4 struct {
 	TOC                         []byte `json:"ac4_dsi_byte"`
 	AdditionalInfo              []byte `json:"additional_info"`

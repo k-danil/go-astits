@@ -3,12 +3,10 @@ package descriptor
 import (
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
-	"github.com/k-danil/go-astits/v2/internal/util"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/util"
 )
 
-// AVCVideo represents an AVC video descriptor
-// Chapter: 2.6.64 | Link: doc/h222.0-201703-iso13818-1.pdf (ITU-T H.222.0 = ISO/IEC 13818-1)
 type AVCVideo struct {
 	Header                        Header `json:"_header"`
 	AVC24HourPictureFlag          bool   `json:"AVC_24_hour_picture_flag"`

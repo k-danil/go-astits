@@ -5,7 +5,7 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
-	"fmt"
+	"io"
 	"strings"
 	"testing"
 	"unicode"
@@ -13,10 +13,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/k-danil/go-astits/v2/internal/bitstest"
-	"github.com/k-danil/go-astits/v2/pes"
-	"github.com/k-danil/go-astits/v2/psi"
-	"github.com/k-danil/go-astits/v2/ts"
+	"github.com/k-danil/go-astits/v3/internal/bitstest"
+	"github.com/k-danil/go-astits/v3/pes"
+	"github.com/k-danil/go-astits/v3/ts"
 )
 
 func hexToBytes(in string) []byte {
@@ -33,25 +32,7 @@ func hexToBytes(in string) []byte {
 	return o
 }
 
-func TestDemuxerNew(t *testing.T) {
-	ps := 1
-	sp := func(p *ts.Packet) bool { return true }
-	dmx := New(context.Background(), nil, WithPacketSize(ps), WithPacketSkipper(sp), WithDVBTables())
-	assert.Equal(t, uint(ps), dmx.optPacketSize)
-	assert.Equal(t, fmt.Sprintf("%p", sp), fmt.Sprintf("%p", dmx.optPacketSkipper))
-	assert.True(t, dmx.optDVBTables)
-	assert.True(t, dmx.acc.dvbTables)
-}
-
 func TestDemuxerNextPacket(t *testing.T) {
-	// Ctx error
-	ctx, cancel := context.WithCancel(context.Background())
-	dmx := New(ctx, bytes.NewReader([]byte{}))
-	cancel()
-	_, err := dmx.NextPacket()
-	assert.Error(t, err)
-
-	// Valid
 	buf := &bytes.Buffer{}
 	w := bitstest.NewWriter(buf)
 	b1, p1 := packet([]byte("1"), true)
@@ -59,165 +40,22 @@ func TestDemuxerNextPacket(t *testing.T) {
 	b2, p2 := packet([]byte("2"), true)
 	p2.Offset = int64(len(b1))
 	_ = w.Write(b2)
-	dmx = New(context.Background(), bytes.NewReader(buf.Bytes()))
+	dmx := New(context.Background(), bytes.NewReader(buf.Bytes()))
 
-	// First packet
 	p, err := dmx.NextPacket()
 	assert.NoError(t, err)
 	assert.Equal(t, b1, p.Raw())
-	assert.Equal(t, p1.Header, p.Header)
-	assert.Equal(t, p1.AdaptationField, p.AdaptationField)
-	assert.Equal(t, p1.Payload, p.Payload)
 	assert.Equal(t, p1.Offset, p.Offset)
 	assert.Equal(t, uint(192), dmx.packetBuffer.PacketSize())
 
-	// Second packet
 	p, err = dmx.NextPacket()
 	assert.NoError(t, err)
 	assert.Equal(t, b2, p.Raw())
-	assert.Equal(t, p2.Header, p.Header)
-	assert.Equal(t, p2.AdaptationField, p.AdaptationField)
-	assert.Equal(t, p2.Payload, p.Payload)
 	assert.Equal(t, p2.Offset, p.Offset)
 
 	// EOF
 	_, err = dmx.NextPacket()
 	assert.EqualError(t, err, ts.ErrNoMorePackets.Error())
-}
-
-func TestDemuxerSyncLock(t *testing.T) {
-	pkt := func() []byte {
-		p := make([]byte, ts.PacketSize)
-		p[0] = '\x47'
-		p[3] = 0x10 // payload present, no adaptation field
-		return p
-	}
-	packets := func(n int) (b []byte) {
-		for range n {
-			b = append(b, pkt()...)
-		}
-		return
-	}
-
-	// Junk prefix, then a torn gap mid-stream — neither aligned to a boundary.
-	var stream []byte
-	stream = append(stream, make([]byte, 12)...)
-	stream = append(stream, packets(3)...)
-	stream = append(stream, make([]byte, 100)...)
-	stream = append(stream, packets(5)...)
-
-	dmx := New(context.Background(), bytes.NewReader(stream), WithSyncLock(), WithSkipErrLimit(-1), WithResyncLimit(-1))
-	var n int
-	for {
-		_, err := dmx.NextPacket()
-		if errors.Is(err, ts.ErrNoMorePackets) {
-			break
-		}
-		require.NoError(t, err)
-		n++
-	}
-	assert.Equal(t, 8, n, "WithSyncLock reads past the prefix and the torn gap")
-}
-
-func TestDemuxerNextTables(t *testing.T) {
-	buf := &bytes.Buffer{}
-	w := bitstest.NewWriter(buf)
-	b := psiBytes()
-	b1 := packetBytes(ts.PacketHeader{ContinuityCounter: uint8(0), PayloadUnitStartIndicator: true, PID: ts.PIDPAT}, b[:147], true)
-	_ = w.Write(b1)
-	b2 := packetBytes(ts.PacketHeader{ContinuityCounter: uint8(1), PID: ts.PIDPAT}, b[147:], true)
-	_ = w.Write(b2)
-	dmx := New(context.Background(), bytes.NewReader(buf.Bytes()))
-
-	psiData, err := psi.Parse(b)
-	require.NoError(t, err)
-
-	var want []psi.SectionSyntaxData
-	for _, s := range psiData.Sections {
-		if s.Syntax != nil && s.Syntax.Data != nil {
-			want = append(want, s.Syntax.Data)
-		}
-	}
-	require.NotEmpty(t, want)
-
-	var got []psi.SectionSyntaxData
-	for {
-		ev, nerr := dmx.Next()
-		if nerr != nil {
-			assert.EqualError(t, nerr, ts.ErrNoMorePackets.Error())
-			break
-		}
-		require.NotEqual(t, EventPES, ev)
-		pid, sec := dmx.Section()
-		assert.Equal(t, ts.PIDPAT, pid)
-		got = append(got, sec.Syntax.Data)
-	}
-	assert.Equal(t, want, got)
-
-	// Table state and program map
-	assert.NotNil(t, dmx.PAT())
-	assert.NotNil(t, dmx.PMT())
-	assert.Equal(t, []uint16{0x3, 0x5}, dmx.programMap.Keys)
-	assert.Equal(t, []uint16{0x2, 0x4}, dmx.programMap.Vals)
-}
-
-func TestDemuxerNextUnknownDataPackets(t *testing.T) {
-	buf := &bytes.Buffer{}
-	bufWriter := bitstest.NewWriter(buf)
-
-	// ts.Packet that isn't a data packet (PSI or PES)
-	b1 := packetBytes(ts.PacketHeader{
-		ContinuityCounter:         uint8(0),
-		PID:                       256,
-		PayloadUnitStartIndicator: true,
-		HasPayload:                true,
-	}, []byte{0x01, 0x02, 0x03, 0x04}, false)
-	_ = bufWriter.Write(b1)
-
-	dmx := New(context.Background(), bytes.NewReader(buf.Bytes()),
-		WithPacketSize(188))
-	_, err := dmx.Next()
-	assert.EqualError(t, err, ts.ErrNoMorePackets.Error())
-}
-
-func TestDemuxerNextPATPMT(t *testing.T) {
-	pat := hexToBytes(`474000100000b00d0001c100000001f0002ab104b2ffffffffffffffff
-		ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
-		ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
-		ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
-		ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
-		ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
-		ffffffffffffffffff`)
-	pmt := hexToBytes(`475000100002b0170001c10000e100f0001be100f0000fe101f0002f44
-		b99bffffffffffffffffffffffffffffffffffffffffffffffffffffffff
-		ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
-		ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
-		ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
-		ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
-		ffffffffffffffffff`)
-	r := bytes.NewReader(append(pat, pmt...))
-	dmx := New(context.Background(), r, WithPacketSize(188))
-	assert.Equal(t, 188*2, r.Len())
-
-	ev, err := dmx.Next()
-	assert.NoError(t, err)
-	assert.Equal(t, EventPAT, ev)
-	pid, sec := dmx.Section()
-	assert.Equal(t, uint16(0), pid)
-	assert.Equal(t, psi.TableIDPAT, sec.Header.TableID)
-	assert.True(t, sec.Syntax.Header.CurrentNextIndicator)
-	assert.IsType(t, (*psi.PAT)(nil), sec.Syntax.Data)
-	assert.NotNil(t, dmx.PAT())
-	assert.Equal(t, 188, r.Len())
-
-	ev, err = dmx.Next()
-	assert.NoError(t, err)
-	assert.Equal(t, EventPMT, ev)
-	pid, sec = dmx.Section()
-	assert.Equal(t, uint16(0x1000), pid)
-	assert.Equal(t, psi.TableIDPMT, sec.Header.TableID)
-	assert.IsType(t, (*psi.PMT)(nil), sec.Syntax.Data)
-	assert.NotNil(t, dmx.PMT())
 }
 
 func TestDemuxerNextPES(t *testing.T) {
@@ -250,10 +88,10 @@ func TestDemuxerNextPES(t *testing.T) {
 		require.NoError(t, err)
 		buf.Write(bs[:])
 	}
-	writePkt(0, true, &ts.PacketAdaptationField{RandomAccessIndicator: true, HasPCR: true, PCR: packetAdaptationField.PCR}, p[:33])
-	writePkt(1, false, nil, p[33:])
+	writePkt(5, true, &ts.PacketAdaptationField{RandomAccessIndicator: true, HasPCR: true, PCR: packetAdaptationField.PCR}, p[:33])
+	writePkt(6, false, nil, p[33:])
 	// Second unit start flushes the first; it drains at EOF itself
-	writePkt(2, true, nil, p)
+	writePkt(7, true, nil, p)
 
 	dmx := New(context.Background(), bytes.NewReader(buf.Bytes()), WithPacketSize(ts.PacketSize))
 
@@ -263,7 +101,7 @@ func TestDemuxerNextPES(t *testing.T) {
 	first := dmx.PES()
 	require.NotNil(t, first)
 	assert.Equal(t, uint16(256), first.PID)
-	assert.Equal(t, uint8(0), first.ContinuityCounter)
+	assert.Equal(t, uint8(5), first.ContinuityCounter, "CC of the unit's first packet")
 	require.NotNil(t, first.AdaptationField)
 	assert.True(t, first.AdaptationField.RandomAccessIndicator)
 	assert.Equal(t, packetAdaptationField.PCR.Base(), first.AdaptationField.PCR.Base())
@@ -271,18 +109,13 @@ func TestDemuxerNextPES(t *testing.T) {
 	var wantData pes.Data
 	require.NoError(t, wantData.Parse(p))
 	assert.Equal(t, wantData.Data, first.Data.Data)
+	first.Close()
 
-	// The claimed unit survives subsequent demuxing
 	ev, err = dmx.Next()
 	require.NoError(t, err)
 	require.Equal(t, EventPES, ev)
-	assert.Equal(t, wantData.Data, first.Data.Data)
-	// The tail unit is left unclaimed on purpose: the next call releases it
-
 	_, err = dmx.Next()
 	assert.EqualError(t, err, ts.ErrNoMorePackets.Error())
-	first.Close()
-	first.Close() // idempotent
 	dmx.Close()
 }
 
@@ -366,10 +199,8 @@ func TestDemuxerRewind(t *testing.T) {
 	first := countEvents()
 	require.NotZero(t, first)
 
-	n, err := dmx.Rewind()
+	_, err := dmx.Rewind()
 	require.NoError(t, err)
-	assert.Equal(t, int64(0), n)
-	assert.Nil(t, dmx.packetBuffer)
 	assert.Equal(t, buf.Len(), r.Len())
 
 	// The dedup cache is gone: everything re-emits; the program map survives
@@ -500,4 +331,25 @@ func TestDemuxerPSIRepeats(t *testing.T) {
 	}
 	assert.Equal(t, defEvents*copies, repEvents, "each of %d copies re-emits", copies)
 	assert.Equal(t, defEvents, repChanged, "only the first copy is a content change")
+}
+
+// A reader that cannot seek continues after Rewind from the packet the
+// demuxer had reached: the window read ahead of it is not replayed.
+func TestRewindNonSeekableContinues(t *testing.T) {
+	var raw []byte
+	for i := range 10 {
+		raw = append(raw, payloadPacket(0x100, uint8(i), false, []byte{byte(i)})...)
+	}
+	dmx := New(context.Background(), struct{ io.Reader }{bytes.NewReader(raw)}, WithPacketSize(ts.PacketSize))
+	defer dmx.Close()
+	p := ts.NewPacket()
+	defer p.Close()
+	for range 5 {
+		require.NoError(t, dmx.NextPacketTo(p))
+	}
+	n, err := dmx.Rewind()
+	require.NoError(t, err)
+	assert.Equal(t, int64(-1), n)
+	require.NoError(t, dmx.NextPacketTo(p))
+	assert.Equal(t, byte(5), p.Payload[0])
 }

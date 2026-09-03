@@ -1,40 +1,25 @@
-// Package pidmap is a compact associative container for PIDs: keys and values
-// live in parallel slices and a key is found through a small open-addressed
-// index of positions, so the common lookup is one hashed probe whatever the
-// number of PIDs. The index starts in an inline array, so a short-lived Map
-// costs no allocation, and moves to the heap once the load would lengthen
-// the probe chains.
 package pidmap
 
 const (
-	inlineIndex = 64
-	hashMul     = 2654435761 // Knuth's multiplicative hashing constant
-	posNone     = 0          // index entries hold position+1, so a cleared entry is empty
+	inlineIndex         = 64
+	knuthHashMultiplier = 2654435761
+	posNone             = 0 // index entries hold position+1, so a cleared entry is empty
 )
 
 type Map[V any] struct {
 	Keys []uint16
 	Vals []V
 
-	idx    []uint16 // nil until the first key; len is a power of two
+	idx    []uint16 // len is a power of two: the probe mask depends on it.
 	shift  uint8    // 32 - log2(len(idx))
 	idxArr [inlineIndex]uint16
 }
 
-func New[V any](capacity int) Map[V] {
-	return Map[V]{
-		Keys: make([]uint16, 0, capacity),
-		Vals: make([]V, 0, capacity),
-	}
-}
-
 func hash(key uint16, shift uint8) uint32 {
-	return (uint32(key) * hashMul) >> shift
+	return (uint32(key) * knuthHashMultiplier) >> shift
 }
 
-// Get returns a pointer to the value, or nil if the key is absent. The pointer
-// is valid until the next GetOrAdd/Remove (append reallocates). This is the
-// per-packet path and must stay inlinable: everything rarer lives elsewhere.
+// The pointer is valid until the next GetOrAdd/Remove (append reallocates).
 func (m *Map[V]) Get(key uint16) *V {
 	if m.idx == nil {
 		return nil
@@ -80,8 +65,6 @@ func (m *Map[V]) index(pos int) {
 	}
 }
 
-// rebuild sizes the index for the keys at load ≤ 1/4 (the inline array while
-// it fits) and indexes every key again.
 func (m *Map[V]) rebuild() {
 	size := inlineIndex
 	for size < 4*len(m.Keys) {
@@ -122,8 +105,7 @@ func (m *Map[V]) Remove(key uint16) {
 	m.rebuild()
 }
 
-// Clear drops every entry, keeping the backing storage; the values are zeroed
-// so nothing they referenced stays alive.
+// Vals is cleared so nothing it referenced stays alive.
 func (m *Map[V]) Clear() {
 	clear(m.Vals)
 	m.Keys = m.Keys[:0]

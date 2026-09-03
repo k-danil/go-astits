@@ -3,11 +3,10 @@ package descriptor
 import (
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
-	"github.com/k-danil/go-astits/v2/internal/util"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/util"
 )
 
-// StereoscopicVideoInfo is the MPEG-2 systems stereoscopic_video_info_descriptor (ISO/IEC 13818-1).
 type StereoscopicVideoInfo struct {
 	Header                     Header `json:"_header"`
 	HorizontalUpsamplingFactor uint8  `json:"horizontal_upsampling_factor"`

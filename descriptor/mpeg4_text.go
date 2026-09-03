@@ -3,10 +3,9 @@ package descriptor
 import (
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
 )
 
-// MPEG4Text is the MPEG-2 systems MPEG-4_text_descriptor (ISO/IEC 13818-1).
 type MPEG4Text struct {
 	TextConfig []byte `json:"textConfig"`
 	Header     Header `json:"_header"`

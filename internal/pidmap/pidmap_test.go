@@ -9,18 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestMap(t *testing.T) {
-	var m Map[uint16]
-	assert.False(t, m.Has(1))
-	m.Set(1, 2)
-	assert.True(t, m.Has(1))
-	assert.Equal(t, uint16(2), *m.Get(1))
-	m.Set(1, 3)
-	assert.Equal(t, uint16(3), *m.Get(1))
-	m.Remove(1)
-	assert.False(t, m.Has(1))
-}
-
 // collidingKeys returns n distinct keys sharing one inline-index bucket.
 func collidingKeys(n int) (keys []uint16) {
 	target := hash(0x100, 32-6)

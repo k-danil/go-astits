@@ -16,8 +16,6 @@ const (
 	codeHexPrefix    = "0x"
 )
 
-// Code marshals as its printable prefix ("eng", or "en" when NUL-padded);
-// anything else becomes "0x" plus six hex digits.
 type Code [3]byte
 
 func (c Code) String() (s string) {
@@ -27,6 +25,7 @@ func (c Code) String() (s string) {
 	}
 
 	s = string(c[:printable])
+	// A code literally spelling "0x…" must go out as hex, or ParseCode reads it back as hex digits.
 	if printable == 0 || !isZero(c[printable:]) || strings.HasPrefix(s, codeHexPrefix) {
 		s = fmt.Sprintf("%s%02x%02x%02x", codeHexPrefix, c[0], c[1], c[2])
 	}

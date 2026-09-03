@@ -4,10 +4,9 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
 )
 
-// PrivateDataSpecifier represents a private data specifier descriptor
 type PrivateDataSpecifier struct {
 	Header    Header `json:"_header"`
 	Specifier uint32 `json:"private_data_specifier"`

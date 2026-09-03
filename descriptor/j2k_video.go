@@ -4,11 +4,10 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
-	"github.com/k-danil/go-astits/v2/internal/util"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/util"
 )
 
-// J2KVideo is the MPEG-2 systems J2K_video_descriptor (ISO/IEC 13818-1).
 type J2KVideo struct {
 	PrivateData        []byte `json:"private_data"`
 	HorizontalSize     uint32 `json:"horizontal_size"`

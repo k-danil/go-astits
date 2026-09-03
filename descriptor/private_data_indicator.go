@@ -4,10 +4,9 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
 )
 
-// PrivateDataIndicator represents a private data Indicator descriptor
 type PrivateDataIndicator struct {
 	Header    Header `json:"_header"`
 	Indicator uint32 `json:"private_data_indicator"`

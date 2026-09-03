@@ -3,11 +3,10 @@ package descriptor
 import (
 	"fmt"
 
-	"github.com/k-danil/go-astits/v2/internal/bytesiter"
-	"github.com/k-danil/go-astits/v2/internal/util"
+	"github.com/k-danil/go-astits/v3/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/util"
 )
 
-// STD is the MPEG-2 systems STD_descriptor (ISO/IEC 13818-1).
 type STD struct {
 	Header        Header `json:"_header"`
 	LeakValidFlag bool   `json:"leak_valid_flag"`
