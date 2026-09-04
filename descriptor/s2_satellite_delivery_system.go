@@ -8,17 +8,25 @@ import (
 
 // S2SatelliteDeliverySystem carries ScramblingSequenceIndex only when
 // ScramblingSequenceSelector is set, InputStreamIdentifier only when
-// MultipleInputStreamFlag is.
+// MultipleInputStreamFlag is, and TimesliceNumber only when NotTimesliceFlag
+// is clear.
 type S2SatelliteDeliverySystem struct {
-	Header                          Header `json:"_header"`
-	ScramblingSequenceIndex         uint32 `json:"scrambling_sequence_index"`
-	InputStreamIdentifier           uint8  `json:"input_stream_identifier"`
-	ScramblingSequenceSelector      bool   `json:"scrambling_sequence_selector"`
-	MultipleInputStreamFlag         bool   `json:"multiple_input_stream_flag"`
-	BackwardsCompatibilityIndicator bool   `json:"backwards_compatibility_indicator"`
+	Header                     Header `json:"_header"`
+	ScramblingSequenceIndex    uint32 `json:"scrambling_sequence_index"`
+	InputStreamIdentifier      uint8  `json:"input_stream_identifier"`
+	TimesliceNumber            uint8  `json:"timeslice_number"`
+	TSGSMode                   uint8  `json:"TS_GS_mode"`
+	ScramblingSequenceSelector bool   `json:"scrambling_sequence_selector"`
+	MultipleInputStreamFlag    bool   `json:"multiple_input_stream_flag"`
+	NotTimesliceFlag           bool   `json:"not_timeslice_flag"`
 }
 
-func newDescriptorS2SatelliteDeliverySystem(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {
+const (
+	s2ScramblingSequenceIndexSize = 3
+	s2ReservedFutureUse           = 0x0c
+)
+
+func newDescriptorS2SatelliteDeliverySystem(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
 	d := &S2SatelliteDeliverySystem{
 		Header: h,
 	}
@@ -31,11 +39,12 @@ func newDescriptorS2SatelliteDeliverySystem(i *bytesiter.Iterator, h Header, _ i
 	}
 	d.ScramblingSequenceSelector = b&0x80 > 0
 	d.MultipleInputStreamFlag = b&0x40 > 0
-	d.BackwardsCompatibilityIndicator = b&0x20 > 0
+	d.NotTimesliceFlag = b&0x10 > 0
+	d.TSGSMode = b & 0x03
 
 	if d.ScramblingSequenceSelector {
 		var bs []byte
-		if bs, err = i.NextBytesNoCopy(3); err != nil || len(bs) < 3 {
+		if bs, err = i.NextBytesNoCopy(s2ScramblingSequenceIndexSize); err != nil {
 			err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 			return
 		}
@@ -48,31 +57,43 @@ func newDescriptorS2SatelliteDeliverySystem(i *bytesiter.Iterator, h Header, _ i
 			return
 		}
 	}
+
+	if !d.NotTimesliceFlag {
+		if d.TimesliceNumber, err = i.NextByte(); err != nil {
+			err = fmt.Errorf("astits: fetching next byte failed: %w", err)
+			return
+		}
+	}
+
+	err = rejectTrailingBytes(i, offsetEnd)
 	return
 }
 
 func (d *S2SatelliteDeliverySystem) CalcLength() (n int) {
 	n = 1
 	if d.ScramblingSequenceSelector {
-		n += 3
+		n += s2ScramblingSequenceIndexSize
 	}
 	if d.MultipleInputStreamFlag {
 		n++
 	}
-	return
+	if !d.NotTimesliceFlag {
+		n++
+	}
+	return n
 }
 
 func (d *S2SatelliteDeliverySystem) Append(dst []byte) []byte {
-	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
-	b := byte(0x1f)
+	dst = append(dst, uint8(d.Tag()), uint8(d.CalcLength()))
+	b := byte(s2ReservedFutureUse) | d.TSGSMode&0x03
 	if d.ScramblingSequenceSelector {
 		b |= 0x80
 	}
 	if d.MultipleInputStreamFlag {
 		b |= 0x40
 	}
-	if d.BackwardsCompatibilityIndicator {
-		b |= 0x20
+	if d.NotTimesliceFlag {
+		b |= 0x10
 	}
 	dst = append(dst, b)
 	if d.ScramblingSequenceSelector {
@@ -83,6 +104,9 @@ func (d *S2SatelliteDeliverySystem) Append(dst []byte) []byte {
 	}
 	if d.MultipleInputStreamFlag {
 		dst = append(dst, d.InputStreamIdentifier)
+	}
+	if !d.NotTimesliceFlag {
+		dst = append(dst, d.TimesliceNumber)
 	}
 	return dst
 }

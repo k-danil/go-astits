@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
+	"errors"
 	"io"
 	"strings"
 	"testing"
@@ -242,6 +243,13 @@ func fuzzSeedStream() []byte {
 	return buf.Bytes()
 }
 
+func fuzzSeedPESStream() []byte {
+	const esPID = 256
+	stream := fuzzSeedStream()
+	stream = append(stream, packetBytes(ts.PacketHeader{PayloadUnitStartIndicator: true, PID: esPID}, pesWithHeaderBytes(), true)...)
+	return append(stream, packetBytes(ts.PacketHeader{ContinuityCounter: 1, PID: esPID}, []byte("tail"), true)...)
+}
+
 func FuzzDemuxer(f *testing.F) {
 	f.Add(fuzzSeedStream())
 	f.Add(bytes.Repeat([]byte{0x47}, 188*3))
@@ -257,6 +265,42 @@ func FuzzDemuxer(f *testing.F) {
 			}
 		}
 		dmx.Close()
+	})
+}
+
+// Damage under a sync lock is resynchronised, so every error reported must stay typed and inside the input.
+func FuzzDemuxerSyncLock(f *testing.F) {
+	seed := fuzzSeedStream()
+	f.Add(seed)
+	f.Add(bytes.Repeat([]byte{0x47}, 188*6))
+	f.Add(bytes.Join([][]byte{seed[:100], seed[300:]}, nil))
+	f.Add(fuzzSeedPESStream())
+	f.Fuzz(func(t *testing.T, b []byte) {
+		dmx := New(context.Background(), bytes.NewReader(b),
+			WithSyncLock(), WithResyncLimit(-1), WithSkipErrLimit(-1),
+			WithRecoverableErrors(), WithPSIRepeats(), WithMaxUnitSize(1<<16, 1<<12))
+		defer dmx.Close()
+		// A crafted input can report an event per byte; a prefix exercises the same invariants.
+		const maxEvents = 1 << 16
+		for range maxEvents {
+			ev, err := dmx.Next()
+			if err == nil {
+				if ev == EventPES {
+					if p := dmx.PES(); p != nil {
+						p.Close()
+					}
+				}
+				continue
+			}
+			re, ok := errors.AsType[*ts.RecoverableError](err)
+			if !ok {
+				require.True(t, errors.Is(err, ts.ErrNoMorePackets) || errors.Is(err, ts.ErrInvalidData),
+					"iteration ends on a declared error, got %v", err)
+				return
+			}
+			require.LessOrEqual(t, re.Offset, int64(len(b)))
+			require.LessOrEqual(t, re.Dropped, int64(len(b)), "more bytes dropped than the input holds")
+		}
 	})
 }
 

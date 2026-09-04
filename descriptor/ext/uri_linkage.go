@@ -65,7 +65,7 @@ func parseURILinkage(i *bytesiter.Iterator, offsetEnd int) (d *URILinkage, err e
 	}
 	if uriLinkageHasPollingInterval(d.URILinkageType) {
 		var bs []byte
-		if bs, err = i.NextBytesNoCopy(2); err != nil || len(bs) < 2 {
+		if bs, err = i.NextBytesNoCopy(2); err != nil {
 			err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 			return
 		}

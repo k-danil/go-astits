@@ -13,9 +13,9 @@ type MultiplexBufferUtilization struct {
 	BoundValid bool   `json:"bound_valid"`
 }
 
-func newDescriptorMultiplexBufferUtilization(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {
+func newDescriptorMultiplexBufferUtilization(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
 	var bs []byte
-	if bs, err = i.NextBytesNoCopy(4); err != nil || len(bs) < 4 {
+	if bs, err = i.NextBytesNoCopy(4); err != nil {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return
 	}
@@ -27,15 +27,17 @@ func newDescriptorMultiplexBufferUtilization(i *bytesiter.Iterator, h Header, _ 
 		UpperBound: uint16(bs[2]&0x7f)<<8 | uint16(bs[3]),
 	}
 	dd = d
+
+	err = rejectTrailingBytes(i, offsetEnd)
 	return
 }
 
-func (*MultiplexBufferUtilization) CalcLength() int {
+func (d *MultiplexBufferUtilization) CalcLength() int {
 	return 4
 }
 
 func (d *MultiplexBufferUtilization) Append(dst []byte) []byte {
-	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	dst = append(dst, uint8(d.Tag()), uint8(d.CalcLength()))
 	lowerHi := byte(d.LowerBound>>8) & 0x7f
 	if d.BoundValid {
 		lowerHi |= 0x80

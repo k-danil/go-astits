@@ -16,7 +16,7 @@ type StereoscopicVideoInfo struct {
 	UsableAs2D                 bool   `json:"usable_as_2D"`
 }
 
-func newDescriptorStereoscopicVideoInfo(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {
+func newDescriptorStereoscopicVideoInfo(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
 	var b byte
 	if b, err = i.NextByte(); err != nil {
 		err = fmt.Errorf("astits: fetching next byte failed: %w", err)
@@ -36,17 +36,18 @@ func newDescriptorStereoscopicVideoInfo(i *bytesiter.Iterator, h Header, _ int) 
 
 	if d.BaseVideoFlag {
 		d.LeftviewFlag = b&0x1 > 0
-		return
+	} else {
+		d.UsableAs2D = b&0x1 > 0
+
+		if b, err = i.NextByte(); err != nil {
+			err = fmt.Errorf("astits: fetching next byte failed: %w", err)
+			return
+		}
+		d.HorizontalUpsamplingFactor = b >> 4 & 0xf
+		d.VerticalUpsamplingFactor = b & 0xf
 	}
 
-	d.UsableAs2D = b&0x1 > 0
-
-	if b, err = i.NextByte(); err != nil {
-		err = fmt.Errorf("astits: fetching next byte failed: %w", err)
-		return
-	}
-	d.HorizontalUpsamplingFactor = b >> 4 & 0xf
-	d.VerticalUpsamplingFactor = b & 0xf
+	err = rejectTrailingBytes(i, offsetEnd)
 	return
 }
 
@@ -58,13 +59,12 @@ func (d *StereoscopicVideoInfo) CalcLength() int {
 }
 
 func (d *StereoscopicVideoInfo) Append(dst []byte) []byte {
-	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	dst = append(dst, uint8(d.Tag()), uint8(d.CalcLength()))
 	dst = append(dst, 0xfe|util.B2U(d.BaseVideoFlag))
 
 	if d.BaseVideoFlag {
 		return append(dst, 0xfe|util.B2U(d.LeftviewFlag))
 	}
-
 	dst = append(dst, 0xfe|util.B2U(d.UsableAs2D))
 	return append(dst, d.HorizontalUpsamplingFactor&0xf<<4|d.VerticalUpsamplingFactor&0xf)
 }

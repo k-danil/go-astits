@@ -12,9 +12,9 @@ type MultiplexBuffer struct {
 	Header       Header `json:"_header"`
 }
 
-func newDescriptorMultiplexBuffer(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {
+func newDescriptorMultiplexBuffer(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
 	var bs []byte
-	if bs, err = i.NextBytesNoCopy(6); err != nil || len(bs) < 6 {
+	if bs, err = i.NextBytesNoCopy(6); err != nil {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return
 	}
@@ -25,15 +25,17 @@ func newDescriptorMultiplexBuffer(i *bytesiter.Iterator, h Header, _ int) (dd De
 		TBLeakRate:   uint32(bs[3])<<16 | uint32(bs[4])<<8 | uint32(bs[5]),
 	}
 	dd = d
+
+	err = rejectTrailingBytes(i, offsetEnd)
 	return
 }
 
-func (*MultiplexBuffer) CalcLength() int {
+func (d *MultiplexBuffer) CalcLength() int {
 	return 6
 }
 
 func (d *MultiplexBuffer) Append(dst []byte) []byte {
-	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	dst = append(dst, uint8(d.Tag()), uint8(d.CalcLength()))
 	dst = append(dst, byte(d.MBBufferSize>>16), byte(d.MBBufferSize>>8), byte(d.MBBufferSize))
 	return append(dst, byte(d.TBLeakRate>>16), byte(d.TBLeakRate>>8), byte(d.TBLeakRate))
 }

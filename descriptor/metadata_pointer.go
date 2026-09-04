@@ -29,11 +29,17 @@ const (
 	metadataFormatIdentifierGate            = 0xff
 	carriageFlagProgramStream               = 2
 	carriageFlagDifferentTransportStream    = 1
+	mpegCarriageFlagsMask                   = 0x3
 )
+
+// Sizing and writing must branch on the same truncated value or they disagree.
+func (d *MetadataPointer) mpegCarriageFlags() uint8 {
+	return d.MPEGCarriageFlags & mpegCarriageFlagsMask
+}
 
 func newDescriptorMetadataPointer(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
 	var bs []byte
-	if bs, err = i.NextBytesNoCopy(2); err != nil || len(bs) < 2 {
+	if bs, err = i.NextBytesNoCopy(2); err != nil {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return
 	}
@@ -45,7 +51,7 @@ func newDescriptorMetadataPointer(i *bytesiter.Iterator, h Header, offsetEnd int
 	dd = d
 
 	if d.MetadataApplicationFormat == metadataApplicationFormatIdentifierGate {
-		if bs, err = i.NextBytesNoCopy(4); err != nil || len(bs) < 4 {
+		if bs, err = i.NextBytesNoCopy(4); err != nil {
 			err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 			return
 		}
@@ -60,7 +66,7 @@ func newDescriptorMetadataPointer(i *bytesiter.Iterator, h Header, offsetEnd int
 	d.MetadataFormat = b
 
 	if d.MetadataFormat == metadataFormatIdentifierGate {
-		if bs, err = i.NextBytesNoCopy(4); err != nil || len(bs) < 4 {
+		if bs, err = i.NextBytesNoCopy(4); err != nil {
 			err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 			return
 		}
@@ -92,7 +98,7 @@ func newDescriptorMetadataPointer(i *bytesiter.Iterator, h Header, offsetEnd int
 	}
 
 	if d.MPEGCarriageFlags <= carriageFlagProgramStream {
-		if bs, err = i.NextBytesNoCopy(2); err != nil || len(bs) < 2 {
+		if bs, err = i.NextBytesNoCopy(2); err != nil {
 			err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 			return
 		}
@@ -100,7 +106,7 @@ func newDescriptorMetadataPointer(i *bytesiter.Iterator, h Header, offsetEnd int
 	}
 
 	if d.MPEGCarriageFlags == carriageFlagDifferentTransportStream {
-		if bs, err = i.NextBytesNoCopy(4); err != nil || len(bs) < 4 {
+		if bs, err = i.NextBytesNoCopy(4); err != nil {
 			err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 			return
 		}
@@ -130,10 +136,10 @@ func (d *MetadataPointer) CalcLength() int {
 	if d.MetadataLocatorRecordFlag {
 		ret += 1 + len(d.MetadataLocatorRecord)
 	}
-	if d.MPEGCarriageFlags <= carriageFlagProgramStream {
+	if d.mpegCarriageFlags() <= carriageFlagProgramStream {
 		ret += 2
 	}
-	if d.MPEGCarriageFlags == carriageFlagDifferentTransportStream {
+	if d.mpegCarriageFlags() == carriageFlagDifferentTransportStream {
 		ret += 4
 	}
 	ret += len(d.PrivateData)
@@ -141,7 +147,7 @@ func (d *MetadataPointer) CalcLength() int {
 }
 
 func (d *MetadataPointer) Append(dst []byte) []byte {
-	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	dst = append(dst, uint8(d.Tag()), uint8(d.CalcLength()))
 	dst = binary.BigEndian.AppendUint16(dst, d.MetadataApplicationFormat)
 	if d.MetadataApplicationFormat == metadataApplicationFormatIdentifierGate {
 		dst = binary.BigEndian.AppendUint32(dst, d.MetadataApplicationFormatIdentifier)
@@ -151,15 +157,15 @@ func (d *MetadataPointer) Append(dst []byte) []byte {
 		dst = binary.BigEndian.AppendUint32(dst, d.MetadataFormatIdentifier)
 	}
 	dst = append(dst, d.MetadataServiceID)
-	dst = append(dst, util.B2U(d.MetadataLocatorRecordFlag)<<7|d.MPEGCarriageFlags&0x3<<5|0x1f)
+	dst = append(dst, util.B2U(d.MetadataLocatorRecordFlag)<<7|d.mpegCarriageFlags()<<5|0x1f)
 	if d.MetadataLocatorRecordFlag {
 		dst = append(dst, uint8(len(d.MetadataLocatorRecord)))
 		dst = append(dst, d.MetadataLocatorRecord...)
 	}
-	if d.MPEGCarriageFlags <= carriageFlagProgramStream {
+	if d.mpegCarriageFlags() <= carriageFlagProgramStream {
 		dst = binary.BigEndian.AppendUint16(dst, d.ProgramNumber)
 	}
-	if d.MPEGCarriageFlags == carriageFlagDifferentTransportStream {
+	if d.mpegCarriageFlags() == carriageFlagDifferentTransportStream {
 		dst = binary.BigEndian.AppendUint16(dst, d.TransportStreamLocation)
 		dst = binary.BigEndian.AppendUint16(dst, d.TransportStreamID)
 	}

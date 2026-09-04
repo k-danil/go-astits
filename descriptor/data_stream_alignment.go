@@ -49,7 +49,7 @@ type DataStreamAlignment struct {
 	Type   AlignmentType `json:"alignment_type"`
 }
 
-func newDescriptorDataStreamAlignment(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {
+func newDescriptorDataStreamAlignment(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
 	var b byte
 	if b, err = i.NextByte(); err != nil {
 		err = fmt.Errorf("astits: fetching next byte failed: %w", err)
@@ -60,14 +60,16 @@ func newDescriptorDataStreamAlignment(i *bytesiter.Iterator, h Header, _ int) (d
 		Type:   AlignmentType(b),
 	}
 	dd = d
+
+	err = rejectTrailingBytes(i, offsetEnd)
 	return
 }
 
-func (*DataStreamAlignment) CalcLength() int {
+func (d *DataStreamAlignment) CalcLength() int {
 	return 1
 }
 
 func (d *DataStreamAlignment) Append(dst []byte) []byte {
-	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	dst = append(dst, uint8(d.Tag()), uint8(d.CalcLength()))
 	return append(dst, uint8(d.Type))
 }

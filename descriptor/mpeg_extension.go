@@ -39,7 +39,7 @@ func (d *MPEGExtension) CalcLength() int {
 }
 
 func (d *MPEGExtension) Append(dst []byte) []byte {
-	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	dst = append(dst, uint8(d.Tag()), uint8(d.CalcLength()))
 	dst = append(dst, d.Extension)
 	return append(dst, d.Body...)
 }

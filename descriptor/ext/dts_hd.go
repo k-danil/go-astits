@@ -75,7 +75,7 @@ func parseDTSHDSubstream(i *bytesiter.Iterator) (s *DTSHDSubstream, err error) {
 	s = &DTSHDSubstream{}
 
 	var bs []byte
-	if bs, err = i.NextBytesNoCopy(3); err != nil || len(bs) < 3 {
+	if bs, err = i.NextBytesNoCopy(3); err != nil {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return
 	}
@@ -97,7 +97,7 @@ func parseDTSHDSubstream(i *bytesiter.Iterator) (s *DTSHDSubstream, err error) {
 
 func parseDTSHDAsset(i *bytesiter.Iterator, a *DTSHDAsset) (err error) {
 	var bs []byte
-	if bs, err = i.NextBytesNoCopy(3); err != nil || len(bs) < 3 {
+	if bs, err = i.NextBytesNoCopy(3); err != nil {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return
 	}
@@ -116,13 +116,27 @@ func parseDTSHDAsset(i *bytesiter.Iterator, a *DTSHDAsset) (err error) {
 		}
 	}
 	if a.LanguageCodeFlag {
-		if bs, err = i.NextBytesNoCopy(3); err != nil || len(bs) < 3 {
+		if bs, err = i.NextBytesNoCopy(3); err != nil {
 			err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 			return
 		}
 		copy(a.Language[:], bs)
 	}
 	return
+}
+
+const (
+	dtsHDSubstreamFlagsReserved = 0x07
+	dtsHDSubstreamReserved      = 0x03
+	dtsHDAssetReserved          = 0x03
+
+	dtsHDMinAssets = 1
+	dtsHDMaxAssets = 8
+)
+
+// num_assets holds the count minus one and cannot say "no assets": an empty substream saturates to one.
+func (s *DTSHDSubstream) numAssetsField() uint8 {
+	return uint8(min(max(len(s.Assets), dtsHDMinAssets), dtsHDMaxAssets) - 1)
 }
 
 func (a *DTSHDAsset) length() int {
@@ -167,7 +181,7 @@ func (d *DTSHD) Append(dst []byte) []byte {
 			b |= s.bit
 		}
 	}
-	dst = append(dst, b)
+	dst = append(dst, b|dtsHDSubstreamFlagsReserved)
 
 	for _, s := range []*DTSHDSubstream{d.CoreSubstream, d.Substream0, d.Substream1, d.Substream2, d.Substream3} {
 		if s != nil {
@@ -178,9 +192,8 @@ func (d *DTSHD) Append(dst []byte) []byte {
 }
 
 func (s *DTSHDSubstream) append(dst []byte) []byte {
-	numAssets := uint8(len(s.Assets) - 1)
-	dst = append(dst, uint8(s.bodyLength()), numAssets&0x07<<5|s.ChannelCount&0x1f)
-	b := s.SamplingFrequency & 0x0f << 3
+	dst = append(dst, uint8(s.bodyLength()), s.numAssetsField()<<5|s.ChannelCount&0x1f)
+	b := s.SamplingFrequency&0x0f<<3 | dtsHDSubstreamReserved
 	if s.LFEFlag {
 		b |= 0x80
 	}
@@ -195,7 +208,7 @@ func (s *DTSHDSubstream) append(dst []byte) []byte {
 }
 
 func (a *DTSHDAsset) append(dst []byte) []byte {
-	w := uint32(a.AssetConstruction&0x1f)<<19 | uint32(a.BitRate&0x1fff)<<2
+	w := uint32(a.AssetConstruction&0x1f)<<19 | uint32(a.BitRate&0x1fff)<<2 | dtsHDAssetReserved
 	if a.VBRFlag {
 		w |= 0x40000
 	}

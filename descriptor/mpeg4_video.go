@@ -11,7 +11,7 @@ type MPEG4Video struct {
 	ProfileAndLevel uint8  `json:"profile_and_level"`
 }
 
-func newDescriptorMPEG4Video(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {
+func newDescriptorMPEG4Video(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
 	var b byte
 	if b, err = i.NextByte(); err != nil {
 		err = fmt.Errorf("astits: fetching next byte failed: %w", err)
@@ -22,14 +22,16 @@ func newDescriptorMPEG4Video(i *bytesiter.Iterator, h Header, _ int) (dd Descrip
 		ProfileAndLevel: b,
 	}
 	dd = d
+
+	err = rejectTrailingBytes(i, offsetEnd)
 	return
 }
 
-func (*MPEG4Video) CalcLength() int {
+func (d *MPEG4Video) CalcLength() int {
 	return 1
 }
 
 func (d *MPEG4Video) Append(dst []byte) []byte {
-	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	dst = append(dst, uint8(d.Tag()), uint8(d.CalcLength()))
 	return append(dst, d.ProfileAndLevel)
 }

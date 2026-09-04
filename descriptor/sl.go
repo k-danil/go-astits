@@ -12,9 +12,9 @@ type SL struct {
 	Header Header `json:"_header"`
 }
 
-func newDescriptorSL(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {
+func newDescriptorSL(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
 	var bs []byte
-	if bs, err = i.NextBytesNoCopy(2); err != nil || len(bs) < 2 {
+	if bs, err = i.NextBytesNoCopy(2); err != nil {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return
 	}
@@ -24,14 +24,16 @@ func newDescriptorSL(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err
 		ESID:   binary.BigEndian.Uint16(bs),
 	}
 	dd = d
+
+	err = rejectTrailingBytes(i, offsetEnd)
 	return
 }
 
-func (*SL) CalcLength() int {
+func (d *SL) CalcLength() int {
 	return 2
 }
 
 func (d *SL) Append(dst []byte) []byte {
-	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	dst = append(dst, uint8(d.Tag()), uint8(d.CalcLength()))
 	return append(dst, byte(d.ESID>>8), byte(d.ESID))
 }

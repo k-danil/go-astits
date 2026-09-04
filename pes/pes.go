@@ -16,8 +16,12 @@ import (
 const optionalHeaderMarker = 0b10
 
 var (
-	ErrInvalidMarkerBits = errclass.New("astits: invalid PES optional header marker bits", ts.ErrInvalidData)
-	ErrUnboundedNonVideo = errclass.New("astits: unbounded PES packet on a non-video stream", ts.ErrInvalidData)
+	ErrInvalidMarkerBits     = errclass.New("astits: invalid PES optional header marker bits", ts.ErrInvalidData)
+	ErrUnboundedNonVideo     = errclass.New("astits: unbounded PES packet on a non-video stream", ts.ErrInvalidData)
+	ErrInvalidStartCode      = errclass.New("astits: invalid PES packet_start_code_prefix", ts.ErrInvalidData)
+	ErrHeaderTooLong         = errclass.New("astits: PES optional header exceeds its length field", ts.ErrInvalidData)
+	ErrMissingOptionalHeader = errclass.New("astits: stream_id requires a PES optional header", ts.ErrInvalidData)
+	ErrMissingExtension      = errclass.New("astits: PES_extension_flag set without an extension header", ts.ErrInvalidData)
 )
 
 type PSTDBufferScale uint8
@@ -101,6 +105,7 @@ const (
 	streamIDAudioNumberMask StreamID = 0x1f
 	streamIDVideoBase       StreamID = 0xe0
 	streamIDVideoNumberMask StreamID = 0x0f
+	streamIDExtended        StreamID = 0xfd
 )
 
 const (
@@ -302,8 +307,13 @@ func (t *FrequencyTruncation) UnmarshalJSON(b []byte) (err error) {
 }
 
 const (
-	HeaderSize         = 6
-	dsmTrickModeLength = 1
+	HeaderSize               = 6
+	dsmTrickModeLength       = 1
+	packetStartCodePrefix    = 0x000001
+	optionalHeaderFixedLen   = 3
+	maxOptionalHeaderData    = 0xff
+	maxExtension2FieldLength = 0x7f
+	maxPacketLength          = 0xffff
 )
 
 type Data struct {
@@ -375,8 +385,12 @@ type DSMTrickMode struct {
 }
 
 func (h *Header) IsVideoStream() bool {
-	return h.StreamID == 0xe0 ||
-		h.StreamID == 0xfd
+	return h.StreamID&^streamIDVideoNumberMask == streamIDVideoBase
+}
+
+// §2.4.3.7 grants PES_packet_length 0 to video only; the extended stream_id carries VC-1/Dirac video too.
+func AllowsUnboundedLength(id StreamID) bool {
+	return id&^streamIDVideoNumberMask == streamIDVideoBase || id == streamIDExtended
 }
 
 func (d *Data) Parse(bs []byte) error {
@@ -390,6 +404,13 @@ func (d *Data) ParseTruncated(bs []byte) error {
 
 func (d *Data) parse(bs []byte, clamp bool) (err error) {
 	const pesPayloadPrefixSize = 3
+
+	if len(bs) < pesPayloadPrefixSize {
+		return ts.ErrShortPacket
+	}
+	if uint32(bs[0])<<16|uint32(bs[1])<<8|uint32(bs[2]) != packetStartCodePrefix {
+		return ErrInvalidStartCode
+	}
 
 	var dataStart, dataEnd int
 	if dataStart, dataEnd, err = d.Header.parseBytes(bs, pesPayloadPrefixSize); err != nil {
@@ -448,13 +469,14 @@ func (h *Header) parseBytes(bs []byte, o int) (dataStart, dataEnd int, err error
 			return
 		}
 	} else {
+		h.OptionalHeader = nil
 		dataStart = o
 	}
 	return
 }
 
 func (h *OptionalHeader) parseBytes(bs []byte, o int) (dataStart int, err error) {
-	if o+3 > len(bs) {
+	if o+optionalHeaderFixedLen > len(bs) {
 		return 0, ts.ErrShortPacket
 	}
 
@@ -478,9 +500,13 @@ func (h *OptionalHeader) parseBytes(bs []byte, o int) (dataStart int, err error)
 	h.HasExtension = b&0x1 > 0
 
 	h.HeaderLength = bs[o+2]
-	o += 3
+	o += optionalHeaderFixedLen
 
-	dataStart = o + int(h.HeaderLength)
+	// PES_header_data_length bounds every field below: past it the bytes are payload (§2.4.3.7).
+	if dataStart = o + int(h.HeaderLength); dataStart > len(bs) {
+		return 0, ts.ErrShortPacket
+	}
+	bs = bs[:dataStart]
 
 	var n int
 	switch h.PTSDTSIndicator {
@@ -690,27 +716,39 @@ func (h *Header) PutHeader(bs []byte, payloadLen int) (n int, err error) {
 }
 
 func (h *Header) putBytes(bs []byte, payloadSize int) (n int, err error) {
-	if len(bs) < HeaderSize {
+	optionalLength := 0
+	if hasPESOptionalHeader(h.StreamID) {
+		if h.OptionalHeader == nil {
+			return 0, fmt.Errorf("astits: stream_id %s: %w", h.StreamID, ErrMissingOptionalHeader)
+		}
+		if h.OptionalHeader.HasExtension && h.OptionalHeader.Extension == nil {
+			return 0, ErrMissingExtension
+		}
+		optionalLength = h.OptionalHeader.CalcLength()
+		if dataLength := optionalLength - optionalHeaderFixedLen; dataLength > maxOptionalHeaderData {
+			return 0, fmt.Errorf("astits: PES header data length %d exceeds %d: %w", dataLength, maxOptionalHeaderData, ErrHeaderTooLong)
+		}
+		if ext := h.OptionalHeader.Extension; h.OptionalHeader.HasExtension && ext.HasExtension2 && ext.extension2FieldLength() > maxExtension2FieldLength {
+			return 0, fmt.Errorf("astits: PES_extension_field_length %d exceeds %d: %w", ext.extension2FieldLength(), maxExtension2FieldLength, ErrHeaderTooLong)
+		}
+	}
+	if len(bs) < HeaderSize+optionalLength {
 		return 0, ts.ErrShortPacket
 	}
-	binary.BigEndian.PutUint32(bs, uint32(h.StreamID)|0x1<<8)
-	pesPacketLength := 0
 
-	if !h.IsVideoStream() {
-		pesPacketLength = payloadSize
-		if hasPESOptionalHeader(h.StreamID) {
-			pesPacketLength += h.OptionalHeader.CalcLength()
+	packetLength := 0
+	if !AllowsUnboundedLength(h.StreamID) {
+		if packetLength = payloadSize + optionalLength; packetLength > maxPacketLength {
+			return 0, fmt.Errorf("astits: PES packet length %d exceeds %d on stream_id %s: %w", packetLength, maxPacketLength, h.StreamID, ErrUnboundedNonVideo)
 		}
-		pesPacketLength *= int((uint64(pesPacketLength) - 0x10000) >> 63)
 	}
 
-	binary.BigEndian.PutUint16(bs[4:], uint16(pesPacketLength))
+	binary.BigEndian.PutUint32(bs, uint32(h.StreamID)|packetStartCodePrefix<<8)
+	binary.BigEndian.PutUint16(bs[4:], uint16(packetLength))
 	n = HeaderSize
-
-	if hasPESOptionalHeader(h.StreamID) {
+	if optionalLength > 0 {
 		n += h.OptionalHeader.putBytes(bs[n:])
 	}
-
 	return
 }
 
@@ -718,10 +756,10 @@ func (h *OptionalHeader) CalcLength() int {
 	if h == nil {
 		return 0
 	}
-	return 3 + int(h.calcDataLength())
+	return optionalHeaderFixedLen + h.calcDataLength()
 }
 
-func (h *OptionalHeader) calcDataLength() (length uint8) {
+func (h *OptionalHeader) calcDataLength() (length int) {
 	switch h.PTSDTSIndicator {
 	case PTSDTSIndicatorOnlyPTS:
 		length += ts.PTSDTSSize
@@ -729,11 +767,11 @@ func (h *OptionalHeader) calcDataLength() (length uint8) {
 		length += 2 * ts.PTSDTSSize
 	}
 
-	length += ts.ESCRSize * util.B2U(h.HasESCR)
-	length += 3 * util.B2U(h.HasESRate)
-	length += dsmTrickModeLength * util.B2U(h.HasDSMTrickMode)
-	length += util.B2U(h.HasAdditionalCopyInfo)
-	length += 2 * util.B2U(h.HasCRC)
+	length += ts.ESCRSize * int(util.B2U(h.HasESCR))
+	length += 3 * int(util.B2U(h.HasESRate))
+	length += dsmTrickModeLength * int(util.B2U(h.HasDSMTrickMode))
+	length += int(util.B2U(h.HasAdditionalCopyInfo))
+	length += 2 * int(util.B2U(h.HasCRC))
 
 	if h.HasExtension {
 		length += h.Extension.calcDataLength()
@@ -741,19 +779,16 @@ func (h *OptionalHeader) calcDataLength() (length uint8) {
 	return
 }
 
-func (h *OptionalHeaderExtension) calcDataLength() (length uint8) {
+func (h *OptionalHeaderExtension) calcDataLength() (length int) {
 	length++
-	length += 16 * util.B2U(h.HasPrivateData)
+	length += 16 * int(util.B2U(h.HasPrivateData))
 	if h.HasPackHeaderField {
-		length += 1 + uint8(len(h.PackHeader))
+		length += 1 + len(h.PackHeader)
 	}
-	length += 2 * util.B2U(h.HasProgramPacketSequenceCounter)
-	length += 2 * util.B2U(h.HasPSTDBuffer)
+	length += 2 * int(util.B2U(h.HasProgramPacketSequenceCounter))
+	length += 2 * int(util.B2U(h.HasPSTDBuffer))
 	if h.HasExtension2 {
-		length += 2 + uint8(len(h.Extension2Reserved))
-		if !h.HasStreamIDExtension && h.HasTREF {
-			length += ts.PTSDTSSize
-		}
+		length += 1 + h.extension2FieldLength()
 	}
 	return
 }
@@ -778,8 +813,9 @@ func (h *OptionalHeader) putBytes(bs []byte) (n int) {
 	b |= util.B2U(h.HasCRC) << 1
 	b |= util.B2U(h.HasExtension)
 	bs[1] = b
-	bs[2] = h.calcDataLength()
-	n = 3
+	// Header.putBytes refuses a longer header, so the length still fits a byte.
+	bs[2] = uint8(h.calcDataLength())
+	n = optionalHeaderFixedLen
 
 	if h.PTSDTSIndicator == PTSDTSIndicatorOnlyPTS {
 		n += h.PTS.PutPTSDTS(bs[n:], 0b0010)
@@ -822,6 +858,14 @@ func (h *OptionalHeader) putBytes(bs []byte) (n int) {
 	return
 }
 
+func (h *OptionalHeaderExtension) extension2FieldLength() (n int) {
+	n = 1 + len(h.Extension2Reserved)
+	if !h.HasStreamIDExtension && h.HasTREF {
+		n += ts.PTSDTSSize
+	}
+	return
+}
+
 func (h *OptionalHeaderExtension) putBytes(bs []byte) (n int) {
 	bs[0] = util.B2U(h.HasPrivateData) << 7
 	bs[0] |= util.B2U(h.HasPackHeaderField) << 6
@@ -858,11 +902,7 @@ func (h *OptionalHeaderExtension) putBytes(bs []byte) (n int) {
 	}
 
 	if h.HasExtension2 {
-		fieldLen := 1 + len(h.Extension2Reserved)
-		if !h.HasStreamIDExtension && h.HasTREF {
-			fieldLen += ts.PTSDTSSize
-		}
-		bs[n] = 0x80 | uint8(fieldLen)
+		bs[n] = 0x80 | uint8(h.extension2FieldLength())
 		n++
 		if h.HasStreamIDExtension {
 			bs[n] = h.StreamIDExtension & 0x7f

@@ -23,9 +23,9 @@ type SVCExtension struct {
 	NoSEINALUnitPresent bool   `json:"no_sei_nal_unit_present"`
 }
 
-func newDescriptorSVCExtension(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {
+func newDescriptorSVCExtension(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
 	var bs []byte
-	if bs, err = i.NextBytesNoCopy(13); err != nil || len(bs) < 13 {
+	if bs, err = i.NextBytesNoCopy(13); err != nil {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return
 	}
@@ -45,16 +45,18 @@ func newDescriptorSVCExtension(i *bytesiter.Iterator, h Header, _ int) (dd Descr
 		NoSEINALUnitPresent: bs[12]&0x02 > 0,
 	}
 	dd = d
+
+	err = rejectTrailingBytes(i, offsetEnd)
 	return
 }
 
-func (*SVCExtension) CalcLength() int {
+func (d *SVCExtension) CalcLength() int {
 	return 13
 }
 
 func (d *SVCExtension) Append(dst []byte) []byte {
-	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
-	dst = append(dst,
+	dst = append(dst, uint8(d.Tag()), uint8(d.CalcLength()))
+	return append(dst,
 		byte(d.Width>>8), byte(d.Width),
 		byte(d.Height>>8), byte(d.Height),
 		byte(d.FrameRate>>8), byte(d.FrameRate),
@@ -64,5 +66,4 @@ func (d *SVCExtension) Append(dst []byte) []byte {
 		d.QualityIDStart&0x0f<<4|d.QualityIDEnd&0x0f,
 		d.TemporalIDStart&0x07<<5|d.TemporalIDEnd&0x07<<2|util.B2U(d.NoSEINALUnitPresent)<<1|0x01,
 	)
-	return dst
 }

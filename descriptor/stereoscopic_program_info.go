@@ -11,7 +11,7 @@ type StereoscopicProgramInfo struct {
 	ServiceType uint8  `json:"service_type"`
 }
 
-func newDescriptorStereoscopicProgramInfo(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {
+func newDescriptorStereoscopicProgramInfo(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
 	var b byte
 	if b, err = i.NextByte(); err != nil {
 		err = fmt.Errorf("astits: fetching next byte failed: %w", err)
@@ -22,14 +22,16 @@ func newDescriptorStereoscopicProgramInfo(i *bytesiter.Iterator, h Header, _ int
 		ServiceType: b & 0x07,
 	}
 	dd = d
+
+	err = rejectTrailingBytes(i, offsetEnd)
 	return
 }
 
-func (*StereoscopicProgramInfo) CalcLength() int {
+func (d *StereoscopicProgramInfo) CalcLength() int {
 	return 1
 }
 
 func (d *StereoscopicProgramInfo) Append(dst []byte) []byte {
-	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	dst = append(dst, uint8(d.Tag()), uint8(d.CalcLength()))
 	return append(dst, 0xf8|d.ServiceType&0x07)
 }

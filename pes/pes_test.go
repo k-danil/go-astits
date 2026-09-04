@@ -483,3 +483,12 @@ func TestParseOptionalHeaderPackHeader(t *testing.T) {
 	n := h.putBytes(bs)
 	assert.Equal(t, buf.Bytes(), bs[:n], "write-back of the parsed header")
 }
+
+func TestParseOptionalHeaderStopsAtDeclaredLength(t *testing.T) {
+	bs := []byte{0x00, 0x00, 0x01, 0xe0, 0x00, 0x00, 0x80, 0x80, 0}
+	bs = append(bs, 0x21, 0x00, 0x01, 0x00, 0x01)
+	bs = append(bs, []byte("payload")...)
+
+	var d Data
+	require.ErrorIs(t, d.Parse(bs), ts.ErrShortPacket)
+}

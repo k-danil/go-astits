@@ -59,7 +59,31 @@ How:
   ISO_IEC_14496 and metadata sections), and the full PES optional header (CRC and pack_header
   included). Structures those two documents defer to other specifications — payloads
   referencing ISO/IEC 14496, DSM-CC (13818-6) or IPMP (13818-11) — are carried verbatim
-  rather than decoded; tags defined outside the two are surfaced as `Unknown`.
+  rather than decoded; tags defined outside the two are surfaced as `Unknown`. The DVB
+  baseline is EN 300 468 V1.19.1 (2025-02): `S2SatelliteDeliverySystem` follows its Table 42
+  (`NotTimesliceFlag`, `TSGSMode`, `TimesliceNumber`), `ServiceType` its Table 89, and the
+  extension tag list runs to 0x24.
+- **Descriptor body contract**: each body is parsed against its own `descriptor_length` and
+  never borrows a neighbour's bytes — a body that needs more than it declares becomes a
+  `*Malformed` carrying the declared bytes verbatim, so the loop stays aligned and `Append`
+  reproduces the input byte for byte. Bytes left past a fixed layout are the encoder's error,
+  not data: the body becomes a `*Malformed` as well, byte-exact through `Raw`. Only bodies
+  whose syntax table ends in a growing loop keep a tail of their own — `short_smoothing_buffer`
+  (Table 94) and `T2MI` (Table 158) in `Reserved` (JSON `_reserved`), `VBI_data`'s
+  unrecognised services — while AC-3, E-AC-3, AC-4, DTS, DTS-HD, DTS Neural and AAC keep
+  theirs in the named `AdditionalInfo` field. Loop-shaped bodies (`ISO_639`, `FMC`, `content`,
+  `multilingual_*`, `cell_list`, …) type what their loop can and reject the rest as
+  `*Malformed`. A zero-length body goes to its parser like any other: legally
+  empty tags keep their type, tags with a mandatory body become `*Malformed`, unassigned tags
+  stay `Unknown`. Reserved bits are re-encoded to the value the spec mandates for their
+  family (`reserved`/`reserved_future_use` 1, `reserved_zero_future_use` 0). DVB dates and
+  durations are validated on the wire: a BCD nibble above 9 fails the body with an error of
+  class `ts.ErrInvalidData` (a `*Malformed` descriptor, a `SectionError` for TDT/TOT/EIT), and
+  on the write side out-of-range values saturate — durations at 99:59:59, dates at the 16-bit
+  MJD range (1858-11-17 … 2038-04-21, one day short of the 0xFFFF undefined marker).
+  Writing does not validate lengths: `Append` writes an
+  8-bit body length and `AppendWithLength` a 12-bit loop length, so a body over 255 bytes or a
+  list over 4095 is the caller's to split.
 - **Direct parsing and serialization**: no bit-writer/byte-iterator abstractions on hot
   paths — slice cursors for reads (the 4-byte TS header lands in one big-endian `uint32`,
   its fields sliced out in registers), packet assembly in a scratch buffer with a single
@@ -180,6 +204,9 @@ How:
 - **Data ownership**: `AdaptationField`/`TransportPrivateData` inside a claimed `demux.PES`
   are owned copies, parsed PSI tables and descriptors own their payloads (guarded by
   dedicated ownership tests); retaining data on the consumer side is safe from pool reuse.
+- **DVB text**: Annex A character tables end to end; control codes under the UTF-8 table are
+  written in their Table A.2 form (`\n` → `EE 82 8A`), never as raw control bytes, and Latin
+  diacritics compose through a precomputed table — one allocation per string.
 - **Hardened parsers**: fuzz targets for every direct parser plus randomized byte-exact
   roundtrip properties; corrupt input never panics and yields errors matchable with
   `errors.Is` — `ts.ErrInvalidData` classifies any corrupt-input failure,
@@ -194,7 +221,12 @@ How:
   `EventError` carrying a typed `*ts.RecoverableError` (kind, PID, byte offset, bytes
   dropped — 0 for a violation that lost nothing) and continues. The offset of a unit-level
   error is the last packet of that unit, not the packet the reader happened to be on when
-  the unit was let go. The error is
+  the unit was let go. A unit whose start was lost — after a tear, or when the reader joins a
+  PID mid-unit — is accumulated but never parsed: it is reported once as `ErrorKindTornUnit`
+  with `ts.ErrHeadlessUnit` and its full byte count, so every accumulated byte of a damaged
+  feed is charged either to the torn head or to the headless remainder, and
+  `ErrorKindUnknownUnit` means what it says — a complete unit of an unrecognised type
+  (SCTE-35, DSM-CC, AIT), not the debris of a lost packet. The error is
   non-terminal — `Events()` yields it without ending the stream, so a lossy feed keeps
   demuxing while the consumer counts damage (e.g. TR 101 290 error counters) and sums the
   loss. A unit the stream never closed (EOF) is still delivered, flagged `PES.Truncated`.
@@ -220,7 +252,36 @@ How:
   `SetCC`, table retransmission from cache; PAT spans sections and packets when needed,
   oversize sections are rejected (`psi.ErrSectionOverflow`, against
   `TableID.MaxSectionLength()`: 1021 for PAT/CAT/PMT/TSDT and the DVB NIT/BAT/SDT, 4093 for
-  EIT and private sections) instead of silently corrupted.
+  EIT and private sections) instead of silently corrupted. The adaptation field is the
+  muxer's to lay out: `WriteData` overwrites `StuffingLength`/`IsOneByteStuffing` before
+  measuring the packet, so a field taken straight from `demux.PES` remuxes byte-exactly
+  instead of counting its old stuffing twice; a field that leaves no room for payload is
+  refused with `mux.ErrAdaptationFieldTooLong`, one longer than its length byte with
+  `ts.ErrAdaptationFieldOverflow` — never a panic in the layout arithmetic. One-byte
+  adaptation fields (`adaptation_field_length` 0) parse as `IsOneByteStuffing` and round-trip
+  byte for byte. A packet with an adaptation field and no payload repeats the continuity
+  counter (H.222.0 2.4.3.3); tables are packetized without a trailing all-stuffing packet;
+  `WriteTables` resets the retransmission counter and leaves both table counters untouched
+  when a write fails. `AddElementaryStream` refuses every PID below 0x0020 — H.222.0
+  Table 2-3 reserves 0x0000–0x000F, EN 300 468 keeps 0x0010–0x001F for service information —
+  plus the muxer's own PMT PID and the null PID, with `mux.ErrReservedPID`; auto-assigned PIDs
+  start above the PMT PID. A structure that contradicts its own flags is refused instead of
+  written: an adaptation field with `IsOneByteStuffing` beside live flags, private data or
+  stuffing, or with `HasAdaptationExtensionField` and no extension, fails with
+  `ts.ErrContradictoryAdaptationField`; a `Put` into a buffer too small for even the length
+  byte returns `ts.ErrShortPacket`.
+- **PES headers are strict both ways**: `pes.Header.IsVideoStream` follows Table 2-22
+  (`stream_id & 0xF0 == 0xE0`), `pes.AllowsUnboundedLength` is the one predicate for who may
+  carry `PES_packet_length` 0 (video and the extended id 0xFD) — the muxer's writer and the
+  demuxer's `ErrUnboundedNonVideo` check share it — and `StreamType.ToPESStreamID` maps
+  AC-3/E-AC-3 to 0xBD (`private_stream_1`) as DVB does. Writing fails instead of corrupting:
+  `pes.ErrHeaderTooLong` when the optional header data exceeds 255 bytes or an extension_2
+  field its 7-bit length, `pes.ErrMissingOptionalHeader` when the stream_id requires one,
+  `pes.ErrMissingExtension` when `HasExtension` is set without an `Extension`,
+  `pes.ErrUnboundedNonVideo` when a non-video unit would exceed 65535 bytes. Parsing rejects
+  a payload without the `00 00 01` start code (`pes.ErrInvalidStartCode`) and reads optional
+  fields only within `PES_header_data_length` — a header that claims fields it has no room
+  for fails with `ts.ErrShortPacket` instead of inventing a PTS out of payload bytes.
 
 ## Migrating to v3
 
@@ -257,8 +318,27 @@ Everything that breaks against v2, in one place:
   `ts.ReadAhead`/`ReadAheadSize`; `Advance` takes a whole number of packets within the window
   and rejects anything else; `Packet.ParseAt` parses in place. Not needed by demuxer users.
 - **v3.1** adds `demux.PacketSpan`/`SectionSpan`, `ts.ErrorKindContinuity`, `ts.ReadAheadSize`
-  and `psi.TableID.MaxSectionLength`, and stops consuming a sub-packet tail at EOF; the only
-  source break is a `demux.PES` composite literal naming the span fields.
+  and `psi.TableID.MaxSectionLength`, and stops consuming a sub-packet tail at EOF. Source
+  breaks: a `demux.PES` composite literal must name `PacketSpan`;
+  `S2SatelliteDeliverySystem` loses `BackwardsCompatibilityIndicator` and gains
+  `NotTimesliceFlag`/`TSGSMode`/`TimesliceNumber`; `ServiceTypeMPEG2HDDigitalTelevisionService`
+  is `ServiceTypeHDDigitalTelevisionService` (JSON `HD_digital_television_service`,
+  `teletext_service` in lower case); `CellList` latitudes and longitudes are `int16`;
+  `pes.Header.IsVideoStream` covers 0xE0–0xEF and no longer 0xFD. Behaviour changes: AC-3
+  and E-AC-3 units get `PES_packet_length` and stream_id 0xBD; a torn unit's headless
+  remainder is one `ErrorKindTornUnit`/`ts.ErrHeadlessUnit` instead of an unknown-unit;
+  descriptor bodies stop at their declared length (`*Malformed` where they used to read into
+  a neighbour) and a tail past a fixed layout makes the body `*Malformed` too; zero-length
+  bodies are typed; `terrestrial_delivery_system`'s JSON `Time_Slicing_indicator` is
+  `time_slicing_indicator` and `C2_bundle_delivery_system`'s `MasterChannel` is
+  `PrimaryChannel` (JSON `primary_channel`) per V1.19.1; `dvbtext.Encode` no longer decomposes U+212B into a
+  base+mark pair (it goes out as UTF-8, and `Decode` now returns the same rune); invalid BCD
+  fails instead of yielding a date; `WriteData` zeroes the adaptation field's stuffing
+  before layout and rejects reserved PIDs and oversize fields; AC-3, DTS-HD and S2 reserved
+  bits re-encode per spec. New errors: `ts.ErrAdaptationFieldOverflow`,
+  `ts.ErrContradictoryAdaptationField`, `ts.ErrHeadlessUnit`, `pes.ErrHeaderTooLong`,
+  `pes.ErrMissingOptionalHeader`, `pes.ErrMissingExtension`, `pes.ErrInvalidStartCode`,
+  `mux.ErrAdaptationFieldTooLong`, `mux.ErrReservedPID`; all are of class `ts.ErrInvalidData`.
 
 ## Problems and deliberate trade-offs
 
@@ -280,6 +360,13 @@ Everything that breaks against v2, in one place:
 - **`Next` results are borrowed**: `PES()` before `Close`, `Section()` and `SectionSpan()`
   are valid only until the next `Next`; retaining beyond that means claiming (`PES`) or
   copying.
+- **`WriteData` owns the adaptation field's stuffing**: the `StuffingLength`/
+  `IsOneByteStuffing` you pass are discarded, and after the call the field carries the
+  stuffing that was actually written. Describe what the packet must carry (PCR, RAI, private
+  data), not how it should be padded.
+- **`Demuxer.Close` ends the demuxer's life**: reading after it is not supported. `PMT()` is
+  the last PMT parsed for any program — on a multi-program stream tell programs apart with
+  `Section()`.
 - **Events of one packet are not ordered among themselves**: a unit completed by a packet is
   delivered before a recoverable error queued while that same packet was read. Ordering holds
   across packets, which is what damage counters need; to tie an error to a unit, use
@@ -302,3 +389,7 @@ Everything that breaks against v2, in one place:
   copy against 34% on L2-resident data): software prefetch a few packets ahead.
 - `SeekBuffer` as the demuxer's default wrapper for seekable readers, so `Rewind` after a
   prefix scan stays in memory; a larger default window (256 packets) for copy mode.
+- Reserved-bit families as named constants across all descriptor writers; EIT events with
+  a broken BCD marked individually instead of failing the section; the muxer's dead
+  multi-section PAT path, TSID/PMT-PID setters and table CC seeding; a time-based table
+  retransmission period.

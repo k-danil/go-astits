@@ -11,7 +11,7 @@ type Scrambling struct {
 	Mode   uint8  `json:"scrambling_mode"`
 }
 
-func newDescriptorScrambling(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {
+func newDescriptorScrambling(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
 	d := &Scrambling{
 		Header: h,
 	}
@@ -21,6 +21,8 @@ func newDescriptorScrambling(i *bytesiter.Iterator, h Header, _ int) (dd Descrip
 		err = fmt.Errorf("astits: fetching next byte failed: %w", err)
 		return
 	}
+
+	err = rejectTrailingBytes(i, offsetEnd)
 	return
 }
 
@@ -29,5 +31,5 @@ func (d *Scrambling) CalcLength() int {
 }
 
 func (d *Scrambling) Append(dst []byte) []byte {
-	return append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()), d.Mode)
+	return append(dst, uint8(d.Tag()), uint8(d.CalcLength()), d.Mode)
 }

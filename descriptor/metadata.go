@@ -19,6 +19,7 @@ const (
 	metadataDecoderConfigServiceRef     = 0x4
 	metadataDecoderConfigReservedLow    = 0x5
 	metadataDecoderConfigReservedHigh   = 0x6
+	decoderConfigFlagsMask              = 0x7
 )
 
 type Metadata struct {
@@ -53,7 +54,7 @@ func nextMetadataRecord(i *bytesiter.Iterator) (bs []byte, err error) {
 
 func newDescriptorMetadata(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
 	var bs []byte
-	if bs, err = i.NextBytesNoCopy(2); err != nil || len(bs) < 2 {
+	if bs, err = i.NextBytesNoCopy(2); err != nil {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return
 	}
@@ -65,7 +66,7 @@ func newDescriptorMetadata(i *bytesiter.Iterator, h Header, offsetEnd int) (dd D
 	dd = d
 
 	if d.MetadataApplicationFormat == metadataApplicationFormatEscape {
-		if bs, err = i.NextBytesNoCopy(4); err != nil || len(bs) < 4 {
+		if bs, err = i.NextBytesNoCopy(4); err != nil {
 			err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 			return
 		}
@@ -80,7 +81,7 @@ func newDescriptorMetadata(i *bytesiter.Iterator, h Header, offsetEnd int) (dd D
 	d.MetadataFormat = b
 
 	if d.MetadataFormat == metadataFormatEscape {
-		if bs, err = i.NextBytesNoCopy(4); err != nil || len(bs) < 4 {
+		if bs, err = i.NextBytesNoCopy(4); err != nil {
 			err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 			return
 		}
@@ -136,6 +137,11 @@ func newDescriptorMetadata(i *bytesiter.Iterator, h Header, offsetEnd int) (dd D
 	return
 }
 
+// Sizing and writing must branch on the same truncated value or they disagree.
+func (d *Metadata) decoderConfigFlags() uint8 {
+	return d.DecoderConfigFlags & decoderConfigFlagsMask
+}
+
 func (d *Metadata) CalcLength() int {
 	ret := 2
 	if d.MetadataApplicationFormat == metadataApplicationFormatEscape {
@@ -151,7 +157,7 @@ func (d *Metadata) CalcLength() int {
 		ret += 1 + len(d.ServiceIdentificationRecord)
 	}
 
-	switch d.DecoderConfigFlags {
+	switch d.decoderConfigFlags() {
 	case metadataDecoderConfigInDescriptor:
 		ret += 1 + len(d.DecoderConfig)
 	case metadataDecoderConfigIdentification:
@@ -171,7 +177,7 @@ func appendMetadataRecord(dst, record []byte) []byte {
 }
 
 func (d *Metadata) Append(dst []byte) []byte {
-	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	dst = append(dst, uint8(d.Tag()), uint8(d.CalcLength()))
 	dst = append(dst, byte(d.MetadataApplicationFormat>>8), byte(d.MetadataApplicationFormat))
 
 	if d.MetadataApplicationFormat == metadataApplicationFormatEscape {
@@ -184,13 +190,13 @@ func (d *Metadata) Append(dst []byte) []byte {
 	}
 
 	dst = append(dst, d.MetadataServiceID)
-	dst = append(dst, d.DecoderConfigFlags&0x7<<5|util.B2U(d.DSMCCFlag)<<4|0x0f)
+	dst = append(dst, d.decoderConfigFlags()<<5|util.B2U(d.DSMCCFlag)<<4|0x0f)
 
 	if d.DSMCCFlag {
 		dst = appendMetadataRecord(dst, d.ServiceIdentificationRecord)
 	}
 
-	switch d.DecoderConfigFlags {
+	switch d.decoderConfigFlags() {
 	case metadataDecoderConfigInDescriptor:
 		dst = appendMetadataRecord(dst, d.DecoderConfig)
 	case metadataDecoderConfigIdentification:

@@ -63,9 +63,15 @@ func TestEncode(t *testing.T) {
 		{"spacing mark keeps its space", "´", Text{0xc2, ' '}},
 		{"euro takes its DVB position", "€", Text{0xa4}},
 		{"newline becomes the CRLF control", "a\nb", Text{'a', 0x8a, 'b'}},
+		{"newline outside the latin table takes its UTF-8 control form", "日\nb",
+			Text{0x15, 0xe6, 0x97, 0xa5, 0xee, 0x82, 0x8a, 'b'}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			assert.Equal(t, tc.want, Encode(tc.text))
+
+			back, err := tc.want.Decode()
+			require.NoError(t, err)
+			assert.Equal(t, tc.text, back)
 		})
 	}
 }

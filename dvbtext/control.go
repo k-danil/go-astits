@@ -19,6 +19,14 @@ func controlRune(c byte) (r rune, ok bool) {
 	return
 }
 
+// Table A.2: a control code inside a multi-byte table travels as the UTF-8 of its private-use rune, never as the raw byte.
+func controlPUARune(r rune) (pua rune, ok bool) {
+	if r == '\n' {
+		pua, ok = controlPUABase+controlCRLF, true
+	}
+	return
+}
+
 func replaceControlRunes(s string) string {
 	if !strings.ContainsFunc(s, isControlRune) {
 		return s

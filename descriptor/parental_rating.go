@@ -47,6 +47,8 @@ func newDescriptorParentalRating(i *bytesiter.Iterator, h Header, offsetEnd int)
 		d.Items[idx].Rating = bs[3]
 		copy(d.Items[idx].CountryCode[:], bs)
 	}
+
+	err = rejectTrailingBytes(i, offsetEnd)
 	return
 }
 
@@ -55,7 +57,7 @@ func (d *ParentalRating) CalcLength() int {
 }
 
 func (d *ParentalRating) Append(dst []byte) []byte {
-	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	dst = append(dst, uint8(d.Tag()), uint8(d.CalcLength()))
 	for _, item := range d.Items {
 		dst = append(dst, item.CountryCode[:]...)
 		dst = append(dst, item.Rating)

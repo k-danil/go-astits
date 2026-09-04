@@ -17,7 +17,7 @@ func parseCP(i *bytesiter.Iterator, offsetEnd int) (d *CP, err error) {
 	d = &CP{}
 
 	var bs []byte
-	if bs, err = i.NextBytesNoCopy(4); err != nil || len(bs) < 4 {
+	if bs, err = i.NextBytesNoCopy(4); err != nil {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return
 	}

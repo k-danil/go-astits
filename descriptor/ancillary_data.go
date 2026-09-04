@@ -11,7 +11,7 @@ type AncillaryData struct {
 	Identifier uint8  `json:"ancillary_data_identifier"`
 }
 
-func newDescriptorAncillaryData(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {
+func newDescriptorAncillaryData(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
 	d := &AncillaryData{
 		Header: h,
 	}
@@ -21,6 +21,8 @@ func newDescriptorAncillaryData(i *bytesiter.Iterator, h Header, _ int) (dd Desc
 		err = fmt.Errorf("astits: fetching next byte failed: %w", err)
 		return
 	}
+
+	err = rejectTrailingBytes(i, offsetEnd)
 	return
 }
 
@@ -29,5 +31,5 @@ func (d *AncillaryData) CalcLength() int {
 }
 
 func (d *AncillaryData) Append(dst []byte) []byte {
-	return append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()), d.Identifier)
+	return append(dst, uint8(d.Tag()), uint8(d.CalcLength()), d.Identifier)
 }

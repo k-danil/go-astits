@@ -17,9 +17,11 @@ func newDescriptorUnknown(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor
 	}
 	dd = d
 
-	if d.Content, err = i.NextBytes(int(h.Length)); err != nil {
-		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
-		return
+	if h.Length > 0 {
+		if d.Content, err = i.NextBytes(int(h.Length)); err != nil {
+			err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
+			return
+		}
 	}
 	return
 }
@@ -29,6 +31,6 @@ func (d *Unknown) CalcLength() int {
 }
 
 func (d *Unknown) Append(dst []byte) []byte {
-	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	dst = append(dst, uint8(d.Tag()), uint8(d.CalcLength()))
 	return append(dst, d.Content...)
 }

@@ -127,7 +127,7 @@ func (d *EnhancedAC3) CalcLength() int {
 }
 
 func (d *EnhancedAC3) Append(dst []byte) []byte {
-	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	dst = append(dst, uint8(d.Tag()), uint8(d.CalcLength()))
 	dst = append(dst, util.B2U(d.HasComponentType)<<7|util.B2U(d.HasBSID)<<6|util.B2U(d.HasMainID)<<5|util.B2U(d.HasASVC)<<4|
 		util.B2U(d.MixInfoExists)<<3|util.B2U(d.HasSubStream1)<<2|util.B2U(d.HasSubStream2)<<1|util.B2U(d.HasSubStream3))
 

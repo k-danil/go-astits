@@ -16,11 +16,13 @@ type C2DeliverySystem struct {
 	GuardInterval               uint8  `json:"guard_interval"`
 }
 
-func parseC2DeliverySystem(i *bytesiter.Iterator, _ int) (d *C2DeliverySystem, err error) {
+const c2DeliverySystemSize = 7
+
+func parseC2DeliverySystem(i *bytesiter.Iterator, offsetEnd int) (d *C2DeliverySystem, err error) {
 	d = &C2DeliverySystem{}
 
 	var bs []byte
-	if bs, err = i.NextBytesNoCopy(7); err != nil || len(bs) < 7 {
+	if bs, err = i.NextBytesNoCopy(c2DeliverySystemSize); err != nil {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return
 	}
@@ -30,11 +32,13 @@ func parseC2DeliverySystem(i *bytesiter.Iterator, _ int) (d *C2DeliverySystem, e
 	d.C2SystemTuningFrequencyType = bs[6] >> 6 & 0x03
 	d.ActiveOFDMSymbolDuration = bs[6] >> 3 & 0x07
 	d.GuardInterval = bs[6] & 0x07
+
+	err = rejectTrailingBytes(i, offsetEnd)
 	return
 }
 
 func (d *C2DeliverySystem) CalcLength() int {
-	return 7
+	return c2DeliverySystemSize
 }
 
 func (d *C2DeliverySystem) Append(dst []byte) []byte {

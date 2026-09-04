@@ -54,7 +54,7 @@ func decodeLatin(body []byte, m mode) (s string, err error) {
 		switch {
 		case mark != 0:
 			var consumed int
-			if consumed, err = writeComposed(&b, mark, latinSpacingMarks[c-markMin], body[i+1:], m); err != nil {
+			if consumed, err = writeComposed(&b, c, body[i+1:], m); err != nil {
 				return
 			}
 			i += consumed
@@ -78,7 +78,7 @@ func decodeLatin(body []byte, m mode) (s string, err error) {
 	return
 }
 
-func writeComposed(b *strings.Builder, mark, spacing rune, rest []byte, m mode) (consumed int, err error) {
+func writeComposed(b *strings.Builder, markCode byte, rest []byte, m mode) (consumed int, err error) {
 	if len(rest) == 0 {
 		if m == strict {
 			err = ErrInvalidText
@@ -86,11 +86,12 @@ func writeComposed(b *strings.Builder, mark, spacing rune, rest []byte, m mode) 
 		return
 	}
 
+	mark := latinMarks[markCode-markMin]
 	base := rest[0]
 	switch {
 	case base == ' ':
 		consumed = 1
-		if spacing != 0 {
+		if spacing := latinSpacingMarks[markCode-markMin]; spacing != 0 {
 			b.WriteRune(spacing)
 			return
 		}
@@ -98,7 +99,12 @@ func writeComposed(b *strings.Builder, mark, spacing rune, rest []byte, m mode) 
 		b.WriteRune(mark)
 	case base > ' ' && base <= asciiMax:
 		consumed = 1
-		b.WriteString(norm.NFC.String(string([]rune{rune(base), mark})))
+		if r, ok := latinComposed()[markBase(markCode, base)]; ok {
+			b.WriteRune(r)
+			return
+		}
+		b.WriteByte(base)
+		b.WriteRune(mark)
 	default:
 		if m == strict {
 			err = ErrInvalidText
@@ -107,8 +113,26 @@ func writeComposed(b *strings.Builder, mark, spacing rune, rest []byte, m mode) 
 	return
 }
 
+// Decoding a diacritic is a lookup, not an NFC pass.
+var latinComposed = sync.OnceValue(func() map[uint16]rune {
+	const composed = 1
+
+	m := make(map[uint16]rune)
+	for i, mark := range latinMarks {
+		if mark == 0 {
+			continue
+		}
+		for base := byte(asciiMin + 1); base <= asciiMax; base++ {
+			if rs := []rune(norm.NFC.String(string([]rune{rune(base), mark}))); len(rs) == composed {
+				m[markBase(byte(markMin+i), base)] = rs[0]
+			}
+		}
+	}
+	return m
+})
+
 var latinReverse = sync.OnceValue(func() map[rune]uint16 {
-	m := make(map[rune]uint16, len(latinHigh)+len(latinSpacingMarks))
+	m := make(map[rune]uint16, len(latinHigh)+len(latinSpacingMarks)+len(latinComposed()))
 	for i, r := range latinHigh {
 		if r != 0 {
 			m[r] = uint16(highMin + i)
@@ -117,6 +141,11 @@ var latinReverse = sync.OnceValue(func() map[rune]uint16 {
 	for i, r := range latinSpacingMarks {
 		if r != 0 {
 			m[r] = markBase(byte(markMin+i), ' ')
+		}
+	}
+	for code, r := range latinComposed() {
+		if _, ok := m[r]; !ok {
+			m[r] = code
 		}
 	}
 	return m
@@ -135,10 +164,8 @@ func encodeLatin(s string) (t Text, ok bool) {
 		default:
 			code, found := rev[r]
 			if !found {
-				if code, found = decomposeLatin(r); !found {
-					t = nil
-					return
-				}
+				t = nil
+				return
 			}
 			if code > 0xff {
 				t = append(t, byte(code>>8))
@@ -152,20 +179,3 @@ func encodeLatin(s string) (t Text, ok bool) {
 }
 
 func markBase(mark, base byte) uint16 { return uint16(mark)<<8 | uint16(base) }
-
-func decomposeLatin(r rune) (code uint16, ok bool) {
-	const composed = 2
-
-	rs := []rune(norm.NFD.String(string(r)))
-	if len(rs) != composed || rs[0] < asciiMin || rs[0] > asciiMax {
-		return
-	}
-
-	for i, mark := range latinMarks {
-		if mark != 0 && mark == rs[1] {
-			code, ok = markBase(byte(markMin+i), byte(rs[0])), true
-			return
-		}
-	}
-	return
-}

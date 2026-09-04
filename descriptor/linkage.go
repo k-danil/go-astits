@@ -77,7 +77,7 @@ func newDescriptorLinkage(i *bytesiter.Iterator, h Header, offsetEnd int) (dd De
 	dd = d
 
 	var bs []byte
-	if bs, err = i.NextBytesNoCopy(7); err != nil || len(bs) < 7 {
+	if bs, err = i.NextBytesNoCopy(7); err != nil {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return
 	}
@@ -98,7 +98,7 @@ func (d *Linkage) CalcLength() int {
 }
 
 func (d *Linkage) Append(dst []byte) []byte {
-	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	dst = append(dst, uint8(d.Tag()), uint8(d.CalcLength()))
 	dst = append(dst,
 		byte(d.TransportStreamID>>8), byte(d.TransportStreamID),
 		byte(d.OriginalNetworkID>>8), byte(d.OriginalNetworkID),

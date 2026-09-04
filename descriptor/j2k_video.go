@@ -25,7 +25,7 @@ type J2KVideo struct {
 
 func newDescriptorJ2KVideo(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
 	var bs []byte
-	if bs, err = i.NextBytesNoCopy(24); err != nil || len(bs) < 24 {
+	if bs, err = i.NextBytesNoCopy(24); err != nil {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return
 	}
@@ -59,7 +59,7 @@ func (d *J2KVideo) CalcLength() int {
 }
 
 func (d *J2KVideo) Append(dst []byte) []byte {
-	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	dst = append(dst, uint8(d.Tag()), uint8(d.CalcLength()))
 	dst = append(dst,
 		byte(d.ProfileAndLevel>>8), byte(d.ProfileAndLevel),
 		byte(d.HorizontalSize>>24), byte(d.HorizontalSize>>16), byte(d.HorizontalSize>>8), byte(d.HorizontalSize),

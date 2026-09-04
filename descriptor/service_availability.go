@@ -29,12 +29,14 @@ func newDescriptorServiceAvailability(i *bytesiter.Iterator, h Header, offsetEnd
 	d.CellIDs = make([]uint16, (offsetEnd-i.Offset())/2)
 	for idx := range d.CellIDs {
 		var bs []byte
-		if bs, err = i.NextBytesNoCopy(2); err != nil || len(bs) < 2 {
+		if bs, err = i.NextBytesNoCopy(2); err != nil {
 			err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 			return
 		}
 		d.CellIDs[idx] = binary.BigEndian.Uint16(bs)
 	}
+
+	err = rejectTrailingBytes(i, offsetEnd)
 	return
 }
 
@@ -43,7 +45,7 @@ func (d *ServiceAvailability) CalcLength() int {
 }
 
 func (d *ServiceAvailability) Append(dst []byte) []byte {
-	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	dst = append(dst, uint8(d.Tag()), uint8(d.CalcLength()))
 	b := byte(0x7f)
 	if d.AvailabilityFlag {
 		b |= 0x80

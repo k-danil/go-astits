@@ -11,7 +11,7 @@ type StreamIdentifier struct {
 	ComponentTag uint8  `json:"component_tag"`
 }
 
-func newDescriptorStreamIdentifier(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {
+func newDescriptorStreamIdentifier(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
 	var b byte
 	if b, err = i.NextByte(); err != nil {
 		err = fmt.Errorf("astits: fetching next byte failed: %w", err)
@@ -22,14 +22,16 @@ func newDescriptorStreamIdentifier(i *bytesiter.Iterator, h Header, _ int) (dd D
 		ComponentTag: b,
 	}
 	dd = d
+
+	err = rejectTrailingBytes(i, offsetEnd)
 	return
 }
 
-func (*StreamIdentifier) CalcLength() int {
+func (d *StreamIdentifier) CalcLength() int {
 	return 1
 }
 
 func (d *StreamIdentifier) Append(dst []byte) []byte {
-	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	dst = append(dst, uint8(d.Tag()), uint8(d.CalcLength()))
 	return append(dst, d.ComponentTag)
 }

@@ -3,6 +3,7 @@ package demux
 import (
 	"bytes"
 	"encoding/binary"
+	"math/bits"
 
 	"github.com/k-danil/go-astits/v3/internal/pidmap"
 	"github.com/k-danil/go-astits/v3/psi"
@@ -37,11 +38,12 @@ type pidSlot struct {
 
 	psiScan int
 
-	sticky  uint8
-	started bool
-	isPSI   bool
-	sawPES  bool
-	packets uint64
+	sticky   uint8
+	started  bool
+	headless bool
+	isPSI    bool
+	sawPES   bool
+	packets  uint64
 }
 
 type accumulator struct {
@@ -81,6 +83,7 @@ type unit struct {
 	cc        uint8
 	pid       uint16
 	isPSI     bool
+	headless  bool
 	truncated bool
 }
 
@@ -181,8 +184,9 @@ func (a *accumulator) add(p *ts.Packet, out []unit) []unit {
 		}
 		a.startUnit(slot, p)
 	} else if !slot.started {
-		// A headless prefix (joined mid-unit) accumulates too; the parse stage rejects it if it is garbage.
+		// Joined past its start indicator: accumulated only to be counted.
 		a.startUnit(slot, p)
+		slot.headless = true
 	}
 	// After finish/start: a tear inside finish clears seenPacket, and the
 	// unit this packet opens must still see its own repeat
@@ -201,7 +205,7 @@ func (a *accumulator) add(p *ts.Packet, out []unit) []unit {
 	slot.lastOffset = p.Offset
 	slot.lastTag = p.Tag
 
-	if slot.isPSI && slot.psiComplete() {
+	if slot.isPSI && !slot.headless && slot.psiComplete() {
 		if u, ok := a.finish(slot, p.Header.PID, p.Offset); ok {
 			out = append(out, u)
 		}
@@ -280,6 +284,7 @@ func (a *accumulator) tear(slot *pidSlot, pid uint16, offset int64, reason error
 
 func (s *pidSlot) start(p *ts.Packet, isPSI bool, limit int) {
 	s.started = true
+	s.headless = false
 	s.isPSI = isPSI
 	s.firstCC = p.Header.ContinuityCounter
 	s.firstOffset = p.Offset
@@ -330,10 +335,10 @@ func (s *pidSlot) flush(pid uint16) (u unit, ok bool) {
 		return
 	}
 	s.sticky = maxClass(s.sticky, classOf(len(s.buf.bs)))
-	if !s.isPSI {
+	if !s.isPSI && !s.headless {
 		s.sawPES = true
 	}
-	u = unit{buf: s.buf, cc: s.firstCC, pid: pid, isPSI: s.isPSI, PacketSpan: PacketSpan{
+	u = unit{buf: s.buf, cc: s.firstCC, pid: pid, isPSI: s.isPSI, headless: s.headless, PacketSpan: PacketSpan{
 		FirstPacketOffset: s.firstOffset, LastPacketOffset: s.lastOffset,
 		FirstPacketTag: s.firstTag, LastPacketTag: s.lastTag,
 	}}
@@ -407,11 +412,10 @@ func (a *accumulator) close() {
 }
 
 func classOf(size int) uint8 {
-	var c uint8
-	for s := 1 << 10; s < size; s <<= 1 {
-		c++
+	if size <= 1<<classShift {
+		return 0
 	}
-	return c
+	return uint8(bits.Len(uint(size-1)) - classShift)
 }
 
 func maxClass(a, b uint8) uint8 {

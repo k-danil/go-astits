@@ -21,9 +21,9 @@ type MVCExtension struct {
 	NoPrefixNALUnitPresent    bool   `json:"no_prefix_nal_unit_present"`
 }
 
-func newDescriptorMVCExtension(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {
+func newDescriptorMVCExtension(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
 	var bs []byte
-	if bs, err = i.NextBytesNoCopy(8); err != nil || len(bs) < 8 {
+	if bs, err = i.NextBytesNoCopy(8); err != nil {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return
 	}
@@ -42,15 +42,17 @@ func newDescriptorMVCExtension(i *bytesiter.Iterator, h Header, _ int) (dd Descr
 		NoPrefixNALUnitPresent:    bs[7]&0x01 > 0,
 	}
 	dd = d
+
+	err = rejectTrailingBytes(i, offsetEnd)
 	return
 }
 
-func (*MVCExtension) CalcLength() int {
+func (d *MVCExtension) CalcLength() int {
 	return 8
 }
 
 func (d *MVCExtension) Append(dst []byte) []byte {
-	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	dst = append(dst, uint8(d.Tag()), uint8(d.CalcLength()))
 	dst = append(dst, byte(d.AverageBitrate>>8), byte(d.AverageBitrate))
 	dst = append(dst, byte(d.MaximumBitrate>>8), byte(d.MaximumBitrate))
 
@@ -60,6 +62,5 @@ func (d *MVCExtension) Append(dst []byte) []byte {
 	dst = append(dst, util.B2U(d.ViewAssociationNotPresent)<<7|util.B2U(d.BaseViewIsLeftEyeview)<<6|0x3<<4|byte(vMin>>6)&0x0f)
 	dst = append(dst, byte(vMin&0x3f)<<2|byte(vMax>>8)&0x3)
 	dst = append(dst, byte(vMax))
-	dst = append(dst, d.TemporalIDStart&0x7<<5|d.TemporalIDEnd&0x7<<2|util.B2U(d.NoSEINALUnitPresent)<<1|util.B2U(d.NoPrefixNALUnitPresent))
-	return dst
+	return append(dst, d.TemporalIDStart&0x7<<5|d.TemporalIDEnd&0x7<<2|util.B2U(d.NoSEINALUnitPresent)<<1|util.B2U(d.NoPrefixNALUnitPresent))
 }

@@ -19,7 +19,7 @@ type VideoStream struct {
 	FrameRateExtension        bool   `json:"frame_rate_extension_flag"`
 }
 
-func newDescriptorVideoStream(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {
+func newDescriptorVideoStream(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
 	var b byte
 	if b, err = i.NextByte(); err != nil {
 		err = fmt.Errorf("astits: fetching next byte failed: %w", err)
@@ -38,7 +38,7 @@ func newDescriptorVideoStream(i *bytesiter.Iterator, h Header, _ int) (dd Descri
 
 	if !d.MPEG1Only {
 		var bs []byte
-		if bs, err = i.NextBytesNoCopy(2); err != nil || len(bs) < 2 {
+		if bs, err = i.NextBytesNoCopy(2); err != nil {
 			err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 			return
 		}
@@ -46,6 +46,8 @@ func newDescriptorVideoStream(i *bytesiter.Iterator, h Header, _ int) (dd Descri
 		d.ChromaFormat = bs[1] >> 6 & 0x03
 		d.FrameRateExtension = bs[1]&0x20 > 0
 	}
+
+	err = rejectTrailingBytes(i, offsetEnd)
 	return
 }
 
@@ -57,7 +59,7 @@ func (d *VideoStream) CalcLength() int {
 }
 
 func (d *VideoStream) Append(dst []byte) []byte {
-	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	dst = append(dst, uint8(d.Tag()), uint8(d.CalcLength()))
 	dst = append(dst, util.B2U(d.MultipleFrameRate)<<7|d.FrameRateCode&0x0f<<3|util.B2U(d.MPEG1Only)<<2|util.B2U(d.ConstrainedParameter)<<1|util.B2U(d.StillPicture))
 
 	if !d.MPEG1Only {

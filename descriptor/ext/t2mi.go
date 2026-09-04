@@ -17,7 +17,7 @@ func parseT2MI(i *bytesiter.Iterator, offsetEnd int) (d *T2MI, err error) {
 	d = &T2MI{}
 
 	var bs []byte
-	if bs, err = i.NextBytesNoCopy(3); err != nil || len(bs) < 3 {
+	if bs, err = i.NextBytesNoCopy(3); err != nil {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return
 	}
@@ -25,9 +25,11 @@ func parseT2MI(i *bytesiter.Iterator, offsetEnd int) (d *T2MI, err error) {
 	d.NumT2MIStreamsMinusOne = bs[1] & 0x07
 	d.PCRISCRCommonClockFlag = bs[2]&0x01 > 0
 
-	if d.Reserved, err = i.NextBytes(offsetEnd - i.Offset()); err != nil {
-		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
-		return
+	// Table 158 closes the body with a reserved_zero_future_use loop, so this tail is data where other bodies reject it.
+	if offsetEnd > i.Offset() {
+		if d.Reserved, err = i.NextBytes(offsetEnd - i.Offset()); err != nil {
+			err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
+		}
 	}
 	return
 }

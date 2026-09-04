@@ -45,7 +45,7 @@ func (d *IOD) CalcLength() int {
 }
 
 func (d *IOD) Append(dst []byte) []byte {
-	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	dst = append(dst, uint8(d.Tag()), uint8(d.CalcLength()))
 	dst = append(dst, d.ScopeOfIODLabel, d.IODLabel)
 	return append(dst, d.InitialObjectDescriptor...)
 }

@@ -14,7 +14,7 @@ type FTAContentManagement struct {
 	DoNotApplyRevocation            bool   `json:"do_not_apply_revocation"`
 }
 
-func newDescriptorFTAContentManagement(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {
+func newDescriptorFTAContentManagement(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
 	d := &FTAContentManagement{
 		Header: h,
 	}
@@ -29,6 +29,8 @@ func newDescriptorFTAContentManagement(i *bytesiter.Iterator, h Header, _ int) (
 	d.DoNotScramble = b&0x08 > 0
 	d.ControlRemoteAccessOverInternet = b >> 1 & 0x03
 	d.DoNotApplyRevocation = b&0x01 > 0
+
+	err = rejectTrailingBytes(i, offsetEnd)
 	return
 }
 
@@ -47,5 +49,5 @@ func (d *FTAContentManagement) Append(dst []byte) []byte {
 	if d.DoNotApplyRevocation {
 		b |= 0x01
 	}
-	return append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()), b)
+	return append(dst, uint8(d.Tag()), uint8(d.CalcLength()), b)
 }

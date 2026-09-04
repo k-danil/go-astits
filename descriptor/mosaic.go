@@ -83,7 +83,7 @@ func newDescriptorMosaic(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Des
 	for i.Offset() < offsetEnd {
 		var cell MosaicCell
 		var bs []byte
-		if bs, err = i.NextBytesNoCopy(2); err != nil || len(bs) < 2 {
+		if bs, err = i.NextBytesNoCopy(2); err != nil {
 			err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 			return
 		}
@@ -122,7 +122,7 @@ func readMosaicLinkage(i *bytesiter.Iterator, cell *MosaicCell) (err error) {
 		return
 	}
 	var bs []byte
-	if bs, err = i.NextBytesNoCopy(n); err != nil || len(bs) < n {
+	if bs, err = i.NextBytesNoCopy(n); err != nil {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return
 	}
@@ -163,7 +163,7 @@ func (d *Mosaic) CalcLength() (n int) {
 }
 
 func (d *Mosaic) Append(dst []byte) []byte {
-	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	dst = append(dst, uint8(d.Tag()), uint8(d.CalcLength()))
 	b := byte(0x08) | d.NumberOfHorizontalElementaryCells&0x07<<4 | d.NumberOfVerticalElementaryCells&0x07
 	if d.MosaicEntryPoint {
 		b |= 0x80

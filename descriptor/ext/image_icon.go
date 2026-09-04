@@ -51,9 +51,18 @@ type ImageIcon struct {
 	PositionFlag         bool                   `json:"position_flag"`
 }
 
-func parseImageIcon(i *bytesiter.Iterator, _ int) (d *ImageIcon, err error) {
+func parseImageIcon(i *bytesiter.Iterator, offsetEnd int) (d *ImageIcon, err error) {
 	d = &ImageIcon{}
 
+	if err = d.parseBody(i); err != nil {
+		return
+	}
+
+	err = rejectTrailingBytes(i, offsetEnd)
+	return
+}
+
+func (d *ImageIcon) parseBody(i *bytesiter.Iterator) (err error) {
 	var b byte
 	if b, err = i.NextByte(); err != nil {
 		err = fmt.Errorf("astits: fetching next byte failed: %w", err)
@@ -69,7 +78,7 @@ func parseImageIcon(i *bytesiter.Iterator, _ int) (d *ImageIcon, err error) {
 	d.IconID = b & 0x07
 
 	if d.DescriptorNumber != 0 {
-		return d, readLengthPrefixed(i, &d.IconData)
+		return readLengthPrefixed(i, &d.IconData)
 	}
 
 	if b, err = i.NextByte(); err != nil {
@@ -82,7 +91,7 @@ func parseImageIcon(i *bytesiter.Iterator, _ int) (d *ImageIcon, err error) {
 	if d.PositionFlag {
 		d.CoordinateSystem = b >> 2 & 0x07
 		var bs []byte
-		if bs, err = i.NextBytesNoCopy(3); err != nil || len(bs) < 3 {
+		if bs, err = i.NextBytesNoCopy(iconOriginSize); err != nil {
 			err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 			return
 		}
@@ -100,6 +109,8 @@ func parseImageIcon(i *bytesiter.Iterator, _ int) (d *ImageIcon, err error) {
 	}
 	return
 }
+
+const iconOriginSize = 3
 
 func readLengthPrefixed(i *bytesiter.Iterator, dst *[]byte) (err error) {
 	var b byte
@@ -121,7 +132,7 @@ func (d *ImageIcon) CalcLength() (n int) {
 	}
 	n++
 	if d.PositionFlag {
-		n += 3
+		n += iconOriginSize
 	}
 	n += 1 + len(d.IconType)
 	if d.IconTransportMode == ImageIconTransportModeInline || d.IconTransportMode == ImageIconTransportModeURL {

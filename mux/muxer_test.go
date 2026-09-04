@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -59,12 +60,14 @@ func TestMuxer_generatePAT(t *testing.T) {
 
 	err := muxer.generatePAT()
 	require.NoError(t, err)
+	patchContinuityCounters(muxer.patBytes.Bytes(), &muxer.patCC)
 	assert.Equal(t, ts.PacketSize, muxer.patBytes.Len())
 	assert.Equal(t, patExpectedBytes(0, 0), muxer.patBytes.Bytes())
 
 	// Version number shouldn't change
 	err = muxer.generatePAT()
 	require.NoError(t, err)
+	patchContinuityCounters(muxer.patBytes.Bytes(), &muxer.patCC)
 	assert.Equal(t, ts.PacketSize, muxer.patBytes.Len())
 	assert.Equal(t, patExpectedBytes(0, 1), muxer.patBytes.Bytes())
 
@@ -72,6 +75,7 @@ func TestMuxer_generatePAT(t *testing.T) {
 	muxer.pmUpdated = true
 	err = muxer.generatePAT()
 	require.NoError(t, err)
+	patchContinuityCounters(muxer.patBytes.Bytes(), &muxer.patCC)
 	assert.Equal(t, ts.PacketSize, muxer.patBytes.Len())
 	assert.Equal(t, patExpectedBytes(1, 2), muxer.patBytes.Bytes())
 }
@@ -177,12 +181,14 @@ func TestMuxer_generatePMT(t *testing.T) {
 
 	err = muxer.generatePMT()
 	require.NoError(t, err)
+	patchContinuityCounters(muxer.pmtBytes.Bytes(), &muxer.pmtCC)
 	assert.Equal(t, ts.PacketSize, muxer.pmtBytes.Len())
 	assert.Equal(t, pmtExpectedBytesVideoOnly(0, 0), muxer.pmtBytes.Bytes())
 
 	// Version number shouldn't change
 	err = muxer.generatePMT()
 	require.NoError(t, err)
+	patchContinuityCounters(muxer.pmtBytes.Bytes(), &muxer.pmtCC)
 	assert.Equal(t, ts.PacketSize, muxer.pmtBytes.Len())
 	assert.Equal(t, pmtExpectedBytesVideoOnly(0, 1), muxer.pmtBytes.Bytes())
 
@@ -195,6 +201,7 @@ func TestMuxer_generatePMT(t *testing.T) {
 	// Version number should change
 	err = muxer.generatePMT()
 	require.NoError(t, err)
+	patchContinuityCounters(muxer.pmtBytes.Bytes(), &muxer.pmtCC)
 	assert.Equal(t, ts.PacketSize, muxer.pmtBytes.Len())
 	assert.Equal(t, pmtExpectedBytesVideoAndAudio(1, 2), muxer.pmtBytes.Bytes())
 }
@@ -290,6 +297,169 @@ func TestMuxer_WriteDataFatAdaptationField(t *testing.T) {
 		assert.Equal(t, payload, got.Data.Data)
 		return
 	}
+}
+
+func packetsOn(t *testing.T, stream []byte, pid uint16) (out [][]byte) {
+	t.Helper()
+	require.Zero(t, len(stream)%ts.PacketSize)
+	for off := 0; off+ts.PacketSize <= len(stream); off += ts.PacketSize {
+		pkt := stream[off : off+ts.PacketSize]
+		var h ts.PacketHeader
+		_, err := h.Parse(pkt)
+		require.NoError(t, err)
+		if h.PID == pid {
+			out = append(out, pkt)
+		}
+	}
+	return
+}
+
+func writeVideoUnit(t *testing.T, m *Muxer, pid uint16, af *ts.PacketAdaptationField, data *pes.Data) {
+	t.Helper()
+	_, err := m.WriteData(&Data{PID: pid, AdaptationField: af, PES: data})
+	require.NoError(t, err)
+}
+
+func newVideoMuxer(t *testing.T, w io.Writer, pid uint16) (m *Muxer) {
+	t.Helper()
+	m = New(context.Background(), w)
+	require.NoError(t, m.AddElementaryStream(psi.ElementaryStream{ElementaryPID: pid, StreamType: psi.StreamTypeH264Video}))
+	m.SetPCRPID(pid)
+	return
+}
+
+// A remuxed adaptation field carries its sender's stuffing: without re-measuring
+// it the packet declares one length and the PES header starts at another.
+func TestMuxer_WriteDataRemuxedAdaptationField(t *testing.T) {
+	const pid = 0x100
+	payload := make([]byte, 100)
+	for i := range payload {
+		payload[i] = byte(i)
+	}
+	pcr := ts.NewClockReference(90000, 0)
+	unit := func() *pes.Data {
+		return &pes.Data{
+			Data:   payload,
+			Header: pes.Header{OptionalHeader: &pes.OptionalHeader{PTS: pcr, PTSDTSIndicator: pes.PTSDTSIndicatorOnlyPTS}},
+		}
+	}
+
+	src := &bytes.Buffer{}
+	m := newVideoMuxer(t, src, pid)
+	writeVideoUnit(t, m, pid, &ts.PacketAdaptationField{HasPCR: true, PCR: pcr, RandomAccessIndicator: true}, unit())
+	writeVideoUnit(t, m, pid, &ts.PacketAdaptationField{HasPCR: true, PCR: pcr, RandomAccessIndicator: true}, unit())
+
+	dmx := demux.New(context.Background(), bytes.NewReader(src.Bytes()), demux.WithPacketSize(ts.PacketSize))
+	var got *demux.PES
+	for got == nil {
+		ev, derr := dmx.Next()
+		require.NoError(t, derr, "PES unit not emitted before EOF")
+		if ev == demux.EventPES {
+			got = dmx.PES()
+		}
+	}
+	require.NotNil(t, got.AdaptationField)
+	require.NotZero(t, got.AdaptationField.StuffingLength, "the parsed field reports the sender's stuffing")
+
+	out := &bytes.Buffer{}
+	m2 := newVideoMuxer(t, out, pid)
+	writeVideoUnit(t, m2, pid, got.AdaptationField, &got.Data)
+
+	first := packetsOn(t, out.Bytes(), pid)[0]
+	afLen := int(first[ts.HeaderSize])
+	assert.Equal(t, []byte{0x00, 0x00, 0x01}, first[ts.HeaderSize+1+afLen:ts.HeaderSize+4+afLen],
+		"the PES header starts right after the declared adaptation field")
+}
+
+// A field that cannot share its packet with any payload is refused instead of
+// driving the layout arithmetic negative.
+func TestMuxer_WriteDataAdaptationFieldTooLong(t *testing.T) {
+	const pid = 0x100
+	m := newVideoMuxer(t, &bytes.Buffer{}, pid)
+	_, err := m.WriteData(&Data{
+		PID: pid,
+		AdaptationField: &ts.PacketAdaptationField{
+			HasTransportPrivateData: true,
+			TransportPrivateData:    make([]byte, 250),
+		},
+		PES: &pes.Data{Data: []byte{0x01}, Header: pes.Header{
+			StreamID:       0xe0,
+			OptionalHeader: &pes.OptionalHeader{PTS: ts.NewClockReference(90000, 0), PTSDTSIndicator: pes.PTSDTSIndicatorOnlyPTS},
+		}},
+	})
+	require.ErrorIs(t, err, ErrAdaptationFieldTooLong)
+}
+
+type failFirstWriter struct {
+	w      io.Writer
+	failed bool
+}
+
+var errWriteRefused = errors.New("write refused")
+
+func (w *failFirstWriter) Write(p []byte) (n int, err error) {
+	if !w.failed {
+		w.failed = true
+		return 0, errWriteRefused
+	}
+	return w.w.Write(p)
+}
+
+func TestWriteTablesKeepsCCWhenTheWriteFails(t *testing.T) {
+	const pid = 0x100
+	out := &bytes.Buffer{}
+	m := newVideoMuxer(t, &failFirstWriter{w: out}, pid)
+
+	_, err := m.WriteTables()
+	require.ErrorIs(t, err, errWriteRefused)
+	require.Zero(t, out.Len())
+
+	_, err = m.WriteTables()
+	require.NoError(t, err)
+
+	for _, tablePID := range []uint16{ts.PIDPAT, pmtStartPID} {
+		pkts := packetsOn(t, out.Bytes(), tablePID)
+		require.Len(t, pkts, 1)
+		var h ts.PacketHeader
+		_, err = h.Parse(pkts[0])
+		require.NoError(t, err)
+		assert.Zero(t, h.ContinuityCounter, "PID %#x", tablePID)
+	}
+}
+
+// H.222.0 2.4.3.3: a packet with an adaptation field and no payload repeats the
+// continuity counter; advancing it there reads as a gap at the decoder.
+func TestMuxer_WriteDataAdaptationFieldOnlyKeepsCC(t *testing.T) {
+	const pid = 0x100
+	// 1 flags byte + 6 PCR + 1 length byte + private data = 183, the whole packet body.
+	priv := make([]byte, packetMaxPayload-9)
+	pcr := ts.NewClockReference(90000, 0)
+
+	out := &bytes.Buffer{}
+	m := newVideoMuxer(t, out, pid)
+	writeVideoUnit(t, m, pid, &ts.PacketAdaptationField{
+		HasPCR: true, PCR: pcr,
+		HasTransportPrivateData: true, TransportPrivateData: priv,
+	}, &pes.Data{
+		Data:   make([]byte, 200),
+		Header: pes.Header{OptionalHeader: &pes.OptionalHeader{PTS: pcr, PTSDTSIndicator: pes.PTSDTSIndicatorOnlyPTS}},
+	})
+
+	pkts := packetsOn(t, out.Bytes(), pid)
+	require.GreaterOrEqual(t, len(pkts), 3)
+	type state struct {
+		hasPayload bool
+		cc         uint8
+	}
+	var got []state
+	for _, pkt := range pkts {
+		var h ts.PacketHeader
+		_, err := h.Parse(pkt)
+		require.NoError(t, err)
+		got = append(got, state{hasPayload: h.HasPayload, cc: h.ContinuityCounter})
+	}
+	require.False(t, got[0].hasPayload, "the field fills the first packet on its own")
+	assert.Equal(t, []state{{false, 0}, {true, 0}, {true, 1}}, got[:3])
 }
 
 func BenchmarkMuxWriteDataToBuffer(b *testing.B) {

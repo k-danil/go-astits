@@ -22,7 +22,7 @@ func parseMessage(i *bytesiter.Iterator, offsetEnd int) (d *Message, err error) 
 	}
 
 	var bs []byte
-	if bs, err = i.NextBytesNoCopy(3); err != nil || len(bs) < 3 {
+	if bs, err = i.NextBytesNoCopy(3); err != nil {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return
 	}

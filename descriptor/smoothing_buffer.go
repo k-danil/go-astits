@@ -12,9 +12,9 @@ type SmoothingBuffer struct {
 	Header     Header `json:"_header"`
 }
 
-func newDescriptorSmoothingBuffer(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {
+func newDescriptorSmoothingBuffer(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
 	var bs []byte
-	if bs, err = i.NextBytesNoCopy(6); err != nil || len(bs) < 6 {
+	if bs, err = i.NextBytesNoCopy(6); err != nil {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return
 	}
@@ -25,15 +25,17 @@ func newDescriptorSmoothingBuffer(i *bytesiter.Iterator, h Header, _ int) (dd De
 		SbSize:     uint32(bs[3]&0x3f)<<16 | uint32(bs[4])<<8 | uint32(bs[5]),
 	}
 	dd = d
+
+	err = rejectTrailingBytes(i, offsetEnd)
 	return
 }
 
-func (*SmoothingBuffer) CalcLength() int {
+func (d *SmoothingBuffer) CalcLength() int {
 	return 6
 }
 
 func (d *SmoothingBuffer) Append(dst []byte) []byte {
-	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	dst = append(dst, uint8(d.Tag()), uint8(d.CalcLength()))
 	dst = append(dst, 0xc0|byte(d.SbLeakRate>>16)&0x3f, byte(d.SbLeakRate>>8), byte(d.SbLeakRate))
 	return append(dst, 0xc0|byte(d.SbSize>>16)&0x3f, byte(d.SbSize>>8), byte(d.SbSize))
 }

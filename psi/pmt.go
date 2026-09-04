@@ -270,7 +270,7 @@ func (t StreamType) ToPESStreamID() pes.StreamID {
 	case StreamTypeMPEG1Audio, StreamTypeMPEG2Audio, StreamTypeAACAudio, StreamTypeAACLATMAudio, StreamTypeMPEG4Audio:
 		return 0xc0
 	case StreamTypeAC3Audio, StreamTypeEAC3Audio:
-		return 0xfd
+		return pes.StreamIDPrivateStream1
 	case StreamTypePrivateSection, StreamTypePrivateData, StreamTypeMetadata:
 		return 0xfc
 	default:

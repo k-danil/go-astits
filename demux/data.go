@@ -103,6 +103,14 @@ func tableEventKind(d psi.SectionSyntaxData) (ev Event, ok bool) {
 
 func (dmx *Demuxer) processUnit(u unit) (emitted *PES, err error) {
 	switch {
+	case u.headless:
+		if dmx.optRecoverable {
+			dmx.reportRecoverable(ts.RecoverableError{
+				Kind: ts.ErrorKindTornUnit, PID: u.pid, Offset: u.LastPacketOffset,
+				Dropped: int64(len(u.buf.bs)), Err: ts.ErrHeadlessUnit,
+			})
+		}
+		poolOfPayload.put(u.buf)
 	case u.isPSI:
 		dmx.processPSI(u)
 	case isPESPayload(u.buf.bs):
@@ -129,7 +137,7 @@ func (dmx *Demuxer) processUnit(u unit) (emitted *PES, err error) {
 		}
 		d.Truncated = u.truncated && pesTruncated(&d.Data, len(u.buf.bs))
 		d.PacketSpan = u.PacketSpan
-		if dmx.optRecoverable && d.Data.Header.PacketLength == 0 && !unboundedAllowed(d.Data.Header.StreamID) {
+		if dmx.optRecoverable && d.Data.Header.PacketLength == 0 && !pes.AllowsUnboundedLength(d.Data.Header.StreamID) {
 			dmx.reportRecoverable(ts.RecoverableError{
 				Kind: ts.ErrorKindPES, PID: u.pid, Offset: u.LastPacketOffset, Err: pes.ErrUnboundedNonVideo,
 			})
@@ -152,17 +160,6 @@ func (dmx *Demuxer) processUnit(u unit) (emitted *PES, err error) {
 		poolOfPayload.put(u.buf)
 	}
 	return nil, nil
-}
-
-const (
-	pesStreamIDVideoMask = 0xf0
-	pesStreamIDVideo     = 0xe0
-	pesStreamIDExtended  = 0xfd
-)
-
-// §2.4.3.7 allows length 0 for video only; the extended id also carries VC-1/Dirac video, so it is not reported.
-func unboundedAllowed(id pes.StreamID) bool {
-	return id&pesStreamIDVideoMask == pesStreamIDVideo || id == pesStreamIDExtended
 }
 
 func pesTruncated(d *pes.Data, n int) bool {

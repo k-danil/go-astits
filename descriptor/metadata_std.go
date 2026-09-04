@@ -13,9 +13,9 @@ type MetadataSTD struct {
 	Header         Header `json:"_header"`
 }
 
-func newDescriptorMetadataSTD(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {
+func newDescriptorMetadataSTD(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
 	var bs []byte
-	if bs, err = i.NextBytesNoCopy(9); err != nil || len(bs) < 9 {
+	if bs, err = i.NextBytesNoCopy(9); err != nil {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return
 	}
@@ -27,15 +27,17 @@ func newDescriptorMetadataSTD(i *bytesiter.Iterator, h Header, _ int) (dd Descri
 		OutputLeakRate: uint32(bs[6]&0x3f)<<16 | uint32(bs[7])<<8 | uint32(bs[8]),
 	}
 	dd = d
+
+	err = rejectTrailingBytes(i, offsetEnd)
 	return
 }
 
-func (*MetadataSTD) CalcLength() int {
+func (d *MetadataSTD) CalcLength() int {
 	return 9
 }
 
 func (d *MetadataSTD) Append(dst []byte) []byte {
-	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	dst = append(dst, uint8(d.Tag()), uint8(d.CalcLength()))
 	dst = append(dst, 0xc0|byte(d.InputLeakRate>>16)&0x3f, byte(d.InputLeakRate>>8), byte(d.InputLeakRate))
 	dst = append(dst, 0xc0|byte(d.BufferSize>>16)&0x3f, byte(d.BufferSize>>8), byte(d.BufferSize))
 	return append(dst, 0xc0|byte(d.OutputLeakRate>>16)&0x3f, byte(d.OutputLeakRate>>8), byte(d.OutputLeakRate))

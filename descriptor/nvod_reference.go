@@ -27,7 +27,7 @@ func newDescriptorNVODReference(i *bytesiter.Iterator, h Header, offsetEnd int) 
 
 	for idx := range d.Items {
 		var bs []byte
-		if bs, err = i.NextBytesNoCopy(6); err != nil || len(bs) < 6 {
+		if bs, err = i.NextBytesNoCopy(6); err != nil {
 			err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 			return
 		}
@@ -35,6 +35,8 @@ func newDescriptorNVODReference(i *bytesiter.Iterator, h Header, offsetEnd int) 
 		d.Items[idx].OriginalNetworkID = binary.BigEndian.Uint16(bs[2:4])
 		d.Items[idx].ServiceID = binary.BigEndian.Uint16(bs[4:6])
 	}
+
+	err = rejectTrailingBytes(i, offsetEnd)
 	return
 }
 
@@ -43,7 +45,7 @@ func (d *NVODReference) CalcLength() int {
 }
 
 func (d *NVODReference) Append(dst []byte) []byte {
-	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	dst = append(dst, uint8(d.Tag()), uint8(d.CalcLength()))
 	for _, item := range d.Items {
 		dst = append(dst,
 			byte(item.TransportStreamID>>8), byte(item.TransportStreamID),

@@ -36,7 +36,7 @@ func parseT2DeliverySystem(i *bytesiter.Iterator, offsetEnd int) (d *T2DeliveryS
 	d = &T2DeliverySystem{}
 
 	var bs []byte
-	if bs, err = i.NextBytesNoCopy(3); err != nil || len(bs) < 3 {
+	if bs, err = i.NextBytesNoCopy(3); err != nil {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return
 	}
@@ -48,7 +48,7 @@ func parseT2DeliverySystem(i *bytesiter.Iterator, offsetEnd int) (d *T2DeliveryS
 	}
 	d.HasExtension = true
 
-	if bs, err = i.NextBytesNoCopy(2); err != nil || len(bs) < 2 {
+	if bs, err = i.NextBytesNoCopy(2); err != nil {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return
 	}
@@ -61,7 +61,7 @@ func parseT2DeliverySystem(i *bytesiter.Iterator, offsetEnd int) (d *T2DeliveryS
 
 	for i.Offset() < offsetEnd {
 		var cell T2Cell
-		if bs, err = i.NextBytesNoCopy(2); err != nil || len(bs) < 2 {
+		if bs, err = i.NextBytesNoCopy(2); err != nil {
 			err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 			return
 		}
@@ -97,7 +97,7 @@ func parseT2DeliverySystem(i *bytesiter.Iterator, offsetEnd int) (d *T2DeliveryS
 		subEnd := i.Offset() + int(b)
 		for i.Offset() < subEnd {
 			var sub T2Subcell
-			if bs, err = i.NextBytesNoCopy(5); err != nil || len(bs) < 5 {
+			if bs, err = i.NextBytesNoCopy(5); err != nil {
 				err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 				return
 			}
@@ -112,7 +112,7 @@ func parseT2DeliverySystem(i *bytesiter.Iterator, offsetEnd int) (d *T2DeliveryS
 
 func nextUint32(i *bytesiter.Iterator) (v uint32, err error) {
 	var bs []byte
-	if bs, err = i.NextBytesNoCopy(4); err != nil || len(bs) < 4 {
+	if bs, err = i.NextBytesNoCopy(4); err != nil {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return
 	}
@@ -129,14 +129,18 @@ func (d *T2DeliverySystem) CalcLength() (n int) {
 		cell := &d.Cells[idx]
 		n += 2
 		if d.TFSFlag {
-			n += 1 + 4*len(cell.CentreFrequencies)
-		} else {
-			n += 4
+			n++
 		}
-		n += 1 + 5*len(cell.Subcells)
+		n += t2FrequencySize * len(cell.CentreFrequencies)
+		n += 1 + t2SubcellSize*len(cell.Subcells)
 	}
 	return
 }
+
+const (
+	t2FrequencySize = 4
+	t2SubcellSize   = 5
+)
 
 func (d *T2DeliverySystem) Append(dst []byte) []byte {
 	dst = append(dst, d.PLPID, byte(d.T2SystemID>>8), byte(d.T2SystemID))
@@ -158,12 +162,12 @@ func (d *T2DeliverySystem) Append(dst []byte) []byte {
 		cell := &d.Cells[idx]
 		dst = append(dst, byte(cell.CellID>>8), byte(cell.CellID))
 		if d.TFSFlag {
-			dst = append(dst, uint8(4*len(cell.CentreFrequencies)))
+			dst = append(dst, uint8(t2FrequencySize*len(cell.CentreFrequencies)))
 		}
 		for _, f := range cell.CentreFrequencies {
 			dst = append(dst, byte(f>>24), byte(f>>16), byte(f>>8), byte(f))
 		}
-		dst = append(dst, uint8(5*len(cell.Subcells)))
+		dst = append(dst, uint8(t2SubcellSize*len(cell.Subcells)))
 		for _, sub := range cell.Subcells {
 			dst = append(dst, sub.CellIDExtension,
 				byte(sub.TransposerFrequency>>24), byte(sub.TransposerFrequency>>16),

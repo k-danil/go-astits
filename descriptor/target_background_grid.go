@@ -13,9 +13,9 @@ type TargetBackgroundGrid struct {
 	AspectRatioInformation uint8  `json:"aspect_ratio_information"`
 }
 
-func newDescriptorTargetBackgroundGrid(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {
+func newDescriptorTargetBackgroundGrid(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
 	var bs []byte
-	if bs, err = i.NextBytesNoCopy(4); err != nil || len(bs) < 4 {
+	if bs, err = i.NextBytesNoCopy(4); err != nil {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return
 	}
@@ -27,15 +27,17 @@ func newDescriptorTargetBackgroundGrid(i *bytesiter.Iterator, h Header, _ int) (
 		AspectRatioInformation: bs[3] & 0x0f,
 	}
 	dd = d
+
+	err = rejectTrailingBytes(i, offsetEnd)
 	return
 }
 
-func (*TargetBackgroundGrid) CalcLength() int {
+func (d *TargetBackgroundGrid) CalcLength() int {
 	return 4
 }
 
 func (d *TargetBackgroundGrid) Append(dst []byte) []byte {
-	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	dst = append(dst, uint8(d.Tag()), uint8(d.CalcLength()))
 	h := d.HorizontalSize & 0x3fff
 	v := d.VerticalSize & 0x3fff
 	return append(dst,

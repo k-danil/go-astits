@@ -14,9 +14,9 @@ type IBP struct {
 	IdenticalGOPFlag bool   `json:"identical_gop_flag"`
 }
 
-func newDescriptorIBP(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {
+func newDescriptorIBP(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
 	var bs []byte
-	if bs, err = i.NextBytesNoCopy(2); err != nil || len(bs) < 2 {
+	if bs, err = i.NextBytesNoCopy(2); err != nil {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return
 	}
@@ -28,15 +28,17 @@ func newDescriptorIBP(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, er
 		MaxGOPLength:     uint16(bs[0]&0x3f)<<8 | uint16(bs[1]),
 	}
 	dd = d
+
+	err = rejectTrailingBytes(i, offsetEnd)
 	return
 }
 
-func (*IBP) CalcLength() int {
+func (d *IBP) CalcLength() int {
 	return 2
 }
 
 func (d *IBP) Append(dst []byte) []byte {
-	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	dst = append(dst, uint8(d.Tag()), uint8(d.CalcLength()))
 	dst = append(dst, util.B2U(d.ClosedGOPFlag)<<7|util.B2U(d.IdenticalGOPFlag)<<6|byte(d.MaxGOPLength>>8)&0x3f)
 	return append(dst, byte(d.MaxGOPLength))
 }

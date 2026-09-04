@@ -20,9 +20,16 @@ type ContentLabeling struct {
 	ContentReferenceIDRecordFlag        bool   `json:"content_reference_id_record_flag"`
 }
 
+const contentTimeBaseIndicatorMask = 0x0f
+
+// Sizing and writing must branch on the same truncated value or they disagree.
+func (d *ContentLabeling) contentTimeBaseIndicator() uint8 {
+	return d.ContentTimeBaseIndicator & contentTimeBaseIndicatorMask
+}
+
 func newDescriptorContentLabeling(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
 	var bs []byte
-	if bs, err = i.NextBytesNoCopy(2); err != nil || len(bs) < 2 {
+	if bs, err = i.NextBytesNoCopy(2); err != nil {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return
 	}
@@ -34,7 +41,7 @@ func newDescriptorContentLabeling(i *bytesiter.Iterator, h Header, offsetEnd int
 	dd = d
 
 	if d.MetadataApplicationFormat == 0xffff {
-		if bs, err = i.NextBytesNoCopy(4); err != nil || len(bs) < 4 {
+		if bs, err = i.NextBytesNoCopy(4); err != nil {
 			err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 			return
 		}
@@ -62,7 +69,7 @@ func newDescriptorContentLabeling(i *bytesiter.Iterator, h Header, offsetEnd int
 	}
 
 	if d.ContentTimeBaseIndicator == 1 || d.ContentTimeBaseIndicator == 2 {
-		if bs, err = i.NextBytesNoCopy(10); err != nil || len(bs) < 10 {
+		if bs, err = i.NextBytesNoCopy(10); err != nil {
 			err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 			return
 		}
@@ -108,13 +115,13 @@ func (d *ContentLabeling) CalcLength() int {
 	if d.ContentReferenceIDRecordFlag {
 		ret += 1 + len(d.ContentReferenceID)
 	}
-	if d.ContentTimeBaseIndicator == 1 || d.ContentTimeBaseIndicator == 2 {
+	if d.contentTimeBaseIndicator() == 1 || d.contentTimeBaseIndicator() == 2 {
 		ret += 10
 	}
-	if d.ContentTimeBaseIndicator == 2 {
+	if d.contentTimeBaseIndicator() == 2 {
 		ret++
 	}
-	if d.ContentTimeBaseIndicator >= 3 && d.ContentTimeBaseIndicator <= 7 {
+	if d.contentTimeBaseIndicator() >= 3 && d.contentTimeBaseIndicator() <= 7 {
 		ret += 1 + len(d.TimeBaseAssociationData)
 	}
 	ret += len(d.PrivateData)
@@ -122,14 +129,14 @@ func (d *ContentLabeling) CalcLength() int {
 }
 
 func (d *ContentLabeling) Append(dst []byte) []byte {
-	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	dst = append(dst, uint8(d.Tag()), uint8(d.CalcLength()))
 	dst = append(dst, byte(d.MetadataApplicationFormat>>8), byte(d.MetadataApplicationFormat))
 
 	if d.MetadataApplicationFormat == 0xffff {
 		dst = append(dst, byte(d.MetadataApplicationFormatIdentifier>>24), byte(d.MetadataApplicationFormatIdentifier>>16), byte(d.MetadataApplicationFormatIdentifier>>8), byte(d.MetadataApplicationFormatIdentifier))
 	}
 
-	b := d.ContentTimeBaseIndicator&0x0f<<3 | 0x07
+	b := d.contentTimeBaseIndicator()<<3 | 0x07
 	if d.ContentReferenceIDRecordFlag {
 		b |= 0x80
 	}
@@ -140,16 +147,16 @@ func (d *ContentLabeling) Append(dst []byte) []byte {
 		dst = append(dst, d.ContentReferenceID...)
 	}
 
-	if d.ContentTimeBaseIndicator == 1 || d.ContentTimeBaseIndicator == 2 {
+	if d.contentTimeBaseIndicator() == 1 || d.contentTimeBaseIndicator() == 2 {
 		dst = append(dst, 0xfe|byte(d.ContentTimeBaseValue>>32&0x01), byte(d.ContentTimeBaseValue>>24), byte(d.ContentTimeBaseValue>>16), byte(d.ContentTimeBaseValue>>8), byte(d.ContentTimeBaseValue))
 		dst = append(dst, 0xfe|byte(d.MetadataTimeBaseValue>>32&0x01), byte(d.MetadataTimeBaseValue>>24), byte(d.MetadataTimeBaseValue>>16), byte(d.MetadataTimeBaseValue>>8), byte(d.MetadataTimeBaseValue))
 	}
 
-	if d.ContentTimeBaseIndicator == 2 {
+	if d.contentTimeBaseIndicator() == 2 {
 		dst = append(dst, 0x80|d.ContentID&0x7f)
 	}
 
-	if d.ContentTimeBaseIndicator >= 3 && d.ContentTimeBaseIndicator <= 7 {
+	if d.contentTimeBaseIndicator() >= 3 && d.contentTimeBaseIndicator() <= 7 {
 		dst = append(dst, byte(len(d.TimeBaseAssociationData)))
 		dst = append(dst, d.TimeBaseAssociationData...)
 	}

@@ -88,6 +88,8 @@ func newDescriptorTeletext(i *bytesiter.Iterator, h Header, offsetEnd int) (dd D
 
 		d.Items[idx].Page = b
 	}
+
+	err = rejectTrailingBytes(i, offsetEnd)
 	return
 }
 
@@ -96,7 +98,7 @@ func (d *Teletext) CalcLength() int {
 }
 
 func (d *Teletext) Append(dst []byte) []byte {
-	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	dst = append(dst, uint8(d.Tag()), uint8(d.CalcLength()))
 	for _, item := range d.Items {
 		dst = append(dst, item.Language[:]...)
 		dst = append(dst, uint8(item.Type)&0x1f<<3|item.Magazine&0x7)

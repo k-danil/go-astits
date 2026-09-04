@@ -36,7 +36,7 @@ const (
 var ErrCRC32Mismatch = errclass.New("astits: CRC32 mismatch", ts.ErrInvalidData)
 
 var (
-	ErrPointerField = errclass.New("astits: pointer_field beyond the unit", ts.ErrInvalidData)
+	ErrPointerField = errclass.New("astits: invalid pointer_field", ts.ErrInvalidData)
 	ErrNoSections   = errclass.New("astits: unit carries no section", ts.ErrInvalidData)
 	ErrUnknownTable = errclass.New("astits: unknown table_id", ts.ErrInvalidData)
 )
@@ -53,6 +53,7 @@ const (
 	psiSyntaxHeaderLen      = 5
 	crc32Len                = 4
 	sectionReservedBits     = 0x30
+	maxPointerField         = 0xff
 )
 
 type TableID uint8
@@ -596,6 +597,9 @@ func parsePSISectionSyntaxData(i *bytesiter.Iterator, h *SectionHeader, sh *Sect
 }
 
 func (d *Data) Append(dst []byte) ([]byte, error) {
+	if d.PointerField < 0 || d.PointerField > maxPointerField {
+		return dst, fmt.Errorf("astits: pointer_field %d does not fit a byte: %w", d.PointerField, ErrPointerField)
+	}
 	dst = append(dst, uint8(d.PointerField))
 	for range d.PointerField {
 		dst = append(dst, 0x00)
@@ -616,11 +620,11 @@ type sectionBody interface {
 	appendSection(dst []byte) []byte
 }
 
-func (s *Section) calcPSISectionLength(body sectionBody) (ret uint16) {
+func (s *Section) calcPSISectionLength(body sectionBody) (ret int) {
 	if s.Header.TableID.hasPSISyntaxHeader() {
 		ret += psiSyntaxHeaderLen
 	}
-	ret += uint16(body.CalcSectionLength())
+	ret += body.CalcSectionLength()
 	if s.Header.TableID.hasCRC32() {
 		ret += crc32Len
 	}
@@ -636,11 +640,11 @@ func (s *Section) appendSection(dst []byte) ([]byte, error) {
 		}
 	}
 
-	var sectionLength uint16
+	var sectionLength int
 	if body != nil {
 		sectionLength = s.calcPSISectionLength(body)
 	}
-	if maxLength := s.Header.TableID.MaxSectionLength(); int(sectionLength) > maxLength {
+	if maxLength := s.Header.TableID.MaxSectionLength(); sectionLength > maxLength {
 		return dst, fmt.Errorf("astits: section length %d exceeds %d: %w", sectionLength, maxLength, ErrSectionOverflow)
 	}
 	crcStart := len(dst)

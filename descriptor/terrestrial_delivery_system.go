@@ -19,19 +19,19 @@ type TerrestrialDeliverySystem struct {
 	GuardInterval        uint8  `json:"guard_interval"`
 	TransmissionMode     uint8  `json:"transmission_mode"`
 	Priority             bool   `json:"priority"`
-	TimeSlicingIndicator bool   `json:"Time_Slicing_indicator"`
+	TimeSlicingIndicator bool   `json:"time_slicing_indicator"`
 	MPEFECIndicator      bool   `json:"MPE-FEC_indicator"`
 	OtherFrequencyFlag   bool   `json:"other_frequency_flag"`
 }
 
-func newDescriptorTerrestrialDeliverySystem(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {
+func newDescriptorTerrestrialDeliverySystem(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
 	d := &TerrestrialDeliverySystem{
 		Header: h,
 	}
 	dd = d
 
 	var bs []byte
-	if bs, err = i.NextBytesNoCopy(11); err != nil || len(bs) < 11 {
+	if bs, err = i.NextBytesNoCopy(11); err != nil {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return
 	}
@@ -47,6 +47,8 @@ func newDescriptorTerrestrialDeliverySystem(i *bytesiter.Iterator, h Header, _ i
 	d.GuardInterval = bs[6] >> 3 & 0x03
 	d.TransmissionMode = bs[6] >> 1 & 0x03
 	d.OtherFrequencyFlag = bs[6]&0x01 > 0
+
+	err = rejectTrailingBytes(i, offsetEnd)
 	return
 }
 
@@ -55,7 +57,7 @@ func (d *TerrestrialDeliverySystem) CalcLength() int {
 }
 
 func (d *TerrestrialDeliverySystem) Append(dst []byte) []byte {
-	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	dst = append(dst, uint8(d.Tag()), uint8(d.CalcLength()))
 	dst = append(dst,
 		byte(d.CentreFrequency>>24), byte(d.CentreFrequency>>16),
 		byte(d.CentreFrequency>>8), byte(d.CentreFrequency))

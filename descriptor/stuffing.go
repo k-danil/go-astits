@@ -17,9 +17,11 @@ func newDescriptorStuffing(i *bytesiter.Iterator, h Header, offsetEnd int) (dd D
 	}
 	dd = d
 
-	if d.Data, err = i.NextBytes(offsetEnd - i.Offset()); err != nil {
-		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
-		return
+	if offsetEnd > i.Offset() {
+		if d.Data, err = i.NextBytes(offsetEnd - i.Offset()); err != nil {
+			err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
+			return
+		}
 	}
 	return
 }
@@ -29,6 +31,6 @@ func (d *Stuffing) CalcLength() int {
 }
 
 func (d *Stuffing) Append(dst []byte) []byte {
-	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	dst = append(dst, uint8(d.Tag()), uint8(d.CalcLength()))
 	return append(dst, d.Data...)
 }

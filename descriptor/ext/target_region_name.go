@@ -27,7 +27,7 @@ func parseTargetRegionName(i *bytesiter.Iterator, offsetEnd int) (d *TargetRegio
 	d = &TargetRegionName{}
 
 	var bs []byte
-	if bs, err = i.NextBytesNoCopy(6); err != nil || len(bs) < 6 {
+	if bs, err = i.NextBytesNoCopy(6); err != nil {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return
 	}
@@ -57,7 +57,7 @@ func parseTargetRegionName(i *bytesiter.Iterator, offsetEnd int) (d *TargetRegio
 			}
 		}
 		if reg.RegionDepth == 3 {
-			if bs, err = i.NextBytesNoCopy(2); err != nil || len(bs) < 2 {
+			if bs, err = i.NextBytesNoCopy(2); err != nil {
 				err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 				return
 			}

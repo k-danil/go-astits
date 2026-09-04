@@ -13,9 +13,9 @@ type MPEG2AACAudio struct {
 	AdditionalInformation uint8  `json:"MPEG-2_AAC_additional_information"`
 }
 
-func newDescriptorMPEG2AACAudio(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {
+func newDescriptorMPEG2AACAudio(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
 	var bs []byte
-	if bs, err = i.NextBytesNoCopy(3); err != nil || len(bs) < 3 {
+	if bs, err = i.NextBytesNoCopy(3); err != nil {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return
 	}
@@ -27,14 +27,16 @@ func newDescriptorMPEG2AACAudio(i *bytesiter.Iterator, h Header, _ int) (dd Desc
 		AdditionalInformation: bs[2],
 	}
 	dd = d
+
+	err = rejectTrailingBytes(i, offsetEnd)
 	return
 }
 
-func (*MPEG2AACAudio) CalcLength() int {
+func (d *MPEG2AACAudio) CalcLength() int {
 	return 3
 }
 
 func (d *MPEG2AACAudio) Append(dst []byte) []byte {
-	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	dst = append(dst, uint8(d.Tag()), uint8(d.CalcLength()))
 	return append(dst, d.Profile, d.ChannelConfiguration, d.AdditionalInformation)
 }

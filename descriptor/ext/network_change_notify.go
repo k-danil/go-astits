@@ -36,7 +36,7 @@ func parseNetworkChangeNotify(i *bytesiter.Iterator, offsetEnd int) (d *NetworkC
 	for i.Offset() < offsetEnd {
 		var cell NetworkChangeCell
 		var bs []byte
-		if bs, err = i.NextBytesNoCopy(3); err != nil || len(bs) < 3 {
+		if bs, err = i.NextBytesNoCopy(3); err != nil {
 			err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 			return
 		}
@@ -45,7 +45,7 @@ func parseNetworkChangeNotify(i *bytesiter.Iterator, offsetEnd int) (d *NetworkC
 
 		for i.Offset() < loopEnd {
 			var c NetworkChange
-			if bs, err = i.NextBytesNoCopy(12); err != nil || len(bs) < 12 {
+			if bs, err = i.NextBytesNoCopy(12); err != nil {
 				err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 				return
 			}
@@ -60,7 +60,7 @@ func parseNetworkChangeNotify(i *bytesiter.Iterator, offsetEnd int) (d *NetworkC
 			c.MessageID = bs[11]
 
 			if c.InvariantTSPresent {
-				if bs, err = i.NextBytesNoCopy(4); err != nil || len(bs) < 4 {
+				if bs, err = i.NextBytesNoCopy(4); err != nil {
 					err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 					return
 				}

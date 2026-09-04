@@ -14,9 +14,9 @@ type VideoWindow struct {
 	WindowPriority   uint8  `json:"window_priority"`
 }
 
-func newDescriptorVideoWindow(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {
+func newDescriptorVideoWindow(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
 	var bs []byte
-	if bs, err = i.NextBytesNoCopy(4); err != nil || len(bs) < 4 {
+	if bs, err = i.NextBytesNoCopy(4); err != nil {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return
 	}
@@ -29,15 +29,17 @@ func newDescriptorVideoWindow(i *bytesiter.Iterator, h Header, _ int) (dd Descri
 		WindowPriority:   uint8(v & 0xf),
 	}
 	dd = d
+
+	err = rejectTrailingBytes(i, offsetEnd)
 	return
 }
 
-func (*VideoWindow) CalcLength() int {
+func (d *VideoWindow) CalcLength() int {
 	return 4
 }
 
 func (d *VideoWindow) Append(dst []byte) []byte {
-	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	dst = append(dst, uint8(d.Tag()), uint8(d.CalcLength()))
 	v := uint32(d.HorizontalOffset&0x3fff)<<18 | uint32(d.VerticalOffset&0x3fff)<<4 | uint32(d.WindowPriority&0xf)
 	return append(dst, byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
 }

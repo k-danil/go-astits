@@ -23,7 +23,7 @@ type AVCVideo struct {
 	ProfileIDC                    uint8  `json:"profile_idc"`
 }
 
-func newDescriptorAVCVideo(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {
+func newDescriptorAVCVideo(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
 	d := &AVCVideo{
 		Header: h,
 	}
@@ -61,15 +61,17 @@ func newDescriptorAVCVideo(i *bytesiter.Iterator, h Header, _ int) (dd Descripto
 	d.AVCStillPresent = b&0x80 > 0
 	d.AVC24HourPictureFlag = b&0x40 > 0
 	d.FramePackingSEINotPresentFlag = b&0x20 > 0
+
+	err = rejectTrailingBytes(i, offsetEnd)
 	return
 }
 
-func (*AVCVideo) CalcLength() int {
+func (d *AVCVideo) CalcLength() int {
 	return 4
 }
 
 func (d *AVCVideo) Append(dst []byte) []byte {
-	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	dst = append(dst, uint8(d.Tag()), uint8(d.CalcLength()))
 	dst = append(dst, d.ProfileIDC)
 	dst = append(dst, util.B2U(d.ConstraintSet0Flag)<<7|util.B2U(d.ConstraintSet1Flag)<<6|
 		util.B2U(d.ConstraintSet2Flag)<<5|util.B2U(d.ConstraintSet3Flag)<<4|

@@ -63,7 +63,7 @@ func parseSHDeliverySystem(i *bytesiter.Iterator, offsetEnd int) (d *SHDeliveryS
 		m.InterleaverType = b&0x20 > 0
 
 		var bs []byte
-		if bs, err = i.NextBytesNoCopy(2); err != nil || len(bs) < 2 {
+		if bs, err = i.NextBytesNoCopy(2); err != nil {
 			err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 			return
 		}
@@ -86,7 +86,7 @@ func parseSHDeliverySystem(i *bytesiter.Iterator, offsetEnd int) (d *SHDeliveryS
 
 		if m.InterleaverPresence {
 			if !m.InterleaverType {
-				if bs, err = i.NextBytesNoCopy(4); err != nil || len(bs) < 4 {
+				if bs, err = i.NextBytesNoCopy(4); err != nil {
 					err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 					return
 				}

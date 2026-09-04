@@ -31,9 +31,9 @@ type MVCOperationPointEntry struct {
 	ApplicableTemporalID uint8   `json:"applicable_temporal_id"`
 }
 
-func newDescriptorMVCOperationPoint(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {
+func newDescriptorMVCOperationPoint(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
 	var bs []byte
-	if bs, err = i.NextBytesNoCopy(3); err != nil || len(bs) < 3 {
+	if bs, err = i.NextBytesNoCopy(3); err != nil {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return
 	}
@@ -54,7 +54,7 @@ func newDescriptorMVCOperationPoint(i *bytesiter.Iterator, h Header, _ int) (dd 
 	d.Levels = make([]MVCOperationPointLevel, bs[2])
 	for li := range d.Levels {
 		level := &d.Levels[li]
-		if bs, err = i.NextBytesNoCopy(2); err != nil || len(bs) < 2 {
+		if bs, err = i.NextBytesNoCopy(2); err != nil {
 			err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 			return
 		}
@@ -62,14 +62,14 @@ func newDescriptorMVCOperationPoint(i *bytesiter.Iterator, h Header, _ int) (dd 
 		level.OperationPoints = make([]MVCOperationPointEntry, bs[1])
 		for oi := range level.OperationPoints {
 			op := &level.OperationPoints[oi]
-			if bs, err = i.NextBytesNoCopy(3); err != nil || len(bs) < 3 {
+			if bs, err = i.NextBytesNoCopy(3); err != nil {
 				err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 				return
 			}
 			op.ApplicableTemporalID = bs[0] & 0x07
 			op.NumTargetOutputViews = bs[1]
 			op.ESReferences = make([]uint8, bs[2])
-			if bs, err = i.NextBytesNoCopy(len(op.ESReferences)); err != nil || len(bs) < len(op.ESReferences) {
+			if bs, err = i.NextBytesNoCopy(len(op.ESReferences)); err != nil {
 				err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 				return
 			}
@@ -78,6 +78,8 @@ func newDescriptorMVCOperationPoint(i *bytesiter.Iterator, h Header, _ int) (dd 
 			}
 		}
 	}
+
+	err = rejectTrailingBytes(i, offsetEnd)
 	return
 }
 
@@ -93,7 +95,7 @@ func (d *MVCOperationPoint) CalcLength() int {
 }
 
 func (d *MVCOperationPoint) Append(dst []byte) []byte {
-	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	dst = append(dst, uint8(d.Tag()), uint8(d.CalcLength()))
 	dst = append(dst, d.ProfileIDC)
 	dst = append(dst, util.B2U(d.ConstraintSet0Flag)<<7|util.B2U(d.ConstraintSet1Flag)<<6|
 		util.B2U(d.ConstraintSet2Flag)<<5|util.B2U(d.ConstraintSet3Flag)<<4|

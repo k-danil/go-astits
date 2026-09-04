@@ -3,6 +3,7 @@ package dvbtext
 import (
 	"encoding/json"
 	"errors"
+	"unicode/utf8"
 
 	"github.com/k-danil/go-astits/v3/internal/errclass"
 	"github.com/k-danil/go-astits/v3/ts"
@@ -42,6 +43,11 @@ func Encode(s string) (t Text) {
 
 	t = make(Text, 0, len(s)+1)
 	t = append(t, selectorUTF8)
-	t = append(t, s...)
+	for _, r := range s {
+		if pua, ok := controlPUARune(r); ok {
+			r = pua
+		}
+		t = utf8.AppendRune(t, r)
+	}
 	return
 }

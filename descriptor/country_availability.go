@@ -29,12 +29,14 @@ func newDescriptorCountryAvailability(i *bytesiter.Iterator, h Header, offsetEnd
 	d.Countries = make([]dvbtext.Code, (offsetEnd-i.Offset())/3)
 	for idx := range d.Countries {
 		var bs []byte
-		if bs, err = i.NextBytesNoCopy(3); err != nil || len(bs) < 3 {
+		if bs, err = i.NextBytesNoCopy(3); err != nil {
 			err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 			return
 		}
 		copy(d.Countries[idx][:], bs)
 	}
+
+	err = rejectTrailingBytes(i, offsetEnd)
 	return
 }
 
@@ -43,7 +45,7 @@ func (d *CountryAvailability) CalcLength() int {
 }
 
 func (d *CountryAvailability) Append(dst []byte) []byte {
-	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	dst = append(dst, uint8(d.Tag()), uint8(d.CalcLength()))
 	b := byte(0x7f)
 	if d.AvailabilityFlag {
 		b |= 0x80

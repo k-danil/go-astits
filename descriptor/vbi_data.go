@@ -128,7 +128,7 @@ func (d *VBIData) CalcLength() int {
 }
 
 func (d *VBIData) Append(dst []byte) []byte {
-	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	dst = append(dst, uint8(d.Tag()), uint8(d.CalcLength()))
 	for _, item := range d.Services {
 		dst = append(dst, uint8(item.DataServiceID))
 		if vbiServiceHasLines(item.DataServiceID) {

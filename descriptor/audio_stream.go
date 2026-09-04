@@ -15,7 +15,7 @@ type AudioStream struct {
 	VariableRateAudioIndicator bool   `json:"variable_rate_audio_indicator"`
 }
 
-func newDescriptorAudioStream(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {
+func newDescriptorAudioStream(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
 	var b byte
 	if b, err = i.NextByte(); err != nil {
 		err = fmt.Errorf("astits: fetching next byte failed: %w", err)
@@ -30,14 +30,16 @@ func newDescriptorAudioStream(i *bytesiter.Iterator, h Header, _ int) (dd Descri
 		VariableRateAudioIndicator: b&0x08 > 0,
 	}
 	dd = d
+
+	err = rejectTrailingBytes(i, offsetEnd)
 	return
 }
 
-func (*AudioStream) CalcLength() int {
+func (d *AudioStream) CalcLength() int {
 	return 1
 }
 
 func (d *AudioStream) Append(dst []byte) []byte {
-	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	dst = append(dst, uint8(d.Tag()), uint8(d.CalcLength()))
 	return append(dst, util.B2U(d.FreeFormatFlag)<<7|util.B2U(d.ID)<<6|(d.Layer&0x3)<<4|util.B2U(d.VariableRateAudioIndicator)<<3|0x7)
 }

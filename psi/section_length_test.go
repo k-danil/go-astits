@@ -19,6 +19,7 @@ func TestAppendSectionLengthLimit(t *testing.T) {
 		{name: "PAT past 1021", tableID: TableIDPAT, data: &PAT{Programs: make([]PATProgram, 275)}, overflow: true},
 		{name: "EIT past 1021", tableID: TableIDEITStart, data: &EIT{Events: make([]EITEvent, 320)}, wantLen: 3858},
 		{name: "EIT past 4093", tableID: TableIDEITStart, data: &EIT{Events: make([]EITEvent, 340)}, overflow: true},
+		{name: "PAT past 65535", tableID: TableIDPAT, data: &PAT{Programs: make([]PATProgram, 16385)}, overflow: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			s := Section{

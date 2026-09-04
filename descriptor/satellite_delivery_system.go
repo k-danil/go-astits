@@ -23,14 +23,14 @@ type SatelliteDeliverySystem struct {
 	ModulationSystem bool   `json:"modulation_system"`
 }
 
-func newDescriptorSatelliteDeliverySystem(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {
+func newDescriptorSatelliteDeliverySystem(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
 	d := &SatelliteDeliverySystem{
 		Header: h,
 	}
 	dd = d
 
 	var bs []byte
-	if bs, err = i.NextBytesNoCopy(11); err != nil || len(bs) < 11 {
+	if bs, err = i.NextBytesNoCopy(11); err != nil {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return
 	}
@@ -43,6 +43,8 @@ func newDescriptorSatelliteDeliverySystem(i *bytesiter.Iterator, h Header, _ int
 	d.ModulationType = bs[6] & 0x03
 	d.SymbolRate = uint32(bs[7])<<20 | uint32(bs[8])<<12 | uint32(bs[9])<<4 | uint32(bs[10])>>4
 	d.FECInner = bs[10] & 0x0f
+
+	err = rejectTrailingBytes(i, offsetEnd)
 	return
 }
 
@@ -51,7 +53,7 @@ func (d *SatelliteDeliverySystem) CalcLength() int {
 }
 
 func (d *SatelliteDeliverySystem) Append(dst []byte) []byte {
-	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	dst = append(dst, uint8(d.Tag()), uint8(d.CalcLength()))
 	dst = append(dst, byte(d.Frequency>>24), byte(d.Frequency>>16), byte(d.Frequency>>8), byte(d.Frequency))
 	dst = append(dst, byte(d.OrbitalPosition>>8), byte(d.OrbitalPosition))
 	b := d.Polarization&0x03<<5 | d.RollOff&0x03<<3 | d.ModulationType&0x03

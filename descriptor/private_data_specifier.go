@@ -12,9 +12,9 @@ type PrivateDataSpecifier struct {
 	Specifier uint32 `json:"private_data_specifier"`
 }
 
-func newDescriptorPrivateDataSpecifier(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {
+func newDescriptorPrivateDataSpecifier(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
 	var bs []byte
-	if bs, err = i.NextBytesNoCopy(4); err != nil || len(bs) < 4 {
+	if bs, err = i.NextBytesNoCopy(4); err != nil {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return
 	}
@@ -24,14 +24,16 @@ func newDescriptorPrivateDataSpecifier(i *bytesiter.Iterator, h Header, _ int) (
 		Specifier: binary.BigEndian.Uint32(bs),
 	}
 	dd = d
+
+	err = rejectTrailingBytes(i, offsetEnd)
 	return
 }
 
-func (*PrivateDataSpecifier) CalcLength() int {
+func (d *PrivateDataSpecifier) CalcLength() int {
 	return 4
 }
 
 func (d *PrivateDataSpecifier) Append(dst []byte) []byte {
-	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	dst = append(dst, uint8(d.Tag()), uint8(d.CalcLength()))
 	return append(dst, byte(d.Specifier>>24), byte(d.Specifier>>16), byte(d.Specifier>>8), byte(d.Specifier))
 }

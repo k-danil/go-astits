@@ -21,7 +21,7 @@ type ExtendedEventItem struct {
 	Description dvbtext.Text `json:"item_description"`
 }
 
-func newDescriptorExtendedEvent(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {
+func newDescriptorExtendedEvent(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
 	d := &ExtendedEvent{
 		Header: h,
 	}
@@ -52,8 +52,8 @@ func newDescriptorExtendedEvent(i *bytesiter.Iterator, h Header, _ int) (dd Desc
 
 	itemsLength := int(b)
 
-	offsetEnd := i.Offset() + itemsLength
-	for i.Offset() < offsetEnd {
+	offsetItemsEnd := i.Offset() + itemsLength
+	for i.Offset() < offsetItemsEnd {
 		var item ExtendedEventItem
 		if err = item.newDescriptorExtendedEventItem(i); err != nil {
 			err = fmt.Errorf("astits: creating extended event item failed: %w", err)
@@ -74,6 +74,8 @@ func newDescriptorExtendedEvent(i *bytesiter.Iterator, h Header, _ int) (dd Desc
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return
 	}
+
+	err = rejectTrailingBytes(i, offsetEnd)
 	return
 }
 
@@ -122,7 +124,7 @@ func (d *ExtendedEvent) CalcLength() int {
 }
 
 func (d *ExtendedEvent) Append(dst []byte) []byte {
-	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	dst = append(dst, uint8(d.Tag()), uint8(d.CalcLength()))
 	var lengthOfItems int
 	for _, item := range d.Items {
 		lengthOfItems += 1 // description length

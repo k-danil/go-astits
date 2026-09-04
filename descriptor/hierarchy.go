@@ -68,9 +68,9 @@ type Hierarchy struct {
 	TREFPresentFlag             bool          `json:"tref_present_flag"`
 }
 
-func newDescriptorHierarchy(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {
+func newDescriptorHierarchy(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
 	var bs []byte
-	if bs, err = i.NextBytesNoCopy(4); err != nil || len(bs) < 4 {
+	if bs, err = i.NextBytesNoCopy(4); err != nil {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return
 	}
@@ -88,15 +88,17 @@ func newDescriptorHierarchy(i *bytesiter.Iterator, h Header, _ int) (dd Descript
 		HierarchyChannel:            bs[3] & 0x3f,
 	}
 	dd = d
+
+	err = rejectTrailingBytes(i, offsetEnd)
 	return
 }
 
-func (*Hierarchy) CalcLength() int {
+func (d *Hierarchy) CalcLength() int {
 	return 4
 }
 
 func (d *Hierarchy) Append(dst []byte) []byte {
-	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	dst = append(dst, uint8(d.Tag()), uint8(d.CalcLength()))
 	return append(dst,
 		util.B2U(d.NoViewScalabilityFlag)<<7|util.B2U(d.NoTemporalScalabilityFlag)<<6|util.B2U(d.NoSpatialScalabilityFlag)<<5|util.B2U(d.NoQualityScalabilityFlag)<<4|uint8(d.HierarchyType)&0x0f,
 		0xc0|d.HierarchyLayerIndex&0x3f,

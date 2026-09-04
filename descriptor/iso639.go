@@ -88,7 +88,7 @@ func (d *ISO639LanguageAndAudioType) CalcLength() int {
 }
 
 func (d *ISO639LanguageAndAudioType) Append(dst []byte) []byte {
-	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	dst = append(dst, uint8(d.Tag()), uint8(d.CalcLength()))
 	for _, it := range d.Items {
 		dst = append(dst, it.Language[:]...)
 		dst = append(dst, uint8(it.Type))

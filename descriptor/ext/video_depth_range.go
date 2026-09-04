@@ -55,16 +55,16 @@ func parseVideoDepthRange(i *bytesiter.Iterator, offsetEnd int) (d *VideoDepthRa
 	for i.Offset() < offsetEnd {
 		var rng DepthRange
 		var bs []byte
-		if bs, err = i.NextBytesNoCopy(2); err != nil || len(bs) < 2 {
+		if bs, err = i.NextBytesNoCopy(2); err != nil {
 			err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 			return
 		}
 		rng.RangeType = VideoDepthRangeType(bs[0])
-		rangeLength := int(bs[1])
+		rangeEnd := i.Offset() + int(bs[1])
 
 		switch rng.RangeType {
 		case VideoDepthRangeProductionDisparityHint:
-			if bs, err = i.NextBytesNoCopy(3); err != nil || len(bs) < 3 {
+			if bs, err = i.NextBytesNoCopy(disparityHintSize); err != nil {
 				err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 				return
 			}
@@ -72,20 +72,34 @@ func parseVideoDepthRange(i *bytesiter.Iterator, offsetEnd int) (d *VideoDepthRa
 			rng.VideoMinDisparityHint = uint16(bs[1]&0x0f)<<8 | uint16(bs[2])
 		case VideoDepthRangeMultiRegionSEI:
 		default:
-			if rng.RangeSelector, err = i.NextBytes(rangeLength); err != nil {
+			if rng.RangeSelector, err = i.NextBytes(rangeEnd - i.Offset()); err != nil {
 				err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 				return
 			}
 		}
+
+		if i.Offset() > rangeEnd {
+			err = fmt.Errorf("astits: video depth range body overruns range_length by %d bytes: %w",
+				i.Offset()-rangeEnd, bytesiter.ErrNoBytesLeft)
+			return
+		}
+		// Skipping the rest would drop bytes Append cannot put back.
+		if i.Offset() < rangeEnd {
+			err = fmt.Errorf("astits: %d bytes left inside range_length: %w", rangeEnd-i.Offset(), errTrailingBytes)
+			return
+		}
+
 		d.Ranges = append(d.Ranges, rng)
 	}
 	return
 }
 
+const disparityHintSize = 3
+
 func (rng *DepthRange) rangeLength() int {
 	switch rng.RangeType {
 	case VideoDepthRangeProductionDisparityHint:
-		return 3
+		return disparityHintSize
 	case VideoDepthRangeMultiRegionSEI:
 		return 0
 	default:

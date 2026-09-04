@@ -26,7 +26,7 @@ func newDescriptorServiceList(i *bytesiter.Iterator, h Header, offsetEnd int) (d
 
 	for idx := range d.Items {
 		var bs []byte
-		if bs, err = i.NextBytesNoCopy(2); err != nil || len(bs) < 2 {
+		if bs, err = i.NextBytesNoCopy(2); err != nil {
 			err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 			return
 		}
@@ -39,6 +39,8 @@ func newDescriptorServiceList(i *bytesiter.Iterator, h Header, offsetEnd int) (d
 		}
 		d.Items[idx].ServiceType = b
 	}
+
+	err = rejectTrailingBytes(i, offsetEnd)
 	return
 }
 
@@ -47,7 +49,7 @@ func (d *ServiceList) CalcLength() int {
 }
 
 func (d *ServiceList) Append(dst []byte) []byte {
-	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	dst = append(dst, uint8(d.Tag()), uint8(d.CalcLength()))
 	for _, item := range d.Items {
 		dst = append(dst, byte(item.ServiceID>>8), byte(item.ServiceID), item.ServiceType)
 	}

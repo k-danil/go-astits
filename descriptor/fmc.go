@@ -25,7 +25,7 @@ func newDescriptorFMC(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descri
 
 	for i.Offset() < offsetEnd {
 		var bs []byte
-		if bs, err = i.NextBytesNoCopy(3); err != nil || len(bs) < 3 {
+		if bs, err = i.NextBytesNoCopy(3); err != nil {
 			err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 			return
 		}
@@ -43,7 +43,7 @@ func (d *FMC) CalcLength() int {
 }
 
 func (d *FMC) Append(dst []byte) []byte {
-	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	dst = append(dst, uint8(d.Tag()), uint8(d.CalcLength()))
 	for _, e := range d.Entries {
 		dst = append(dst, byte(e.ESID>>8), byte(e.ESID), e.FlexMuxChannel)
 	}

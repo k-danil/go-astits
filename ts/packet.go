@@ -49,7 +49,8 @@ const (
 	RSPacketSize   = 204 // 188 + 16-byte Reed-Solomon parity suffix
 	HeaderSize     = 4
 
-	m2tsPrefixSize = M2TSPacketSize - PacketSize
+	m2tsPrefixSize           = M2TSPacketSize - PacketSize
+	maxAdaptationFieldLength = 0xff
 )
 
 const syncByte byte = '\x47'
@@ -100,12 +101,12 @@ type PacketAdaptationField struct {
 	AdaptationExtensionField          *PacketAdaptationExtensionField `json:"adaptation_field_extension"`
 	OPCR                              ClockReference                  `json:"OPCR"`
 	PCR                               ClockReference                  `json:"PCR"`
-	TransportPrivateData              []byte                          `json:"private_data_byte"` // a view into the packet buffer after parse; CopyFrom takes an owned copy
-	TransportPrivateDataLength        uint8                           `json:"transport_private_data_length"`
+	TransportPrivateData              []byte                          `json:"private_data_byte"`             // a view into the packet buffer after parse; CopyFrom takes an owned copy
+	TransportPrivateDataLength        uint8                           `json:"transport_private_data_length"` // parse output; Put writes len(TransportPrivateData)
 	Length                            uint8                           `json:"adaptation_field_length"`
 	StuffingLength                    uint8                           `json:"_stuffing_length"`
 	SpliceCountdown                   int8                            `json:"splice_countdown"`
-	IsOneByteStuffing                 bool                            `json:"_is_one_byte_stuffing"` // serializer knob, not a wire field
+	IsOneByteStuffing                 bool                            `json:"_is_one_byte_stuffing"`
 	DiscontinuityIndicator            bool                            `json:"discontinuity_indicator"`
 	RandomAccessIndicator             bool                            `json:"random_access_indicator"`
 	ElementaryStreamPriorityIndicator bool                            `json:"elementary_stream_priority_indicator"`
@@ -198,7 +199,7 @@ func (p *Packet) Reset() {
 	p.Tag = 0
 }
 
-// p keeps viewing bs, so it is valid only as long as bs is.
+// p keeps viewing bs, so it is valid only as long as bs is. A bs of exactly 192 bytes is read as M2TS, prefix included.
 func (p *Packet) ParseAt(bs []byte, offset int64, s PacketSkipper, keep *PIDSet) (skip bool, err error) {
 	p.Offset = offset
 	p.raw = bs
@@ -286,6 +287,7 @@ func (af *PacketAdaptationField) Parse(bs []byte) (n int, err error) {
 	af.Length = bs[0]
 	o := 1
 	bodyStart := o
+	af.IsOneByteStuffing = af.Length == 0
 
 	if af.Length > 0 {
 		if o >= len(bs) {
@@ -372,63 +374,61 @@ func (afe *PacketAdaptationExtensionField) Parse(bs []byte) (n int, err error) {
 	afe.Length = bs[0]
 	o := 1
 
-	if afe.Length > 0 {
+	// H.222.0 2.4.3.5: the declared length bounds the fields below, and the flags byte is mandatory, so length 0 is malformed.
+	end := 1 + int(afe.Length)
+	if afe.Length == 0 || end > len(bs) {
+		return o, ErrShortPacket
+	}
+	bs = bs[:end]
+
+	b := bs[o]
+	o++
+
+	afe.HasLegalTimeWindow = b&0x80 > 0
+	afe.HasPiecewiseRate = b&0x40 > 0
+	afe.HasSeamlessSplice = b&0x20 > 0
+	afe.HasAFDescriptors = b&0x10 == 0
+
+	if afe.HasLegalTimeWindow {
+		if o+2 > len(bs) {
+			return o, ErrShortPacket
+		}
+		afe.LegalTimeWindowIsValid = bs[o]&0x80 > 0
+		afe.LegalTimeWindowOffset = binary.BigEndian.Uint16(bs[o:]) & 0x7fff
+		o += 2
+	}
+
+	if afe.HasPiecewiseRate {
+		if o+3 > len(bs) {
+			return o, ErrShortPacket
+		}
+		afe.PiecewiseRate = uint32(bs[o]&0x3f)<<16 | uint32(bs[o+1])<<8 | uint32(bs[o+2])
+		o += 3
+	}
+
+	if afe.HasSeamlessSplice {
 		if o >= len(bs) {
 			return o, ErrShortPacket
 		}
-		b := bs[o]
-		o++
+		// Splice type shares its byte with the DTS next access unit
+		afe.SpliceType = bs[o] & 0xf0 >> 4
 
-		afe.HasLegalTimeWindow = b&0x80 > 0
-		afe.HasPiecewiseRate = b&0x40 > 0
-		afe.HasSeamlessSplice = b&0x20 > 0
-		afe.HasAFDescriptors = b&0x10 == 0
-
-		if afe.HasLegalTimeWindow {
-			if o+2 > len(bs) {
-				return o, ErrShortPacket
-			}
-			afe.LegalTimeWindowIsValid = bs[o]&0x80 > 0
-			afe.LegalTimeWindowOffset = binary.BigEndian.Uint16(bs[o:]) & 0x7fff
-			o += 2
+		var pn int
+		if pn, err = afe.DTSNextAccessUnit.ParsePTSDTS(bs[o:]); err != nil {
+			err = fmt.Errorf("astits: parsing DTS failed: %w", err)
+			return
 		}
+		o += pn
+	}
 
-		if afe.HasPiecewiseRate {
-			if o+3 > len(bs) {
-				return o, ErrShortPacket
-			}
-			afe.PiecewiseRate = uint32(bs[o]&0x3f)<<16 | uint32(bs[o+1])<<8 | uint32(bs[o+2])
-			o += 3
-		}
-
-		if afe.HasSeamlessSplice {
-			if o >= len(bs) {
-				return o, ErrShortPacket
-			}
-			// Splice type shares its byte with the DTS next access unit
-			afe.SpliceType = bs[o] & 0xf0 >> 4
-
-			var pn int
-			if pn, err = afe.DTSNextAccessUnit.ParsePTSDTS(bs[o:]); err != nil {
-				err = fmt.Errorf("astits: parsing DTS failed: %w", err)
-				return
-			}
-			o += pn
-		}
-
-		if afe.HasAFDescriptors {
-			bodyEnd := 1 + int(afe.Length)
-			if bodyEnd > len(bs) || bodyEnd < o {
-				return o, ErrShortPacket
-			}
-			afe.AFDescriptors = bs[o:bodyEnd]
-			o = bodyEnd
-		}
+	if afe.HasAFDescriptors {
+		afe.AFDescriptors = bs[o:]
+		o = len(bs)
 	}
 	return o, nil
 }
 
-// len(bs) is the target packet size; the tail is stuffed with 0xff.
+// len(bs) is the target packet size (188); the tail is stuffed with 0xff. An M2TS prefix is not written — pass Raw to keep it.
 func (p *Packet) Put(bs []byte) (n int, err error) {
 	p.Header.Put(bs)
 	n = HeaderSize
@@ -484,25 +484,46 @@ func (ph *PacketHeader) putBytes(bb []byte) {
 	binary.BigEndian.PutUint32(bb, val)
 }
 
-func (af *PacketAdaptationField) CalcLength() int {
-	var length uint8
+func (af *PacketAdaptationField) carriesFields() bool {
+	return af.DiscontinuityIndicator || af.RandomAccessIndicator || af.ElementaryStreamPriorityIndicator ||
+		af.HasPCR || af.HasOPCR || af.HasSplicingCountdown || af.HasTransportPrivateData ||
+		af.HasAdaptationExtensionField || af.StuffingLength > 0
+}
+
+func (af *PacketAdaptationField) CalcLength() (length int) {
+	// Length 0 wins over the flags; Put rejects the contradiction.
+	if af.IsOneByteStuffing {
+		return 0
+	}
 	length++
-	length += PCRSize * util.B2U(af.HasPCR)
-	length += PCRSize * util.B2U(af.HasOPCR)
-	length += util.B2U(af.HasSplicingCountdown)
-	length += (1 + uint8(len(af.TransportPrivateData))) * util.B2U(af.HasTransportPrivateData)
-	length += (1 + af.AdaptationExtensionField.calcLength()) * util.B2U(af.HasAdaptationExtensionField)
-	length += af.StuffingLength
-	return int(length)
+	length += PCRSize * int(util.B2U(af.HasPCR))
+	length += PCRSize * int(util.B2U(af.HasOPCR))
+	length += int(util.B2U(af.HasSplicingCountdown))
+	length += (1 + len(af.TransportPrivateData)) * int(util.B2U(af.HasTransportPrivateData))
+	length += (1 + af.AdaptationExtensionField.calcLength()) * int(util.B2U(af.HasAdaptationExtensionField))
+	length += int(af.StuffingLength)
+	return
 }
 
 func (af *PacketAdaptationField) Put(bs []byte) (n int, err error) {
 	if af.IsOneByteStuffing {
+		if af.carriesFields() {
+			return 0, ErrContradictoryAdaptationField
+		}
+		if len(bs) == 0 {
+			return 0, ErrShortPacket
+		}
 		bs[0] = 0
 		return 1, nil
 	}
+	if af.HasAdaptationExtensionField && af.AdaptationExtensionField == nil {
+		return 0, ErrContradictoryAdaptationField
+	}
 
 	length := af.CalcLength()
+	if length > maxAdaptationFieldLength {
+		return 0, ErrAdaptationFieldOverflow
+	}
 	if length+1 > len(bs) {
 		return 0, ErrShortPacket
 	}
@@ -534,7 +555,7 @@ func (af *PacketAdaptationField) Put(bs []byte) (n int, err error) {
 	}
 
 	if af.HasTransportPrivateData {
-		bs[n] = af.TransportPrivateDataLength
+		bs[n] = uint8(len(af.TransportPrivateData))
 		n++
 		n += copy(bs[n:], af.TransportPrivateData)
 	}
@@ -551,22 +572,22 @@ func (af *PacketAdaptationField) Put(bs []byte) (n int, err error) {
 	return
 }
 
-func (afe *PacketAdaptationExtensionField) calcLength() (length uint8) {
+func (afe *PacketAdaptationExtensionField) calcLength() (length int) {
 	if afe == nil {
 		return 0
 	}
 	length++
-	length += 2 * util.B2U(afe.HasLegalTimeWindow)
-	length += 3 * util.B2U(afe.HasPiecewiseRate)
-	length += PTSDTSSize * util.B2U(afe.HasSeamlessSplice)
+	length += 2 * int(util.B2U(afe.HasLegalTimeWindow))
+	length += 3 * int(util.B2U(afe.HasPiecewiseRate))
+	length += PTSDTSSize * int(util.B2U(afe.HasSeamlessSplice))
 	if afe.HasAFDescriptors {
-		length += uint8(len(afe.AFDescriptors))
+		length += len(afe.AFDescriptors)
 	}
-	return length
+	return
 }
 
 func (afe *PacketAdaptationExtensionField) putBytes(bs []byte) (n int) {
-	bs[0] = afe.calcLength()
+	bs[0] = uint8(afe.calcLength())
 	bs[1] = util.B2U(afe.HasLegalTimeWindow)<<7 | util.B2U(afe.HasPiecewiseRate)<<6 | util.B2U(afe.HasSeamlessSplice)<<5 | util.B2U(!afe.HasAFDescriptors)<<4 | 0x0f
 	n = 2
 

@@ -25,7 +25,7 @@ func newDescriptorContent(i *bytesiter.Iterator, h Header, offsetEnd int) (dd De
 
 	for i.Offset() < offsetEnd {
 		var bs []byte
-		if bs, err = i.NextBytesNoCopy(2); err != nil || len(bs) < 2 {
+		if bs, err = i.NextBytesNoCopy(2); err != nil {
 			err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 			return
 		}
@@ -44,7 +44,7 @@ func (d *Content) CalcLength() int {
 }
 
 func (d *Content) Append(dst []byte) []byte {
-	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	dst = append(dst, uint8(d.Tag()), uint8(d.CalcLength()))
 	for _, item := range d.Items {
 		dst = append(dst, item.ContentNibbleLevel1<<4|item.ContentNibbleLevel2&0xf, item.UserByte)
 	}

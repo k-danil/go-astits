@@ -7,7 +7,9 @@ func newDescriptorUserDefined(i *bytesiter.Iterator, h Header, _ int) (dd Descri
 		Header: h,
 	}
 	dd = d
-	d.Data, err = i.NextBytes(int(h.Length))
+	if h.Length > 0 {
+		d.Data, err = i.NextBytes(int(h.Length))
+	}
 	return
 }
 
@@ -21,6 +23,6 @@ func (d *UserDefined) CalcLength() int {
 }
 
 func (d *UserDefined) Append(dst []byte) []byte {
-	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	dst = append(dst, uint8(d.Tag()), uint8(d.CalcLength()))
 	return append(dst, d.Data...)
 }

@@ -48,7 +48,7 @@ func (d *MultilingualComponent) CalcLength() (n int) {
 }
 
 func (d *MultilingualComponent) Append(dst []byte) []byte {
-	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()), d.ComponentTag)
+	dst = append(dst, uint8(d.Tag()), uint8(d.CalcLength()), d.ComponentTag)
 	for _, item := range d.Items {
 		dst = append(dst, item.Language[:]...)
 		dst = append(dst, uint8(len(item.Description)))

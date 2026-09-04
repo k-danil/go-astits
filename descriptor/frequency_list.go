@@ -29,12 +29,14 @@ func newDescriptorFrequencyList(i *bytesiter.Iterator, h Header, offsetEnd int) 
 	d.Frequencies = make([]uint32, (offsetEnd-i.Offset())/4)
 	for idx := range d.Frequencies {
 		var bs []byte
-		if bs, err = i.NextBytesNoCopy(4); err != nil || len(bs) < 4 {
+		if bs, err = i.NextBytesNoCopy(4); err != nil {
 			err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 			return
 		}
 		d.Frequencies[idx] = binary.BigEndian.Uint32(bs)
 	}
+
+	err = rejectTrailingBytes(i, offsetEnd)
 	return
 }
 
@@ -43,7 +45,7 @@ func (d *FrequencyList) CalcLength() int {
 }
 
 func (d *FrequencyList) Append(dst []byte) []byte {
-	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	dst = append(dst, uint8(d.Tag()), uint8(d.CalcLength()))
 	dst = append(dst, 0xfc|d.CodingType&0x03)
 	for _, f := range d.Frequencies {
 		dst = append(dst, byte(f>>24), byte(f>>16), byte(f>>8), byte(f))

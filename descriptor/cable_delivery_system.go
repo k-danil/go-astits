@@ -17,14 +17,14 @@ type CableDeliverySystem struct {
 	FECInner   uint8  `json:"FEC_inner"`
 }
 
-func newDescriptorCableDeliverySystem(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {
+func newDescriptorCableDeliverySystem(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
 	d := &CableDeliverySystem{
 		Header: h,
 	}
 	dd = d
 
 	var bs []byte
-	if bs, err = i.NextBytesNoCopy(11); err != nil || len(bs) < 11 {
+	if bs, err = i.NextBytesNoCopy(11); err != nil {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return
 	}
@@ -33,6 +33,8 @@ func newDescriptorCableDeliverySystem(i *bytesiter.Iterator, h Header, _ int) (d
 	d.Modulation = bs[6]
 	d.SymbolRate = uint32(bs[7])<<20 | uint32(bs[8])<<12 | uint32(bs[9])<<4 | uint32(bs[10])>>4
 	d.FECInner = bs[10] & 0x0f
+
+	err = rejectTrailingBytes(i, offsetEnd)
 	return
 }
 
@@ -41,7 +43,7 @@ func (d *CableDeliverySystem) CalcLength() int {
 }
 
 func (d *CableDeliverySystem) Append(dst []byte) []byte {
-	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	dst = append(dst, uint8(d.Tag()), uint8(d.CalcLength()))
 	dst = append(dst, byte(d.Frequency>>24), byte(d.Frequency>>16), byte(d.Frequency>>8), byte(d.Frequency))
 	dst = append(dst, 0xff, 0xf0|d.FECOuter&0x0f, d.Modulation)
 	return append(dst,

@@ -15,7 +15,7 @@ type Registration struct {
 
 func newDescriptorRegistration(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
 	var bs []byte
-	if bs, err = i.NextBytesNoCopy(4); err != nil || len(bs) < 4 {
+	if bs, err = i.NextBytesNoCopy(4); err != nil {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return
 	}
@@ -40,7 +40,7 @@ func (d *Registration) CalcLength() int {
 }
 
 func (d *Registration) Append(dst []byte) []byte {
-	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	dst = append(dst, uint8(d.Tag()), uint8(d.CalcLength()))
 	dst = append(dst, byte(d.FormatIdentifier>>24), byte(d.FormatIdentifier>>16), byte(d.FormatIdentifier>>8), byte(d.FormatIdentifier))
 	return append(dst, d.AdditionalIdentificationInfo...)
 }

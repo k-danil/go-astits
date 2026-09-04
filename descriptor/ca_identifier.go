@@ -21,12 +21,14 @@ func newDescriptorCAIdentifier(i *bytesiter.Iterator, h Header, offsetEnd int) (
 
 	for idx := range d.SystemIDs {
 		var bs []byte
-		if bs, err = i.NextBytesNoCopy(2); err != nil || len(bs) < 2 {
+		if bs, err = i.NextBytesNoCopy(2); err != nil {
 			err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 			return
 		}
 		d.SystemIDs[idx] = binary.BigEndian.Uint16(bs)
 	}
+
+	err = rejectTrailingBytes(i, offsetEnd)
 	return
 }
 
@@ -35,7 +37,7 @@ func (d *CAIdentifier) CalcLength() int {
 }
 
 func (d *CAIdentifier) Append(dst []byte) []byte {
-	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	dst = append(dst, uint8(d.Tag()), uint8(d.CalcLength()))
 	for _, id := range d.SystemIDs {
 		dst = append(dst, byte(id>>8), byte(id))
 	}

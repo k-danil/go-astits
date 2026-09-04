@@ -43,20 +43,22 @@ func newDescriptorSubtitling(i *bytesiter.Iterator, h Header, offsetEnd int) (dd
 
 		d.Items[idx].Type = b
 
-		if bs, err = i.NextBytesNoCopy(2); err != nil || len(bs) < 2 {
+		if bs, err = i.NextBytesNoCopy(2); err != nil {
 			err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 			return
 		}
 
 		d.Items[idx].CompositionPageID = binary.BigEndian.Uint16(bs)
 
-		if bs, err = i.NextBytesNoCopy(2); err != nil || len(bs) < 2 {
+		if bs, err = i.NextBytesNoCopy(2); err != nil {
 			err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 			return
 		}
 
 		d.Items[idx].AncillaryPageID = binary.BigEndian.Uint16(bs)
 	}
+
+	err = rejectTrailingBytes(i, offsetEnd)
 	return
 }
 
@@ -65,7 +67,7 @@ func (d *Subtitling) CalcLength() int {
 }
 
 func (d *Subtitling) Append(dst []byte) []byte {
-	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	dst = append(dst, uint8(d.Tag()), uint8(d.CalcLength()))
 	for _, item := range d.Items {
 		dst = append(dst, item.Language[:]...)
 		dst = append(dst, item.Type,

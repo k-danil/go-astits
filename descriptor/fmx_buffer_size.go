@@ -29,6 +29,6 @@ func (d *FmxBufferSize) CalcLength() int {
 }
 
 func (d *FmxBufferSize) Append(dst []byte) []byte {
-	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	dst = append(dst, uint8(d.Tag()), uint8(d.CalcLength()))
 	return append(dst, d.Body...)
 }

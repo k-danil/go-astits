@@ -14,7 +14,14 @@ type MPEG4AudioExtension struct {
 	HasASC                      bool   `json:"ASC_flag"`
 }
 
-func newDescriptorMPEG4AudioExtension(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {
+const mpeg4AudioExtensionMaxLoops = 0x0f
+
+// num_of_loops is 4 bits: entries past the fifteenth cannot be signalled, so they are dropped.
+func (d *MPEG4AudioExtension) audioProfileLevelIndication() []byte {
+	return d.AudioProfileLevelIndication[:min(len(d.AudioProfileLevelIndication), mpeg4AudioExtensionMaxLoops)]
+}
+
+func newDescriptorMPEG4AudioExtension(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
 	var b byte
 	if b, err = i.NextByte(); err != nil {
 		err = fmt.Errorf("astits: fetching next byte failed: %w", err)
@@ -47,11 +54,13 @@ func newDescriptorMPEG4AudioExtension(i *bytesiter.Iterator, h Header, _ int) (d
 			}
 		}
 	}
+
+	err = rejectTrailingBytes(i, offsetEnd)
 	return
 }
 
 func (d *MPEG4AudioExtension) CalcLength() int {
-	ret := 1 + len(d.AudioProfileLevelIndication)
+	ret := 1 + len(d.audioProfileLevelIndication())
 	if d.HasASC {
 		ret += 1 + len(d.AudioSpecificConfig)
 	}
@@ -59,9 +68,10 @@ func (d *MPEG4AudioExtension) CalcLength() int {
 }
 
 func (d *MPEG4AudioExtension) Append(dst []byte) []byte {
-	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
-	dst = append(dst, util.B2U(d.HasASC)<<7|0x7<<4|uint8(len(d.AudioProfileLevelIndication))&0x0f)
-	dst = append(dst, d.AudioProfileLevelIndication...)
+	dst = append(dst, uint8(d.Tag()), uint8(d.CalcLength()))
+	apl := d.audioProfileLevelIndication()
+	dst = append(dst, util.B2U(d.HasASC)<<7|0x7<<4|uint8(len(apl)))
+	dst = append(dst, apl...)
 	if d.HasASC {
 		dst = append(dst, uint8(len(d.AudioSpecificConfig)))
 		dst = append(dst, d.AudioSpecificConfig...)

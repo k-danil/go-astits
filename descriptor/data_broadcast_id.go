@@ -20,7 +20,7 @@ func newDescriptorDataBroadcastID(i *bytesiter.Iterator, h Header, offsetEnd int
 	dd = d
 
 	var bs []byte
-	if bs, err = i.NextBytesNoCopy(2); err != nil || len(bs) < 2 {
+	if bs, err = i.NextBytesNoCopy(2); err != nil {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return
 	}
@@ -38,7 +38,7 @@ func (d *DataBroadcastID) CalcLength() int {
 }
 
 func (d *DataBroadcastID) Append(dst []byte) []byte {
-	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	dst = append(dst, uint8(d.Tag()), uint8(d.CalcLength()))
 	dst = append(dst, byte(d.DataBroadcastID>>8), byte(d.DataBroadcastID))
 	return append(dst, d.Selector...)
 }

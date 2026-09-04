@@ -11,7 +11,7 @@ type AdaptationFieldData struct {
 	Identifier uint8  `json:"adaptation_field_data_identifier"`
 }
 
-func newDescriptorAdaptationFieldData(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {
+func newDescriptorAdaptationFieldData(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
 	d := &AdaptationFieldData{
 		Header: h,
 	}
@@ -21,6 +21,8 @@ func newDescriptorAdaptationFieldData(i *bytesiter.Iterator, h Header, _ int) (d
 		err = fmt.Errorf("astits: fetching next byte failed: %w", err)
 		return
 	}
+
+	err = rejectTrailingBytes(i, offsetEnd)
 	return
 }
 
@@ -29,5 +31,5 @@ func (d *AdaptationFieldData) CalcLength() int {
 }
 
 func (d *AdaptationFieldData) Append(dst []byte) []byte {
-	return append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()), d.Identifier)
+	return append(dst, uint8(d.Tag()), uint8(d.CalcLength()), d.Identifier)
 }

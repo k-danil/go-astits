@@ -109,7 +109,7 @@ func newDescriptorAnnouncementSupport(i *bytesiter.Iterator, h Header, offsetEnd
 	dd = d
 
 	var bs []byte
-	if bs, err = i.NextBytesNoCopy(2); err != nil || len(bs) < 2 {
+	if bs, err = i.NextBytesNoCopy(2); err != nil {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return
 	}
@@ -126,7 +126,7 @@ func newDescriptorAnnouncementSupport(i *bytesiter.Iterator, h Header, offsetEnd
 		item.ReferenceType = AnnouncementReference(b & 0x07)
 
 		if announcementHasReference(item.ReferenceType) {
-			if bs, err = i.NextBytesNoCopy(7); err != nil || len(bs) < 7 {
+			if bs, err = i.NextBytesNoCopy(7); err != nil {
 				err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 				return
 			}
@@ -152,7 +152,7 @@ func (d *AnnouncementSupport) CalcLength() (n int) {
 }
 
 func (d *AnnouncementSupport) Append(dst []byte) []byte {
-	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	dst = append(dst, uint8(d.Tag()), uint8(d.CalcLength()))
 	dst = append(dst, byte(d.SupportIndicator>>8), byte(d.SupportIndicator))
 	for _, item := range d.Announcements {
 		dst = append(dst, uint8(item.AnnouncementType)&0x0f<<4|0x08|uint8(item.ReferenceType)&0x07)

@@ -18,16 +18,18 @@ type C2BundleEntry struct {
 	C2SystemTuningFrequencyType uint8  `json:"C2_System_tuning_frequency_type"`
 	ActiveOFDMSymbolDuration    uint8  `json:"active_OFDM_symbol_duration"`
 	GuardInterval               uint8  `json:"guard_interval"`
-	MasterChannel               bool   `json:"master_channel"`
+	PrimaryChannel              bool   `json:"primary_channel"`
 }
+
+const c2BundleEntrySize = 8
 
 func parseC2BundleDeliverySystem(i *bytesiter.Iterator, offsetEnd int) (d *C2BundleDeliverySystem, err error) {
 	d = &C2BundleDeliverySystem{
-		Entries: make([]C2BundleEntry, (offsetEnd-i.Offset())/8),
+		Entries: make([]C2BundleEntry, (offsetEnd-i.Offset())/c2BundleEntrySize),
 	}
 	for idx := range d.Entries {
 		var bs []byte
-		if bs, err = i.NextBytesNoCopy(8); err != nil || len(bs) < 8 {
+		if bs, err = i.NextBytesNoCopy(c2BundleEntrySize); err != nil {
 			err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 			return
 		}
@@ -37,13 +39,15 @@ func parseC2BundleDeliverySystem(i *bytesiter.Iterator, offsetEnd int) (d *C2Bun
 		d.Entries[idx].C2SystemTuningFrequencyType = bs[6] >> 6 & 0x03
 		d.Entries[idx].ActiveOFDMSymbolDuration = bs[6] >> 3 & 0x07
 		d.Entries[idx].GuardInterval = bs[6] & 0x07
-		d.Entries[idx].MasterChannel = bs[7]&0x80 > 0
+		d.Entries[idx].PrimaryChannel = bs[7]&0x80 > 0
 	}
+
+	err = rejectTrailingBytes(i, offsetEnd)
 	return
 }
 
 func (d *C2BundleDeliverySystem) CalcLength() int {
-	return 8 * len(d.Entries)
+	return c2BundleEntrySize * len(d.Entries)
 }
 
 func (d *C2BundleDeliverySystem) Append(dst []byte) []byte {
@@ -53,11 +57,11 @@ func (d *C2BundleDeliverySystem) Append(dst []byte) []byte {
 			byte(e.C2SystemTuningFrequency>>24), byte(e.C2SystemTuningFrequency>>16),
 			byte(e.C2SystemTuningFrequency>>8), byte(e.C2SystemTuningFrequency),
 			e.C2SystemTuningFrequencyType&0x03<<6|e.ActiveOFDMSymbolDuration&0x07<<3|e.GuardInterval&0x07)
-		var master byte
-		if e.MasterChannel {
-			master = 0x80
+		var primary byte
+		if e.PrimaryChannel {
+			primary = 0x80
 		}
-		dst = append(dst, master)
+		dst = append(dst, primary)
 	}
 	return dst
 }

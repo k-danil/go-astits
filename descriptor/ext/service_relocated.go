@@ -13,22 +13,26 @@ type ServiceRelocated struct {
 	OldServiceID         uint16 `json:"old_service_id"`
 }
 
-func parseServiceRelocated(i *bytesiter.Iterator, _ int) (d *ServiceRelocated, err error) {
+const serviceRelocatedSize = 6
+
+func parseServiceRelocated(i *bytesiter.Iterator, offsetEnd int) (d *ServiceRelocated, err error) {
 	d = &ServiceRelocated{}
 
 	var bs []byte
-	if bs, err = i.NextBytesNoCopy(6); err != nil || len(bs) < 6 {
+	if bs, err = i.NextBytesNoCopy(serviceRelocatedSize); err != nil {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return
 	}
 	d.OldOriginalNetworkID = binary.BigEndian.Uint16(bs[0:2])
 	d.OldTransportStreamID = binary.BigEndian.Uint16(bs[2:4])
 	d.OldServiceID = binary.BigEndian.Uint16(bs[4:6])
+
+	err = rejectTrailingBytes(i, offsetEnd)
 	return
 }
 
 func (d *ServiceRelocated) CalcLength() int {
-	return 6
+	return serviceRelocatedSize
 }
 
 func (d *ServiceRelocated) Append(dst []byte) []byte {

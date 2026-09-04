@@ -452,7 +452,7 @@ func (dmx *Demuxer) PAT() *psi.PAT {
 	return dmx.pat
 }
 
-// In effect only (current_next_indicator set); nil until one is seen.
+// The last PMT of any program, current_next_indicator set only; nil until one is seen. On a multi-program stream tell them apart by Section().
 func (dmx *Demuxer) PMT() *psi.PMT {
 	return dmx.pmt
 }
@@ -481,7 +481,7 @@ func (dmx *Demuxer) Events() iter.Seq2[Event, error] {
 	}
 }
 
-// Mandatory for a demuxer abandoned before the end of the stream. Units still accumulating are dropped without an event; read Next to ts.ErrNoMorePackets first to drain them.
+// Mandatory when a stream is abandoned early, and the end of the demuxer's life: do not read after it. Units still accumulating are dropped without an event, so drain them with Next first.
 func (dmx *Demuxer) Close() {
 	if dmx.pending != nil && !dmx.claimed {
 		dmx.pending.Close()

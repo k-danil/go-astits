@@ -29,9 +29,9 @@ type HEVCVideo struct {
 	SubPicHRDParamsNotPresentFlag  bool   `json:"sub_pic_hrd_params_not_present_flag"`
 }
 
-func newDescriptorHEVCVideo(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {
+func newDescriptorHEVCVideo(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
 	var bs []byte
-	if bs, err = i.NextBytesNoCopy(13); err != nil || len(bs) < 13 {
+	if bs, err = i.NextBytesNoCopy(13); err != nil {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return
 	}
@@ -57,13 +57,15 @@ func newDescriptorHEVCVideo(i *bytesiter.Iterator, h Header, _ int) (dd Descript
 	dd = d
 
 	if d.TemporalLayerSubsetFlag {
-		if bs, err = i.NextBytesNoCopy(2); err != nil || len(bs) < 2 {
+		if bs, err = i.NextBytesNoCopy(2); err != nil {
 			err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 			return
 		}
 		d.TemporalIDMin = bs[0] >> 5 & 0x7
 		d.TemporalIDMax = bs[1] >> 5 & 0x7
 	}
+
+	err = rejectTrailingBytes(i, offsetEnd)
 	return
 }
 
@@ -76,7 +78,7 @@ func (d *HEVCVideo) CalcLength() int {
 }
 
 func (d *HEVCVideo) Append(dst []byte) []byte {
-	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	dst = append(dst, uint8(d.Tag()), uint8(d.CalcLength()))
 	dst = append(dst, d.ProfileSpace&0x3<<6|util.B2U(d.TierFlag)<<5|d.ProfileIDC&0x1f)
 	dst = append(dst, byte(d.ProfileCompatibilityIndication>>24), byte(d.ProfileCompatibilityIndication>>16), byte(d.ProfileCompatibilityIndication>>8), byte(d.ProfileCompatibilityIndication))
 

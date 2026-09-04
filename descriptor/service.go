@@ -27,7 +27,7 @@ const (
 	ServiceTypeRCSMap                                      ServiceType = 0x0e
 	ServiceTypeRCSFLS                                      ServiceType = 0x0f
 	ServiceTypeDVBMHPService                               ServiceType = 0x10
-	ServiceTypeMPEG2HDDigitalTelevisionService             ServiceType = 0x11
+	ServiceTypeHDDigitalTelevisionService                  ServiceType = 0x11
 	ServiceTypeH264AVCSDDigitalTelevisionService           ServiceType = 0x16
 	ServiceTypeH264AVCSDNVODTimeShiftedService             ServiceType = 0x17
 	ServiceTypeH264AVCSDNVODReferenceService               ServiceType = 0x18
@@ -38,12 +38,15 @@ const (
 	ServiceTypeH264AVCStereoscopicHDNVODTimeShiftedService ServiceType = 0x1d
 	ServiceTypeH264AVCStereoscopicHDNVODReferenceService   ServiceType = 0x1e
 	ServiceTypeHEVCDigitalTelevisionService                ServiceType = 0x1f
+	ServiceTypeHEVCUHDDigitalTelevisionService             ServiceType = 0x20
+	ServiceTypeVVCDigitalTelevisionService                 ServiceType = 0x21
+	ServiceTypeAVS3DigitalTelevisionService                ServiceType = 0x22
 )
 
 var serviceTypeNames = map[ServiceType]string{
 	ServiceTypeDigitalTelevisionService:                    "digital_television_service",
 	ServiceTypeDigitalRadioSoundService:                    "digital_radio_sound_service",
-	ServiceTypeTeletextService:                             "Teletext_service",
+	ServiceTypeTeletextService:                             "teletext_service",
 	ServiceTypeNVODReferenceService:                        "NVOD_reference_service",
 	ServiceTypeNVODTimeShiftedService:                      "NVOD_time_shifted_service",
 	ServiceTypeMosaicService:                               "mosaic_service",
@@ -56,7 +59,7 @@ var serviceTypeNames = map[ServiceType]string{
 	ServiceTypeRCSMap:                                      "RCS_Map",
 	ServiceTypeRCSFLS:                                      "RCS_FLS",
 	ServiceTypeDVBMHPService:                               "DVB_MHP_service",
-	ServiceTypeMPEG2HDDigitalTelevisionService:             "MPEG2_HD_digital_television_service",
+	ServiceTypeHDDigitalTelevisionService:                  "HD_digital_television_service",
 	ServiceTypeH264AVCSDDigitalTelevisionService:           "H264_AVC_SD_digital_television_service",
 	ServiceTypeH264AVCSDNVODTimeShiftedService:             "H264_AVC_SD_NVOD_time_shifted_service",
 	ServiceTypeH264AVCSDNVODReferenceService:               "H264_AVC_SD_NVOD_reference_service",
@@ -67,6 +70,9 @@ var serviceTypeNames = map[ServiceType]string{
 	ServiceTypeH264AVCStereoscopicHDNVODTimeShiftedService: "H264_AVC_frame_compatible_plano_stereoscopic_HD_NVOD_time_shifted_service",
 	ServiceTypeH264AVCStereoscopicHDNVODReferenceService:   "H264_AVC_frame_compatible_plano_stereoscopic_HD_NVOD_reference_service",
 	ServiceTypeHEVCDigitalTelevisionService:                "HEVC_digital_television_service",
+	ServiceTypeHEVCUHDDigitalTelevisionService:             "HEVC_UHD_digital_television_service",
+	ServiceTypeVVCDigitalTelevisionService:                 "VVC_digital_television_service",
+	ServiceTypeAVS3DigitalTelevisionService:                "AVS3_digital_television_service",
 }
 
 func (t ServiceType) String() (s string) {
@@ -93,7 +99,7 @@ type Service struct {
 	Type     ServiceType  `json:"service_type"`
 }
 
-func newDescriptorService(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {
+func newDescriptorService(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
 	var b byte
 	if b, err = i.NextByte(); err != nil {
 		err = fmt.Errorf("astits: fetching next byte failed: %w", err)
@@ -129,6 +135,8 @@ func newDescriptorService(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return
 	}
+
+	err = rejectTrailingBytes(i, offsetEnd)
 	return
 }
 
@@ -137,7 +145,7 @@ func (d *Service) CalcLength() int {
 }
 
 func (d *Service) Append(dst []byte) []byte {
-	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	dst = append(dst, uint8(d.Tag()), uint8(d.CalcLength()))
 	dst = append(dst, uint8(d.Type), uint8(len(d.Provider)))
 	dst = append(dst, d.Provider...)
 	dst = append(dst, uint8(len(d.Name)))

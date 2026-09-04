@@ -32,7 +32,7 @@ func (d *Extension) CalcLength() int {
 }
 
 func (d *Extension) Append(dst []byte) []byte {
-	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	dst = append(dst, uint8(d.Tag()), uint8(d.CalcLength()))
 	dst = append(dst, uint8(d.Body.Tag()))
 	return d.Body.Append(dst)
 }

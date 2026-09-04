@@ -21,7 +21,7 @@ type AVCTimingAndHRD struct {
 	PictureToDisplayConversion  bool   `json:"picture_to_display_conversion_flag"`
 }
 
-func newDescriptorAVCTimingAndHRD(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {
+func newDescriptorAVCTimingAndHRD(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
 	var b byte
 	if b, err = i.NextByte(); err != nil {
 		err = fmt.Errorf("astits: fetching next byte failed: %w", err)
@@ -44,7 +44,7 @@ func newDescriptorAVCTimingAndHRD(i *bytesiter.Iterator, h Header, _ int) (dd De
 
 		if !d.Is90kHz {
 			var bs []byte
-			if bs, err = i.NextBytesNoCopy(8); err != nil || len(bs) < 8 {
+			if bs, err = i.NextBytesNoCopy(8); err != nil {
 				err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 				return
 			}
@@ -53,7 +53,7 @@ func newDescriptorAVCTimingAndHRD(i *bytesiter.Iterator, h Header, _ int) (dd De
 		}
 
 		var bs []byte
-		if bs, err = i.NextBytesNoCopy(4); err != nil || len(bs) < 4 {
+		if bs, err = i.NextBytesNoCopy(4); err != nil {
 			err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 			return
 		}
@@ -68,6 +68,7 @@ func newDescriptorAVCTimingAndHRD(i *bytesiter.Iterator, h Header, _ int) (dd De
 	d.TemporalPOC = b&0x40 > 0
 	d.PictureToDisplayConversion = b&0x20 > 0
 
+	err = rejectTrailingBytes(i, offsetEnd)
 	return
 }
 
@@ -83,7 +84,7 @@ func (d *AVCTimingAndHRD) CalcLength() int {
 }
 
 func (d *AVCTimingAndHRD) Append(dst []byte) []byte {
-	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	dst = append(dst, uint8(d.Tag()), uint8(d.CalcLength()))
 	dst = append(dst, util.B2U(d.HRDManagementValid)<<7|0x7e|util.B2U(d.PictureAndTimingInfoPresent))
 
 	if d.PictureAndTimingInfoPresent {

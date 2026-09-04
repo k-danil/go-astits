@@ -281,8 +281,9 @@ var roundtripGenerators = map[string]func(r *rand.Rand) Descriptor{
 	"S2SatelliteDeliverySystem": func(r *rand.Rand) Descriptor {
 		return &S2SatelliteDeliverySystem{Header: Header{Tag: TagS2SatelliteDeliverySystem},
 			ScramblingSequenceSelector: r.UintN(2) == 1, MultipleInputStreamFlag: r.UintN(2) == 1,
-			BackwardsCompatibilityIndicator: r.UintN(2) == 1,
-			ScramblingSequenceIndex:         uint32(r.UintN(1 << 18)), InputStreamIdentifier: uint8(r.UintN(256))}
+			NotTimesliceFlag: r.UintN(2) == 1, TSGSMode: uint8(r.UintN(4)),
+			TimesliceNumber:         uint8(r.UintN(256)),
+			ScramblingSequenceIndex: uint32(r.UintN(1 << 18)), InputStreamIdentifier: uint8(r.UintN(256))}
 	},
 	"TerrestrialDeliverySystem": func(r *rand.Rand) Descriptor {
 		return &TerrestrialDeliverySystem{Header: Header{Tag: TagTerrestrialDeliverySystem},
@@ -405,12 +406,12 @@ var roundtripGenerators = map[string]func(r *rand.Rand) Descriptor{
 		d := &CellList{Header: Header{Tag: TagCellList}}
 		for range 1 + r.UintN(3) {
 			cell := CellListCell{CellID: uint16(r.UintN(1 << 16)),
-				CellLatitude: uint16(r.UintN(1 << 16)), CellLongitude: uint16(r.UintN(1 << 16)),
+				CellLatitude: int16(r.UintN(1 << 16)), CellLongitude: int16(r.UintN(1 << 16)),
 				CellExtentOfLatitude: uint16(r.UintN(1 << 12)), CellExtentOfLongitude: uint16(r.UintN(1 << 12))}
 			for range r.UintN(3) {
 				cell.Subcells = append(cell.Subcells, CellListSubcell{
 					CellIDExtension: uint8(r.UintN(256)),
-					SubcellLatitude: uint16(r.UintN(1 << 16)), SubcellLongitude: uint16(r.UintN(1 << 16)),
+					SubcellLatitude: int16(r.UintN(1 << 16)), SubcellLongitude: int16(r.UintN(1 << 16)),
 					SubcellExtentOfLatitude: uint16(r.UintN(1 << 12)), SubcellExtentOfLongitude: uint16(r.UintN(1 << 12))})
 			}
 			d.Cells = append(d.Cells, cell)
@@ -469,7 +470,7 @@ var roundtripGenerators = map[string]func(r *rand.Rand) Descriptor{
 				PLPID: uint8(r.UintN(256)), DataSliceID: uint8(r.UintN(256)),
 				C2SystemTuningFrequency: r.Uint32(), C2SystemTuningFrequencyType: uint8(r.UintN(4)),
 				ActiveOFDMSymbolDuration: uint8(r.UintN(8)), GuardInterval: uint8(r.UintN(8)),
-				MasterChannel: r.UintN(2) == 1})
+				PrimaryChannel: r.UintN(2) == 1})
 		}
 		return &Extension{Header: Header{Tag: TagExtension}, Body: e}
 	},
@@ -1114,6 +1115,55 @@ func TestRoundtripDescriptors(t *testing.T) {
 
 				b2 := AppendWithLength(nil, ds)
 				assert.Equal(t, b1, b2, "iteration %d", i)
+			}
+		})
+	}
+}
+
+// Only these bodies end in a reserved loop an encoder may fill (EN 300 468 Tables 94 and 158).
+var bodiesWithSpecTail = map[string]struct{}{
+	"ShortSmoothingBuffer": {},
+	"ext.T2MI":             {},
+}
+
+// The tail lands in the body's own loop, where its reserved bits are normalised on write: the bytes come back changed, not lost.
+var bodiesNormalisingTail = map[string]struct{}{
+	"AAC":                  {},
+	"AnnouncementSupport":  {},
+	"ext.SHDeliverySystem": {},
+	"ext.T2DeliverySystem": {},
+}
+
+func TestDescriptorKeepsBodyTail(t *testing.T) {
+	tail := []byte{0xa5, 0x5a, 0x0f}
+	for name, gen := range roundtripGenerators {
+		t.Run(name, func(t *testing.T) {
+			_, keepsTail := bodiesWithSpecTail[name]
+			r := rand.New(rand.NewPCG(17, 23))
+			for i := range 50 {
+				canonical := gen(r).Append(nil)
+				body := canonical[2:]
+				for extra := 1; extra <= len(tail); extra++ {
+					if len(body)+extra > 0xff {
+						continue
+					}
+					desc := []byte{canonical[0], uint8(len(body) + extra)}
+					desc = append(desc, body...)
+					desc = append(desc, tail[:extra]...)
+					in := append([]byte{0xf0 | byte(len(desc)>>8), byte(len(desc))}, desc...)
+
+					ds, n, err := Parse(in)
+					require.NoError(t, err, "iteration %d, %d extra", i, extra)
+					require.Equal(t, len(in), n, "iteration %d, %d extra", i, extra)
+					require.Len(t, ds, 1, "iteration %d, %d extra", i, extra)
+					if m, malformed := ds[0].(*Malformed); malformed {
+						require.False(t, keepsTail, "iteration %d, %d extra", i, extra)
+						require.Equal(t, desc[2:], m.Raw, "iteration %d, %d extra", i, extra)
+					}
+					if _, normalises := bodiesNormalisingTail[name]; !normalises {
+						require.Equal(t, in, AppendWithLength(nil, ds), "iteration %d, %d extra", i, extra)
+					}
+				}
 			}
 		})
 	}

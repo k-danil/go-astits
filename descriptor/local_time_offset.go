@@ -27,13 +27,13 @@ type LocalTimeOffsetItem struct {
 func newDescriptorLocalTimeOffset(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
 	d := &LocalTimeOffset{
 		Header: h,
-		Items:  make([]LocalTimeOffsetItem, (offsetEnd-i.Offset())/13),
+		Items:  make([]LocalTimeOffsetItem, (offsetEnd-i.Offset())/localTimeOffsetItemSize),
 	}
 	dd = d
 
 	for idx := range d.Items {
 		var bs []byte
-		if bs, err = i.NextBytesNoCopy(3); err != nil {
+		if bs, err = i.NextBytesNoCopy(len(d.Items[idx].CountryCode)); err != nil {
 			err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 			return
 		}
@@ -64,15 +64,19 @@ func newDescriptorLocalTimeOffset(i *bytesiter.Iterator, h Header, offsetEnd int
 			return
 		}
 	}
+
+	err = rejectTrailingBytes(i, offsetEnd)
 	return
 }
 
+const localTimeOffsetItemSize = 13
+
 func (d *LocalTimeOffset) CalcLength() int {
-	return 13 * len(d.Items)
+	return localTimeOffsetItemSize * len(d.Items)
 }
 
 func (d *LocalTimeOffset) Append(dst []byte) []byte {
-	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	dst = append(dst, uint8(d.Tag()), uint8(d.CalcLength()))
 	for _, item := range d.Items {
 		dst = append(dst, item.CountryCode[:]...)
 		dst = append(dst, item.CountryRegionID&0x3f<<2|1<<1|util.B2U(item.LocalTimeOffsetPolarity))

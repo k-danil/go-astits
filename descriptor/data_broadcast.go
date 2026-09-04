@@ -17,14 +17,14 @@ type DataBroadcast struct {
 	ComponentTag    uint8        `json:"component_tag"`
 }
 
-func newDescriptorDataBroadcast(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {
+func newDescriptorDataBroadcast(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
 	d := &DataBroadcast{
 		Header: h,
 	}
 	dd = d
 
 	var bs []byte
-	if bs, err = i.NextBytesNoCopy(2); err != nil || len(bs) < 2 {
+	if bs, err = i.NextBytesNoCopy(2); err != nil {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return
 	}
@@ -46,7 +46,7 @@ func newDescriptorDataBroadcast(i *bytesiter.Iterator, h Header, _ int) (dd Desc
 		return
 	}
 
-	if bs, err = i.NextBytesNoCopy(3); err != nil || len(bs) < 3 {
+	if bs, err = i.NextBytesNoCopy(3); err != nil {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return
 	}
@@ -60,6 +60,8 @@ func newDescriptorDataBroadcast(i *bytesiter.Iterator, h Header, _ int) (dd Desc
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return
 	}
+
+	err = rejectTrailingBytes(i, offsetEnd)
 	return
 }
 
@@ -68,7 +70,7 @@ func (d *DataBroadcast) CalcLength() int {
 }
 
 func (d *DataBroadcast) Append(dst []byte) []byte {
-	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	dst = append(dst, uint8(d.Tag()), uint8(d.CalcLength()))
 	dst = append(dst, byte(d.DataBroadcastID>>8), byte(d.DataBroadcastID), d.ComponentTag)
 	dst = append(dst, uint8(len(d.Selector)))
 	dst = append(dst, d.Selector...)

@@ -12,7 +12,7 @@ type STD struct {
 	LeakValidFlag bool   `json:"leak_valid_flag"`
 }
 
-func newDescriptorSTD(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {
+func newDescriptorSTD(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
 	var b byte
 	if b, err = i.NextByte(); err != nil {
 		err = fmt.Errorf("astits: fetching next byte failed: %w", err)
@@ -23,14 +23,16 @@ func newDescriptorSTD(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, er
 		LeakValidFlag: b&0x01 > 0,
 	}
 	dd = d
+
+	err = rejectTrailingBytes(i, offsetEnd)
 	return
 }
 
-func (*STD) CalcLength() int {
+func (d *STD) CalcLength() int {
 	return 1
 }
 
 func (d *STD) Append(dst []byte) []byte {
-	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	dst = append(dst, uint8(d.Tag()), uint8(d.CalcLength()))
 	return append(dst, 0xfe|util.B2U(d.LeakValidFlag))
 }

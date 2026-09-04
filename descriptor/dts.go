@@ -25,7 +25,7 @@ func newDescriptorDTS(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descri
 	dd = d
 
 	var bs []byte
-	if bs, err = i.NextBytesNoCopy(5); err != nil || len(bs) < 5 {
+	if bs, err = i.NextBytesNoCopy(5); err != nil {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return
 	}
@@ -50,7 +50,7 @@ func (d *DTS) CalcLength() int {
 }
 
 func (d *DTS) Append(dst []byte) []byte {
-	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	dst = append(dst, uint8(d.Tag()), uint8(d.CalcLength()))
 	v := uint64(d.SampleRateCode&0x0f)<<36 | uint64(d.BitRateCode&0x3f)<<30 |
 		uint64(d.NBLKS&0x7f)<<23 | uint64(d.FSize&0x3fff)<<9 |
 		uint64(d.SurroundMode&0x3f)<<3 | uint64(d.ExtendedSurroundFlag&0x03)

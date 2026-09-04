@@ -89,8 +89,8 @@ func (d *AC3) CalcLength() int {
 }
 
 func (d *AC3) Append(dst []byte) []byte {
-	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
-	dst = append(dst, util.B2U(d.HasComponentType)<<7|util.B2U(d.HasBSID)<<6|util.B2U(d.HasMainID)<<5|util.B2U(d.HasASVC)<<4|0xf)
+	dst = append(dst, uint8(d.Tag()), uint8(d.CalcLength()))
+	dst = append(dst, util.B2U(d.HasComponentType)<<7|util.B2U(d.HasBSID)<<6|util.B2U(d.HasMainID)<<5|util.B2U(d.HasASVC)<<4)
 
 	if d.HasComponentType {
 		dst = append(dst, d.ComponentType)

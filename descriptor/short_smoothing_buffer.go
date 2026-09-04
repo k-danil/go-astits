@@ -27,9 +27,11 @@ func newDescriptorShortSmoothingBuffer(i *bytesiter.Iterator, h Header, offsetEn
 	d.SBSize = b >> 6 & 0x03
 	d.SBLeakRate = b & 0x3f
 
-	if d.Reserved, err = i.NextBytes(offsetEnd - i.Offset()); err != nil {
-		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
-		return
+	if offsetEnd > i.Offset() {
+		if d.Reserved, err = i.NextBytes(offsetEnd - i.Offset()); err != nil {
+			err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
+			return
+		}
 	}
 	return
 }
@@ -39,7 +41,7 @@ func (d *ShortSmoothingBuffer) CalcLength() int {
 }
 
 func (d *ShortSmoothingBuffer) Append(dst []byte) []byte {
-	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	dst = append(dst, uint8(d.Tag()), uint8(d.CalcLength()))
 	dst = append(dst, d.SBSize&0x03<<6|d.SBLeakRate&0x3f)
 	return append(dst, d.Reserved...)
 }

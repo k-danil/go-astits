@@ -68,7 +68,7 @@ func (d *Component) CalcLength() int {
 }
 
 func (d *Component) Append(dst []byte) []byte {
-	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	dst = append(dst, uint8(d.Tag()), uint8(d.CalcLength()))
 	dst = append(dst, d.StreamContentExt<<4|d.StreamContent&0xf)
 	dst = append(dst, d.ComponentType, d.ComponentTag)
 	dst = append(dst, d.ISO639LanguageCode[:]...)

@@ -5,7 +5,9 @@ import (
 	"fmt"
 
 	"github.com/k-danil/go-astits/v3/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/errclass"
 	"github.com/k-danil/go-astits/v3/internal/util"
+	"github.com/k-danil/go-astits/v3/ts"
 )
 
 type Tag uint8
@@ -17,50 +19,71 @@ type Body interface {
 	Append(dst []byte) []byte
 }
 
+// Tags without a Body of their own parse into Unknown, which keeps the selector bytes verbatim.
 const (
-	TagImageIcon              Tag = 0x00
-	TagCP                     Tag = 0x02
-	TagCPIdentifier           Tag = 0x03
-	TagT2DeliverySystem       Tag = 0x04
-	TagSHDeliverySystem       Tag = 0x05
-	TagSupplementaryAudio     Tag = 0x6
-	TagNetworkChangeNotify    Tag = 0x07
-	TagMessage                Tag = 0x08
-	TagTargetRegion           Tag = 0x09
-	TagTargetRegionName       Tag = 0x0a
-	TagServiceRelocated       Tag = 0x0b
-	TagC2DeliverySystem       Tag = 0x0d
-	TagDTSHD                  Tag = 0x0e
-	TagDTSNeural              Tag = 0x0f
-	TagVideoDepthRange        Tag = 0x10
-	TagT2MI                   Tag = 0x11
-	TagURILinkage             Tag = 0x13
-	TagCIAncillaryData        Tag = 0x14
-	TagAC4                    Tag = 0x15
-	TagC2BundleDeliverySystem Tag = 0x16
+	TagImageIcon                    Tag = 0x00
+	TagCPCMDeliverySignalling       Tag = 0x01
+	TagCP                           Tag = 0x02
+	TagCPIdentifier                 Tag = 0x03
+	TagT2DeliverySystem             Tag = 0x04
+	TagSHDeliverySystem             Tag = 0x05
+	TagSupplementaryAudio           Tag = 0x6
+	TagNetworkChangeNotify          Tag = 0x07
+	TagMessage                      Tag = 0x08
+	TagTargetRegion                 Tag = 0x09
+	TagTargetRegionName             Tag = 0x0a
+	TagServiceRelocated             Tag = 0x0b
+	TagXAITPID                      Tag = 0x0c
+	TagC2DeliverySystem             Tag = 0x0d
+	TagDTSHD                        Tag = 0x0e
+	TagDTSNeural                    Tag = 0x0f
+	TagVideoDepthRange              Tag = 0x10
+	TagT2MI                         Tag = 0x11
+	TagURILinkage                   Tag = 0x13
+	TagCIAncillaryData              Tag = 0x14
+	TagAC4                          Tag = 0x15
+	TagC2BundleDeliverySystem       Tag = 0x16
+	TagS2XSatelliteDeliverySystem   Tag = 0x17
+	TagProtectionMessage            Tag = 0x18
+	TagAudioPreselection            Tag = 0x19
+	TagTTMLSubtitling               Tag = 0x20
+	TagDTSUHD                       Tag = 0x21
+	TagServiceProminence            Tag = 0x22
+	TagVVCSubpictures               Tag = 0x23
+	TagS2Xv2SatelliteDeliverySystem Tag = 0x24
 )
 
 var tagNames = map[Tag]string{
-	TagImageIcon:              "image_icon_descriptor",
-	TagCP:                     "CP_descriptor",
-	TagCPIdentifier:           "CP_identifier_descriptor",
-	TagT2DeliverySystem:       "T2_delivery_system_descriptor",
-	TagSHDeliverySystem:       "SH_delivery_system_descriptor",
-	TagSupplementaryAudio:     "supplementary_audio_descriptor",
-	TagNetworkChangeNotify:    "network_change_notify_descriptor",
-	TagMessage:                "message_descriptor",
-	TagTargetRegion:           "target_region_descriptor",
-	TagTargetRegionName:       "target_region_name_descriptor",
-	TagServiceRelocated:       "service_relocated_descriptor",
-	TagC2DeliverySystem:       "C2_delivery_system_descriptor",
-	TagDTSHD:                  "DTS-HD_audio_stream_descriptor",
-	TagDTSNeural:              "DTS_Neural_descriptor",
-	TagVideoDepthRange:        "video_depth_range_descriptor",
-	TagT2MI:                   "T2MI_descriptor",
-	TagURILinkage:             "URI_linkage_descriptor",
-	TagCIAncillaryData:        "CI_ancillary_data_descriptor",
-	TagAC4:                    "AC-4_descriptor",
-	TagC2BundleDeliverySystem: "C2_bundle_delivery_system_descriptor",
+	TagImageIcon:                    "image_icon_descriptor",
+	TagCPCMDeliverySignalling:       "cpcm_delivery_signalling_descriptor",
+	TagCP:                           "CP_descriptor",
+	TagCPIdentifier:                 "CP_identifier_descriptor",
+	TagT2DeliverySystem:             "T2_delivery_system_descriptor",
+	TagSHDeliverySystem:             "SH_delivery_system_descriptor",
+	TagSupplementaryAudio:           "supplementary_audio_descriptor",
+	TagNetworkChangeNotify:          "network_change_notify_descriptor",
+	TagMessage:                      "message_descriptor",
+	TagTargetRegion:                 "target_region_descriptor",
+	TagTargetRegionName:             "target_region_name_descriptor",
+	TagServiceRelocated:             "service_relocated_descriptor",
+	TagXAITPID:                      "XAIT_PID_descriptor",
+	TagC2DeliverySystem:             "C2_delivery_system_descriptor",
+	TagDTSHD:                        "DTS-HD_audio_stream_descriptor",
+	TagDTSNeural:                    "DTS_Neural_descriptor",
+	TagVideoDepthRange:              "video_depth_range_descriptor",
+	TagT2MI:                         "T2MI_descriptor",
+	TagURILinkage:                   "URI_linkage_descriptor",
+	TagCIAncillaryData:              "CI_ancillary_data_descriptor",
+	TagAC4:                          "AC-4_descriptor",
+	TagC2BundleDeliverySystem:       "C2_bundle_delivery_system_descriptor",
+	TagS2XSatelliteDeliverySystem:   "S2X_satellite_delivery_system_descriptor",
+	TagProtectionMessage:            "protection_message_descriptor",
+	TagAudioPreselection:            "audio_preselection_descriptor",
+	TagTTMLSubtitling:               "TTML_subtitling_descriptor",
+	TagDTSUHD:                       "DTS-UHD_descriptor",
+	TagServiceProminence:            "service_prominence_descriptor",
+	TagVVCSubpictures:               "vvc_subpictures_descriptor",
+	TagS2Xv2SatelliteDeliverySystem: "S2Xv2_satellite_delivery_system_descriptor",
 }
 
 func (t Tag) String() (s string) {
@@ -109,6 +132,15 @@ type Unknown struct {
 func (u *Unknown) Tag() Tag                 { return u.ExtTag }
 func (u *Unknown) CalcLength() int          { return len(u.Data) }
 func (u *Unknown) Append(dst []byte) []byte { return append(dst, u.Data...) }
+
+var errTrailingBytes = errclass.New("astits: bytes left past the extension descriptor body", ts.ErrInvalidData)
+
+func rejectTrailingBytes(i *bytesiter.Iterator, offsetEnd int) (err error) {
+	if i.Offset() < offsetEnd {
+		err = errTrailingBytes
+	}
+	return
+}
 
 func Parse(i *bytesiter.Iterator, extTag Tag, offsetEnd int) (b Body, err error) {
 	switch extTag {

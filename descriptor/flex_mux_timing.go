@@ -15,9 +15,9 @@ type FlexMuxTiming struct {
 	FmxRateLength uint8  `json:"FmxRateLength"`
 }
 
-func newDescriptorFlexMuxTiming(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {
+func newDescriptorFlexMuxTiming(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
 	var bs []byte
-	if bs, err = i.NextBytesNoCopy(8); err != nil || len(bs) < 8 {
+	if bs, err = i.NextBytesNoCopy(8); err != nil {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return
 	}
@@ -30,15 +30,17 @@ func newDescriptorFlexMuxTiming(i *bytesiter.Iterator, h Header, _ int) (dd Desc
 		FmxRateLength: bs[7],
 	}
 	dd = d
+
+	err = rejectTrailingBytes(i, offsetEnd)
 	return
 }
 
-func (*FlexMuxTiming) CalcLength() int {
+func (d *FlexMuxTiming) CalcLength() int {
 	return 8
 }
 
 func (d *FlexMuxTiming) Append(dst []byte) []byte {
-	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	dst = append(dst, uint8(d.Tag()), uint8(d.CalcLength()))
 	dst = binary.BigEndian.AppendUint16(dst, d.FCRESID)
 	dst = binary.BigEndian.AppendUint32(dst, d.FCRResolution)
 	return append(dst, d.FCRLength, d.FmxRateLength)

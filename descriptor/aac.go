@@ -67,7 +67,7 @@ func (d *AAC) CalcLength() (n int) {
 }
 
 func (d *AAC) Append(dst []byte) []byte {
-	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()), d.ProfileAndLevel)
+	dst = append(dst, uint8(d.Tag()), uint8(d.CalcLength()), d.ProfileAndLevel)
 	if !d.HasFlags {
 		return dst
 	}

@@ -6,8 +6,19 @@ import (
 	"fmt"
 
 	"github.com/k-danil/go-astits/v3/internal/bytesiter"
+	"github.com/k-danil/go-astits/v3/internal/errclass"
 	"github.com/k-danil/go-astits/v3/internal/util"
+	"github.com/k-danil/go-astits/v3/ts"
 )
+
+var errTrailingBytes = errclass.New("astits: bytes left past the descriptor body", ts.ErrInvalidData)
+
+func rejectTrailingBytes(i *bytesiter.Iterator, offsetEnd int) (err error) {
+	if i.Offset() < offsetEnd {
+		err = errTrailingBytes
+	}
+	return
+}
 
 type Tag uint8
 
@@ -239,6 +250,10 @@ func (t *Tag) UnmarshalJSON(b []byte) (err error) {
 }
 
 // Parse reads a length-prefixed descriptor list; n includes the 2-byte prefix.
+//
+// A body is confined to its own descriptor_length; anything the parser rejects, bytes left past a fixed
+// layout included, becomes a *Malformed holding the declared bytes verbatim, so Append reproduces the input
+// byte for byte.
 func Parse(bs []byte) (ds []Descriptor, n int, err error) {
 	i := bytesiter.New(bs)
 	if ds, err = parseDescriptors(i); err != nil {
@@ -247,7 +262,7 @@ func Parse(bs []byte) (ds []Descriptor, n int, err error) {
 	return ds, i.Offset(), nil
 }
 
-// ParseN reads a descriptor loop of length bytes with no length prefix (CAT, TSDT).
+// ParseN reads a descriptor loop of length bytes with no length prefix (CAT, TSDT), under Parse's body contract.
 func ParseN(bs []byte, length int) (ds []Descriptor, n int, err error) {
 	i := bytesiter.New(bs)
 	if ds, err = parseDescriptorsN(i, length); err != nil {
@@ -258,7 +273,7 @@ func ParseN(bs []byte, length int) (ds []Descriptor, n int, err error) {
 
 func parseDescriptors(i *bytesiter.Iterator) (o []Descriptor, err error) {
 	var bs []byte
-	if bs, err = i.NextBytesNoCopy(2); err != nil || len(bs) < 2 {
+	if bs, err = i.NextBytesNoCopy(2); err != nil {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return
 	}
@@ -294,7 +309,7 @@ func parseDescriptorsN(i *bytesiter.Iterator, length int) (o []Descriptor, err e
 		o = make([]Descriptor, descrCount)
 
 		for idx := range o {
-			if bs, err = i.NextBytesNoCopy(2); err != nil || len(bs) < 2 {
+			if bs, err = i.NextBytesNoCopy(2); err != nil {
 				err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 				return
 			}
@@ -304,28 +319,27 @@ func parseDescriptorsN(i *bytesiter.Iterator, length int) (o []Descriptor, err e
 				Length: bs[1],
 			}
 
-			switch {
-			case h.Length > 0:
-				offsetBody := i.Offset()
-				offsetDescriptorEnd := offsetBody + int(h.Length)
-				var perr error
-				if o[idx], perr = h.parseDescriptor(i, offsetDescriptorEnd); perr != nil {
-					// A rejected body is the encoder's data, not a torn loop; only bytes that are truly missing stay an error.
-					i.Seek(offsetBody)
-					var raw []byte
-					if raw, err = i.NextBytes(int(h.Length)); err != nil {
-						err = fmt.Errorf("astits: fetching descriptor %x body failed: %w", h.Tag, err)
-						return
-					}
-					o[idx] = &Malformed{Header: h, Raw: raw, Err: perr}
+			offsetBody := i.Offset()
+			offsetDescriptorEnd := offsetBody + int(h.Length)
+
+			// Without the outer min a descriptor could widen the enclosing section.
+			prevLimit := i.Limit(min(offsetDescriptorEnd, i.Len()))
+			var perr error
+			o[idx], perr = h.parseDescriptor(i, offsetDescriptorEnd)
+			i.Limit(prevLimit)
+
+			if perr != nil {
+				// A rejected body is the encoder's data, not a torn loop; only missing bytes stay an error.
+				i.Seek(offsetBody)
+				var raw []byte
+				if raw, err = i.NextBytes(int(h.Length)); err != nil {
+					err = fmt.Errorf("astits: fetching descriptor %x body failed: %w", h.Tag, err)
+					return
 				}
-				// Realign: a body parser may stop short of the declared length, or read past it.
-				i.Seek(offsetDescriptorEnd)
-			case h.Tag >= userDefinedTagsStart && h.Tag != tagForbidden:
-				o[idx] = &UserDefined{Header: h}
-			default:
-				o[idx] = &Unknown{Header: h}
+				o[idx] = &Malformed{Header: h, Raw: raw, Err: perr}
 			}
+			// Realign: the loop must advance exactly h.Length whatever the body consumed.
+			i.Seek(offsetDescriptorEnd)
 		}
 	}
 	return
@@ -338,6 +352,7 @@ func Append(dst []byte, ds []Descriptor) []byte {
 	return dst
 }
 
+// The 12-bit loop length truncates silently past 4095 bytes: oversized lists must be split by the caller.
 func AppendWithLength(dst []byte, ds []Descriptor) []byte {
 	length := uint16(CalcLength(ds))
 	dst = append(dst, byte(length>>8)|0xf0, byte(length))
@@ -356,6 +371,7 @@ func CalcLength(ds []Descriptor) (length int) {
 type Descriptor interface {
 	// Body size, without the 2-byte prefix that Append writes.
 	CalcLength() int
+	// A body over 255 bytes gets a truncated length and no error.
 	Append(dst []byte) []byte
 	Tag() Tag
 }
@@ -676,14 +692,21 @@ func (*Subtitling) Tag() Tag                   { return TagSubtitling }
 func (*SystemClock) Tag() Tag                  { return TagSystemClock }
 func (*TargetBackgroundGrid) Tag() Tag         { return TagTargetBackgroundGrid }
 func (*Telephone) Tag() Tag                    { return TagTelephone }
-func (*Teletext) Tag() Tag                     { return TagTeletext }
-func (*TerrestrialDeliverySystem) Tag() Tag    { return TagTerrestrialDeliverySystem }
-func (*TimeShiftedEvent) Tag() Tag             { return TagTimeShiftedEvent }
-func (*TimeShiftedService) Tag() Tag           { return TagTimeShiftedService }
-func (*TransportProfile) Tag() Tag             { return TagTransportProfile }
-func (*TransportStream) Tag() Tag              { return TagTransportStream }
-func (d *Unknown) Tag() Tag                    { return d.Header.Tag }
-func (d *UserDefined) Tag() Tag                { return d.Header.Tag }
-func (*VBIData) Tag() Tag                      { return TagVBIData }
-func (*VideoStream) Tag() Tag                  { return TagVideoStream }
-func (*VideoWindow) Tag() Tag                  { return TagVideoWindow }
+
+// One parser serves 0x46 and 0x56; a hand-built descriptor has no Header, so only the VBI tag comes from the wire.
+func (d *Teletext) Tag() Tag {
+	if d.Header.Tag == TagVBITeletext {
+		return TagVBITeletext
+	}
+	return TagTeletext
+}
+func (*TerrestrialDeliverySystem) Tag() Tag { return TagTerrestrialDeliverySystem }
+func (*TimeShiftedEvent) Tag() Tag          { return TagTimeShiftedEvent }
+func (*TimeShiftedService) Tag() Tag        { return TagTimeShiftedService }
+func (*TransportProfile) Tag() Tag          { return TagTransportProfile }
+func (*TransportStream) Tag() Tag           { return TagTransportStream }
+func (d *Unknown) Tag() Tag                 { return d.Header.Tag }
+func (d *UserDefined) Tag() Tag             { return d.Header.Tag }
+func (*VBIData) Tag() Tag                   { return TagVBIData }
+func (*VideoStream) Tag() Tag               { return TagVideoStream }
+func (*VideoWindow) Tag() Tag               { return TagVideoWindow }

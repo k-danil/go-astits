@@ -23,12 +23,16 @@ const (
 	ccWrap           = 0b1111
 	afLengthByte     = 1
 	afFlagsByte      = 1
+
+	reservedPIDLast uint16 = 0x1f
 )
 
 var (
-	ErrPIDNotFound      = errors.New("astits: PID not found")
-	ErrPIDAlreadyExists = errors.New("astits: PID already exists")
-	ErrPCRPIDInvalid    = errors.New("astits: PCR PID invalid")
+	ErrPIDNotFound            = errors.New("astits: PID not found")
+	ErrPIDAlreadyExists       = errors.New("astits: PID already exists")
+	ErrPCRPIDInvalid          = errors.New("astits: PCR PID invalid")
+	ErrReservedPID            = errors.New("astits: PID reserved for tables or stuffing")
+	ErrAdaptationFieldTooLong = errors.New("astits: adaptation field leaves no room in the packet")
 )
 
 // Muxer writes an MPEG-TS stream for a single program.
@@ -102,6 +106,8 @@ func New(ctx context.Context, w io.Writer, opts ...func(*Muxer)) (m *Muxer) {
 
 		patCC: newWrappingCounter(0b1111),
 		pmtCC: newWrappingCounter(0b1111),
+
+		nextPID: pmtStartPID + 1,
 	}
 
 	m.pkt = m.pktArr[:]
@@ -125,14 +131,21 @@ func New(ctx context.Context, w io.Writer, opts ...func(*Muxer)) (m *Muxer) {
 }
 
 // if es.ElementaryPID is zero, it will be generated automatically
-func (m *Muxer) AddElementaryStream(es psi.ElementaryStream) error {
+func (m *Muxer) AddElementaryStream(es psi.ElementaryStream) (err error) {
 	if es.ElementaryPID != 0 {
-		for _, oes := range m.pmt.ElementaryStreams {
-			if oes.ElementaryPID == es.ElementaryPID {
-				return ErrPIDAlreadyExists
-			}
+		if reservedPID(es.ElementaryPID) {
+			return ErrReservedPID
+		}
+		if m.esContexts.Get(es.ElementaryPID) != nil {
+			return ErrPIDAlreadyExists
 		}
 	} else {
+		for m.esContexts.Get(m.nextPID) != nil {
+			m.nextPID++
+		}
+		if reservedPID(m.nextPID) {
+			return ErrReservedPID
+		}
 		es.ElementaryPID = m.nextPID
 		m.nextPID++
 	}
@@ -145,6 +158,10 @@ func (m *Muxer) AddElementaryStream(es psi.ElementaryStream) error {
 	}
 	m.pmtUpdated = true
 	return nil
+}
+
+func reservedPID(pid uint16) bool {
+	return pid <= reservedPIDLast || pid == pmtStartPID || pid >= ts.PIDNull
 }
 
 func (m *Muxer) RemoveElementaryStream(pid uint16) error {
@@ -179,11 +196,19 @@ func (m *Muxer) SetCC(pid uint16, cc uint8) error {
 	return ctx.cc.set(int(cc))
 }
 
-// Zeroes d.AdaptationField.StuffingLength on success. Issues several writes per unit, so buffer an unbuffered destination.
+// Always overwrites d.AdaptationField.StuffingLength and IsOneByteStuffing: a caller's value would be counted twice. Issues several writes per unit, so buffer an unbuffered destination.
 func (m *Muxer) WriteData(d *Data) (bytesWritten int, err error) {
 	ctx := m.esContexts.Get(d.PID)
 	if ctx == nil {
 		return 0, ErrPIDNotFound
+	}
+
+	afLen := 0
+	if d.AdaptationField != nil {
+		d.AdaptationField.StuffingLength, d.AdaptationField.IsOneByteStuffing = 0, false
+		if afLen = afLengthByte + d.AdaptationField.CalcLength(); afLen > packetMaxPayload {
+			return 0, ErrAdaptationFieldTooLong
+		}
 	}
 
 	forceTables := d.AdaptationField != nil &&
@@ -208,10 +233,7 @@ func (m *Muxer) WriteData(d *Data) (bytesWritten int, err error) {
 	pesHdr := m.pesHdr[:hdrLen]
 
 	bulkChunk := m.packetSize - ts.HeaderSize
-	firstPktLen := ts.HeaderSize
-	if d.AdaptationField != nil {
-		firstPktLen += 1 + d.AdaptationField.CalcLength()
-	}
+	firstPktLen := ts.HeaderSize + afLen
 
 	// Ends on a packet boundary either way, so the bulk and tail phases below can finish the unit.
 	payloadWritten := 0
@@ -241,7 +263,7 @@ func (m *Muxer) WriteData(d *Data) (bytesWritten int, err error) {
 	} else {
 		writeAf := d.AdaptationField != nil
 		for hdrWritten := 0; hdrWritten < hdrLen; {
-			header := ts.PacketHeader{ContinuityCounter: uint8(ctx.cc.inc()), PID: d.PID}
+			header := ts.PacketHeader{ContinuityCounter: uint8(ctx.cc.value), PID: d.PID}
 			var af *ts.PacketAdaptationField
 			pktLen := ts.HeaderSize
 			if writeAf {
@@ -254,8 +276,10 @@ func (m *Muxer) WriteData(d *Data) (bytesWritten int, err error) {
 			hdrChunk := min(hdrLen-hdrWritten, bytesAvailable)
 			payloadChunk := min(len(d.PES.Data)-payloadWritten, bytesAvailable-hdrChunk)
 			content := hdrChunk + payloadChunk
+			// H.222.0 2.4.3.3: an adaptation-field-only packet repeats the counter instead of advancing it.
 			if content > 0 {
 				header.HasPayload = true
+				header.ContinuityCounter = uint8(ctx.cc.inc())
 				if hdrWritten == 0 {
 					header.PayloadUnitStartIndicator = true
 				}
@@ -318,9 +342,6 @@ func (m *Muxer) WriteData(d *Data) (bytesWritten int, err error) {
 		bytesWritten += n
 	}
 
-	if d.AdaptationField != nil {
-		d.AdaptationField.StuffingLength = 0
-	}
 	return
 }
 
@@ -379,15 +400,22 @@ func (m *Muxer) retransmitTables(force bool) (n int, err error) {
 		return
 	}
 
-	if n, err = m.WriteTables(); err != nil {
-		return
-	}
-
-	m.tablesRetransmitCounter = 0
-	return
+	return m.WriteTables()
 }
 
 func (m *Muxer) WriteTables() (bytesWritten int, err error) {
+	// A counter burned on a table that never reached the wire shows up as a continuity gap at the decoder.
+	patCC, pmtCC := m.patCC, m.pmtCC
+	defer func() {
+		if err != nil {
+			m.patCC, m.pmtCC = patCC, pmtCC
+		}
+	}()
+
+	if err = m.validatePCRPID(); err != nil {
+		return
+	}
+
 	if err = m.generatePAT(); err != nil {
 		return
 	}
@@ -395,6 +423,9 @@ func (m *Muxer) WriteTables() (bytesWritten int, err error) {
 	if err = m.generatePMT(); err != nil {
 		return
 	}
+
+	patchContinuityCounters(m.patBytes.Bytes(), &m.patCC)
+	patchContinuityCounters(m.pmtBytes.Bytes(), &m.pmtCC)
 
 	var n int
 	if n, err = m.w.Write(m.patBytes.Bytes()); err != nil {
@@ -407,7 +438,26 @@ func (m *Muxer) WriteTables() (bytesWritten int, err error) {
 	}
 	bytesWritten += n
 
+	m.tablesRetransmitCounter = 0
 	return
+}
+
+func patchContinuityCounters(bs []byte, cc *wrappingCounter) {
+	for off := 0; off < len(bs); off += ts.PacketSize {
+		ts.SetContinuityCounter(bs[off:], uint8(cc.inc()))
+	}
+}
+
+func (m *Muxer) validatePCRPID() (err error) {
+	if !m.pmtUpdated {
+		return
+	}
+	for _, es := range m.pmt.ElementaryStreams {
+		if es.ElementaryPID == m.pmt.PCRPID {
+			return
+		}
+	}
+	return ErrPCRPIDInvalid
 }
 
 const (
@@ -461,7 +511,7 @@ func (m *Muxer) generatePAT() (err error) {
 
 		m.patBytes.Reset()
 		l := len(m.patData)
-		for i := 0; i <= l/packetMaxPayload; i++ {
+		for i := 0; i*packetMaxPayload < l; i++ {
 			start := i * packetMaxPayload
 			stop := min(start+packetMaxPayload, l)
 			pkt := ts.Packet{
@@ -479,27 +529,11 @@ func (m *Muxer) generatePAT() (err error) {
 		}
 	}
 
-	b := m.patBytes.Bytes()
-	for off := 0; off < len(b); off += ts.PacketSize {
-		ts.SetContinuityCounter(b[off:], uint8(m.patCC.inc()))
-	}
-
 	return
 }
 
 func (m *Muxer) generatePMT() (err error) {
 	if m.pmtUpdated {
-		hasPCRPID := false
-		for _, es := range m.pmt.ElementaryStreams {
-			if es.ElementaryPID == m.pmt.PCRPID {
-				hasPCRPID = true
-				break
-			}
-		}
-		if !hasPCRPID {
-			return ErrPCRPIDInvalid
-		}
-
 		psiData := psi.Data{
 			Sections: []psi.Section{
 				{
@@ -528,7 +562,7 @@ func (m *Muxer) generatePMT() (err error) {
 
 		m.pmtBytes.Reset()
 		l := len(m.pmtData)
-		for i := 0; i <= l/packetMaxPayload; i++ {
+		for i := 0; i*packetMaxPayload < l; i++ {
 			start := i * packetMaxPayload
 			stop := min(start+packetMaxPayload, l)
 			pkt := ts.Packet{
@@ -544,11 +578,6 @@ func (m *Muxer) generatePMT() (err error) {
 			}
 			m.pmtBytes.Write(m.pkt)
 		}
-	}
-
-	b := m.pmtBytes.Bytes()
-	for off := 0; off < len(b); off += ts.PacketSize {
-		ts.SetContinuityCounter(b[off:], uint8(m.pmtCC.inc()))
 	}
 
 	return

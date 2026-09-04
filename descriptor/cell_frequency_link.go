@@ -32,7 +32,7 @@ func newDescriptorCellFrequencyLink(i *bytesiter.Iterator, h Header, offsetEnd i
 	for i.Offset() < offsetEnd {
 		var cell CellFrequencyLinkCell
 		var bs []byte
-		if bs, err = i.NextBytesNoCopy(7); err != nil || len(bs) < 7 {
+		if bs, err = i.NextBytesNoCopy(7); err != nil {
 			err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 			return
 		}
@@ -42,7 +42,7 @@ func newDescriptorCellFrequencyLink(i *bytesiter.Iterator, h Header, offsetEnd i
 
 		for i.Offset() < subEnd {
 			var sub CellFrequencyLinkSubcell
-			if bs, err = i.NextBytesNoCopy(5); err != nil || len(bs) < 5 {
+			if bs, err = i.NextBytesNoCopy(5); err != nil {
 				err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 				return
 			}
@@ -63,7 +63,7 @@ func (d *CellFrequencyLink) CalcLength() (n int) {
 }
 
 func (d *CellFrequencyLink) Append(dst []byte) []byte {
-	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	dst = append(dst, uint8(d.Tag()), uint8(d.CalcLength()))
 	for _, cell := range d.Cells {
 		dst = append(dst,
 			byte(cell.CellID>>8), byte(cell.CellID),

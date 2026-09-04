@@ -17,14 +17,14 @@ type Telephone struct {
 	ForeignAvailability   bool   `json:"foreign_availability"`
 }
 
-func newDescriptorTelephone(i *bytesiter.Iterator, h Header, _ int) (dd Descriptor, err error) {
+func newDescriptorTelephone(i *bytesiter.Iterator, h Header, offsetEnd int) (dd Descriptor, err error) {
 	d := &Telephone{
 		Header: h,
 	}
 	dd = d
 
 	var bs []byte
-	if bs, err = i.NextBytesNoCopy(3); err != nil || len(bs) < 3 {
+	if bs, err = i.NextBytesNoCopy(3); err != nil {
 		err = fmt.Errorf("astits: fetching next bytes failed: %w", err)
 		return
 	}
@@ -51,6 +51,8 @@ func newDescriptorTelephone(i *bytesiter.Iterator, h Header, _ int) (dd Descript
 			return
 		}
 	}
+
+	err = rejectTrailingBytes(i, offsetEnd)
 	return
 }
 
@@ -60,7 +62,7 @@ func (d *Telephone) CalcLength() int {
 }
 
 func (d *Telephone) Append(dst []byte) []byte {
-	dst = append(dst, uint8(d.Header.Tag), uint8(d.CalcLength()))
+	dst = append(dst, uint8(d.Tag()), uint8(d.CalcLength()))
 	b0 := byte(0xc0) | d.ConnectionType&0x1f
 	if d.ForeignAvailability {
 		b0 |= 0x20

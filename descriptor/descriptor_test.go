@@ -35,7 +35,7 @@ var descriptorTestTable = []descriptorTest{
 			_ = w.Write("1")            // BSID flag
 			_ = w.Write("1")            // MainID flag
 			_ = w.Write("1")            // ASVC flag
-			_ = w.Write("1111")         // Reserved flags
+			_ = w.Write("0000")         // Reserved flags
 			_ = w.Write(uint8(1))       // Component type
 			_ = w.Write(uint8(2))       // BSID
 			_ = w.Write(uint8(3))       // MainID
@@ -714,4 +714,75 @@ func TestParseOwnsInput(t *testing.T) {
 	}
 
 	assert.Equal(t, reference, parsed)
+}
+
+func TestDescriptorBodyStopsAtDeclaredLength(t *testing.T) {
+	neighbour := []byte{byte(TagStreamIdentifier), 0x01, 0x07}
+	body := []byte{0x00, 0x01, 0x00, 0x00, 0x00, 0x02, 0x05, 0xff}
+
+	loop := []byte{0x00, 0x00, byte(TagCellFrequencyLink), byte(len(body))}
+	loop = append(loop, body...)
+	loop = append(loop, neighbour...)
+	l := len(loop) - 2
+	loop[0], loop[1] = byte(l>>8)|0xf0, byte(l)
+
+	ds, n, err := Parse(loop)
+	require.NoError(t, err)
+	require.Equal(t, len(loop), n)
+	require.Len(t, ds, 2)
+
+	m, ok := ds[0].(*Malformed)
+	require.True(t, ok)
+	assert.Equal(t, Header{Tag: TagCellFrequencyLink, Length: uint8(len(body))}, m.Header)
+	assert.Equal(t, body, m.Raw)
+	require.Error(t, m.Err)
+
+	assert.Equal(t, &StreamIdentifier{
+		Header:       Header{Tag: TagStreamIdentifier, Length: 1},
+		ComponentTag: 0x07,
+	}, ds[1])
+	assert.Equal(t, loop[2:], Append(nil, ds))
+}
+
+func TestTeletextTagWithoutAHeader(t *testing.T) {
+	d := &Teletext{Items: []TeletextItem{{Language: [3]byte{'e', 'n', 'g'}, Type: TeletextTypeInitialTeletextPage}}}
+
+	ds, _, err := Parse(AppendWithLength(nil, []Descriptor{d}))
+	require.NoError(t, err)
+	require.Len(t, ds, 1)
+	assert.Equal(t, TagTeletext, ds[0].Tag())
+}
+
+const tagUnassigned Tag = 0x39
+
+func TestDescriptorZeroLengthBody(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		tag   Tag
+		check func(t *testing.T, d Descriptor)
+	}{
+		{"legally empty body keeps its type", TagMuxCode, func(t *testing.T, d Descriptor) {
+			assert.Equal(t, &MuxCode{Header: Header{Tag: TagMuxCode}}, d)
+		}},
+		{"mandatory body is rejected", TagStreamIdentifier, func(t *testing.T, d Descriptor) {
+			m, ok := d.(*Malformed)
+			require.True(t, ok)
+			assert.Equal(t, Header{Tag: TagStreamIdentifier}, m.Header)
+			assert.Empty(t, m.Raw)
+			require.Error(t, m.Err)
+		}},
+		{"unassigned tag stays Unknown", tagUnassigned, func(t *testing.T, d Descriptor) {
+			assert.Equal(t, &Unknown{Header: Header{Tag: tagUnassigned}}, d)
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			in := []byte{0xf0, 0x02, byte(tc.tag), 0x00}
+			ds, n, err := Parse(in)
+			require.NoError(t, err)
+			require.Equal(t, len(in), n)
+			require.Len(t, ds, 1)
+			tc.check(t, ds[0])
+			assert.Equal(t, in, AppendWithLength(nil, ds))
+		})
+	}
 }
