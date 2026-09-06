@@ -191,3 +191,43 @@ func TestIsPSIPIDNextPAT(t *testing.T) {
 	pm.Set(0x100, 1)
 	assert.True(t, a.isPSIPID(&live, 0x100), "the PAT in effect wins over what the PID carried")
 }
+
+func TestAccumulatorTearAfterWholePES(t *testing.T) {
+	const whole = "\x00\x00\x01\xC0\x00\x04abcd"
+	tests := []struct {
+		name      string
+		steps     []accStep
+		wantUnits []string
+		wantErrs  []ts.RecoverableError
+	}{
+		{
+			name:      "counter gap",
+			steps:     []accStep{{cc: 0, pusi: true, payload: whole}, {cc: 5, pusi: true, payload: whole}},
+			wantUnits: []string{whole},
+			wantErrs:  []ts.RecoverableError{{Kind: ts.ErrorKindContinuity, PID: 0x100, Err: ts.ErrContinuityGap}},
+		},
+		{
+			name:      "transport error",
+			steps:     []accStep{{cc: 0, pusi: true, payload: whole}, {cc: 1, tei: true, payload: "junk"}},
+			wantUnits: []string{whole},
+			wantErrs:  []ts.RecoverableError{{Kind: ts.ErrorKindPacketDrop, PID: 0x100, Dropped: 4, Err: ts.ErrTransportError}},
+		},
+		{
+			name:     "a PES short of its declared length is still torn",
+			steps:    []accStep{{cc: 0, pusi: true, payload: whole[:8]}, {cc: 5, pusi: true, payload: whole}},
+			wantErrs: []ts.RecoverableError{{Kind: ts.ErrorKindTornUnit, PID: 0x100, Dropped: 8, Err: ts.ErrContinuityGap}},
+		},
+		{
+			name:     "an unbounded PES cannot be known whole",
+			steps:    []accStep{{cc: 0, pusi: true, payload: "\x00\x00\x01\xE0\x00\x00abcd"}, {cc: 5, pusi: true, payload: whole}},
+			wantErrs: []ts.RecoverableError{{Kind: ts.ErrorKindTornUnit, PID: 0x100, Dropped: 10, Err: ts.ErrContinuityGap}},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			units, errs := runAcc(t, tt.steps)
+			assert.Equal(t, tt.wantUnits, units)
+			assert.Equal(t, tt.wantErrs, errs)
+		})
+	}
+}

@@ -3,9 +3,11 @@ package demux
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"math/bits"
 
 	"github.com/k-danil/go-astits/v3/internal/pidmap"
+	"github.com/k-danil/go-astits/v3/pes"
 	"github.com/k-danil/go-astits/v3/psi"
 	"github.com/k-danil/go-astits/v3/ts"
 )
@@ -13,6 +15,7 @@ import (
 const (
 	unboundedPESFloorClass = 6
 	defaultFloorClass      = 1
+	pesLengthOffset        = 4
 )
 
 // Packets are one-shot scratch: their payloads must be copied out, never retained.
@@ -107,7 +110,7 @@ func (a *accumulator) startUnit(slot *pidSlot, p *ts.Packet) {
 	slot.start(p, isPSI, a.limitOf(isPSI))
 }
 
-// One packet can yield two units: the start indicator closes the previous one and the section it opens can complete in the same packet.
+// One packet can yield two units: it closes the open one and can complete the next in the same packet.
 func (a *accumulator) add(p *ts.Packet, out []unit) []unit {
 	slot := a.lastSlot
 	if slot == nil || p.Header.PID != a.lastPID {
@@ -130,8 +133,7 @@ func (a *accumulator) add(p *ts.Packet, out []unit) []unit {
 			if p.Header.TransportErrorIndicator {
 				reason = ts.ErrTransportError
 			}
-			a.tear(slot, p.Header.PID, p.Offset, reason, len(p.Payload))
-			return out
+			return a.tear(slot, p.Header.PID, p.Offset, reason, len(p.Payload), out)
 		}
 		if slot.started {
 			if u, ok := a.finish(slot, p.Header.PID, p.Offset); ok {
@@ -152,7 +154,7 @@ func (a *accumulator) add(p *ts.Packet, out []unit) []unit {
 			slot.lastWasDup = true
 			a.checkDuplicate(slot, p)
 		} else {
-			a.tear(slot, p.Header.PID, p.Offset, ts.ErrContinuityGap, 0)
+			out = a.tear(slot, p.Header.PID, p.Offset, ts.ErrContinuityGap, 0, out)
 			slot.seenPacket = true // the counter stays known: further repeats are still repeats
 		}
 		return out
@@ -164,7 +166,7 @@ func (a *accumulator) add(p *ts.Packet, out []unit) []unit {
 			reason = ts.ErrDiscontinuity
 		}
 		if slot.started {
-			a.tear(slot, p.Header.PID, p.Offset, reason, 0)
+			out = a.tear(slot, p.Header.PID, p.Offset, reason, 0, out)
 		} else if a.report != nil {
 			// A PSI PID closes its unit in every packet, so a gap between two whole units loses no bytes and still breaks the counter.
 			a.report(ts.RecoverableError{
@@ -188,15 +190,13 @@ func (a *accumulator) add(p *ts.Packet, out []unit) []unit {
 		a.startUnit(slot, p)
 		slot.headless = true
 	}
-	// After finish/start: a tear inside finish clears seenPacket, and the
-	// unit this packet opens must still see its own repeat
+	// After finish/start: a tear clears seenPacket, and the unit this packet opens must still see its own repeat
 	slot.lastCC = p.Header.ContinuityCounter
 	slot.seenPacket = true
 
 	if need := len(slot.buf.bs) + len(p.Payload); need > cap(slot.buf.bs) {
 		if overLimit(need, a.limitOf(slot.isPSI)) {
-			a.tear(slot, p.Header.PID, p.Offset, ts.ErrUnitTooLarge, len(p.Payload))
-			return out
+			return a.tear(slot, p.Header.PID, p.Offset, ts.ErrUnitTooLarge, len(p.Payload), out)
 		}
 		slot.grow(need)
 	}
@@ -262,15 +262,30 @@ func (a *accumulator) finish(slot *pidSlot, pid uint16, offset int64) (u unit, o
 		return
 	}
 	if overLimit(len(slot.buf.bs), a.limitOf(slot.isPSI)) {
-		a.tear(slot, pid, offset, ts.ErrUnitTooLarge, 0)
+		a.tear(slot, pid, offset, ts.ErrUnitTooLarge, 0, nil)
 		return
 	}
 	return slot.flush(pid)
 }
 
-func (a *accumulator) tear(slot *pidSlot, pid uint16, offset int64, reason error, lost int) {
+func (a *accumulator) tear(slot *pidSlot, pid uint16, offset int64, reason error, lost int, out []unit) []unit {
 	if !slot.started {
-		return
+		return out
+	}
+	// A whole PES lost only the payload after it; ErrUnitTooLarge stays torn, as finish would tear it back and recurse.
+	if !errors.Is(reason, ts.ErrUnitTooLarge) && slot.pesWhole() {
+		if u, ok := a.finish(slot, pid, offset); ok {
+			out = append(out, u)
+			if a.report != nil {
+				e := ts.RecoverableError{Kind: ts.ErrorKindContinuity, PID: pid, Offset: offset, Err: reason}
+				if lost > 0 {
+					e.Kind, e.Dropped = ts.ErrorKindPacketDrop, int64(lost)
+				}
+				a.report(e)
+			}
+		}
+		slot.seenPacket = false
+		return out
 	}
 	if a.report != nil && len(slot.buf.bs)+lost > 0 {
 		a.report(ts.RecoverableError{
@@ -280,6 +295,7 @@ func (a *accumulator) tear(slot *pidSlot, pid uint16, offset int64, reason error
 	}
 	slot.release()
 	slot.seenPacket = false
+	return out
 }
 
 func (s *pidSlot) start(p *ts.Packet, isPSI bool, limit int) {
@@ -312,9 +328,9 @@ func (s *pidSlot) classFor(payload []byte, isPSI bool) uint8 {
 	if isPSI {
 		return maxClass(s.sticky, defaultFloorClass)
 	}
-	if len(payload) >= 6 && payload[0] == 0 && payload[1] == 0 && payload[2] == 1 {
-		if pl := binary.BigEndian.Uint16(payload[4:6]); pl > 0 {
-			return maxClass(classOf(int(pl)+6), s.sticky)
+	if len(payload) >= pes.HeaderSize && isPESPayload(payload) {
+		if pl := binary.BigEndian.Uint16(payload[pesLengthOffset : pesLengthOffset+2]); pl > 0 {
+			return maxClass(classOf(int(pl)+pes.HeaderSize), s.sticky)
 		}
 		return maxClass(s.sticky, unboundedPESFloorClass)
 	}
@@ -349,6 +365,15 @@ func (s *pidSlot) flush(pid uint16) (u unit, ok bool) {
 	s.started = false
 	s.lastLen = 0
 	return u, true
+}
+
+func (s *pidSlot) pesWhole() bool {
+	b := s.buf.bs
+	if s.isPSI || s.headless || len(b) < pes.HeaderSize || !isPESPayload(b) {
+		return false
+	}
+	n := int(binary.BigEndian.Uint16(b[pesLengthOffset : pesLengthOffset+2]))
+	return n != 0 && len(b) >= pes.HeaderSize+n
 }
 
 func (s *pidSlot) release() {
