@@ -233,8 +233,10 @@ How:
   Violations that lost nothing carry `Dropped` 0: a non-video PES with `PES_packet_length` 0
   (`pes.ErrUnboundedNonVideo`) is delivered and reported; a repeated packet whose bytes
   differ from the original (`ts.ErrDuplicateMismatch`) is dropped and reported, and a
-  third repeat in a row counts as a continuity gap. The third repeat and the unit size cap
-  change what the silent mode delivers too: both drop the unit they hit.
+  third repeat in a row counts as a continuity gap. A unit start whose bytes differ from the
+  open unit's last packet is no repeat at all: it ends the open unit and starts the next one
+  instead of being dropped. The third repeat and the unit size cap change what the silent
+  mode delivers too: both drop the unit they hit.
   A PSI unit is parsed section by section: a damaged section is one event (with its CRC32
   checked before its body, so damage counts as CRC_error) and the sections around it are
   still delivered (`psi.Data.Errors` lists them for direct users of `psi.Parse`); a

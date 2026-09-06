@@ -75,14 +75,6 @@ func TestAccumulatorDiscontinuityIndicator(t *testing.T) {
 			wantTorn: []ts.RecoverableError{{Kind: ts.ErrorKindTornUnit, PID: 0x100, Dropped: 6, Err: ts.ErrDiscontinuity}},
 		},
 		{
-			name: "unit start with a repeated counter is new, not a duplicate",
-			steps: []accStep{
-				{cc: 0, pusi: true, payload: "abc"}, {cc: 1, payload: "def"},
-				{cc: 1, pusi: true, payload: "x", di: true}, {cc: 2, pusi: true, payload: "z"},
-			},
-			wantUnits: []string{"abcdef", "x"},
-		},
-		{
 			name: "a run of indicator packets with a continuous counter is one unit",
 			steps: []accStep{
 				{cc: 0, pusi: true, payload: "abc", di: true}, {cc: 1, payload: "def", di: true},
@@ -230,4 +222,21 @@ func TestAccumulatorTearAfterWholePES(t *testing.T) {
 			assert.Equal(t, tt.wantErrs, errs)
 		})
 	}
+}
+
+func TestAccumulatorUnitStartUnderRepeatedCounter(t *testing.T) {
+	const (
+		open  = "\x00\x00\x01\xE0\x00\x00aaaa" // unbounded: never whole
+		tail  = "tail"
+		next  = "\x00\x00\x01\xE0\x00\x00bbbb"
+		third = "\x00\x00\x01\xE0\x00\x00cccc"
+	)
+	units, errs := runAcc(t, []accStep{
+		{cc: 0, pusi: true, payload: open}, {cc: 1, payload: tail},
+		{cc: 1, pusi: true, payload: next}, {cc: 2, pusi: true, payload: third},
+	})
+	assert.Equal(t, []string{next}, units)
+	assert.Equal(t, []ts.RecoverableError{{
+		Kind: ts.ErrorKindTornUnit, PID: 0x100, Dropped: int64(len(open) + len(tail)), Err: ts.ErrContinuityGap,
+	}}, errs)
 }

@@ -121,6 +121,24 @@ func TestAccumulatorRepeats(t *testing.T) {
 		poolOfPayload.put(units[0].buf)
 	})
 
+	// a completed section leaves no tail to compare against: its repeat is still a repeat
+	t.Run("a repeated PSI packet is dropped after its section completed", func(t *testing.T) {
+		var events []ts.RecoverableError
+		a, _ := newAcc(func(e ts.RecoverableError) { events = append(events, e) }, defaultMaxPESUnit, defaultMaxPSIUnit)
+		sec := append([]byte{0x00}, patSection(0, true, 0x100)...)
+		var delivered int
+		var units []unit
+		for range 2 {
+			units = a.add(accPacket(ts.PIDPAT, 5, true, sec), units[:0])
+			delivered += len(units)
+			for _, u := range units {
+				poolOfPayload.put(u.buf)
+			}
+		}
+		assert.Equal(t, 1, delivered, "the duplicate delivers no second section")
+		assert.Empty(t, events)
+	})
+
 	t.Run("a repeat after ordinary packets is a repeat again", func(t *testing.T) {
 		var events []ts.RecoverableError
 		a, _ := newAcc(func(e ts.RecoverableError) { events = append(events, e) }, defaultMaxPESUnit, defaultMaxPSIUnit)

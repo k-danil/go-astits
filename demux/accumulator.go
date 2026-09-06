@@ -148,16 +148,18 @@ func (a *accumulator) add(p *ts.Packet, out []unit) []unit {
 	discontinuity := p.Header.HasAdaptationField && p.AdaptationField.DiscontinuityIndicator
 	jumpAllowed := discontinuity && p.Header.PayloadUnitStartIndicator
 	if !jumpAllowed && slot.seenPacket && p.Header.ContinuityCounter == slot.lastCC {
-		// §2.4.3.3: two and only two, byte-identical. A third repeat is a
-		// counter discontinuity, and no repeat is ever appended.
-		if !slot.lastWasDup {
-			slot.lastWasDup = true
-			a.checkDuplicate(slot, p)
-		} else {
-			out = a.tear(slot, p.Header.PID, p.Offset, ts.ErrContinuityGap, 0, out)
-			slot.seenPacket = true // the counter stays known: further repeats are still repeats
+		// a start whose bytes differ is a lost counter cycle, not a repeat: dropping it would glue its unit onto the open one
+		if !p.Header.PayloadUnitStartIndicator || !slot.differsFromTail(p.Payload) {
+			// §2.4.3.3: one repeat at most; a further one is a counter discontinuity
+			if !slot.lastWasDup {
+				slot.lastWasDup = true
+				a.checkDuplicate(slot, p)
+			} else {
+				out = a.tear(slot, p.Header.PID, p.Offset, ts.ErrContinuityGap, 0, out)
+				slot.seenPacket = true // the counter stays known: further repeats are still repeats
+			}
+			return out
 		}
-		return out
 	}
 	slot.lastWasDup = false
 	if slot.seenPacket && !jumpAllowed && p.Header.ContinuityCounter != (slot.lastCC+1)%16 {
@@ -233,12 +235,14 @@ func (a *accumulator) carrySectionTail(slot *pidSlot, p *ts.Packet) {
 	slot.lastOffset, slot.lastTag = p.Offset, p.Tag
 }
 
-// lastLen must still describe the buffer tail: never call after appending the repeat.
+// never call after appending the repeat: lastLen must still describe the buffer tail
+func (s *pidSlot) differsFromTail(payload []byte) bool {
+	return s.started && s.lastLen > 0 && s.lastLen <= len(s.buf.bs) &&
+		!bytes.Equal(payload, s.buf.bs[len(s.buf.bs)-s.lastLen:])
+}
+
 func (a *accumulator) checkDuplicate(slot *pidSlot, p *ts.Packet) {
-	if a.report == nil || !slot.started || slot.lastLen == 0 || slot.lastLen > len(slot.buf.bs) {
-		return
-	}
-	if !bytes.Equal(p.Payload, slot.buf.bs[len(slot.buf.bs)-slot.lastLen:]) {
+	if a.report != nil && slot.differsFromTail(p.Payload) {
 		a.report(ts.RecoverableError{
 			Kind: ts.ErrorKindPacketDrop, PID: p.Header.PID, Offset: p.Offset,
 			Dropped: int64(len(p.Payload)), Err: ts.ErrDuplicateMismatch,
