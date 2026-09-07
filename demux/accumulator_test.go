@@ -237,6 +237,6 @@ func TestAccumulatorUnitStartUnderRepeatedCounter(t *testing.T) {
 	})
 	assert.Equal(t, []string{next}, units)
 	assert.Equal(t, []ts.RecoverableError{{
-		Kind: ts.ErrorKindTornUnit, PID: 0x100, Dropped: int64(len(open) + len(tail)), Err: ts.ErrContinuityGap,
+		Kind: ts.ErrorKindTornUnit, PID: 0x100, Dropped: int64(len(open) + len(tail)), Err: ts.ErrDuplicateMismatch,
 	}}, errs)
 }

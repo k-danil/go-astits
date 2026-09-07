@@ -195,9 +195,10 @@ How:
   packets never reach PSI processing, so keep PID 0 (PAT) and the PMT PID(s) when program
   info is still needed. `SetKeepPIDs` swaps the list in for a later pass (e.g. after `Rewind`).
 - **`Packet.Offset`** — a byte map of the stream, correct even with a skipper installed.
-- **`demux.WithPacketHook`** — a callback run on every raw packet as it is read (after the
+- **`demux.WithPacketHook`** — a callback run on every raw packet `Next` reads (after the
   skipper, before unit assembly), so one `Next` traversal can serve both packet-level work
-  (indexing, PID/PCR sampling) and unit-level demuxing without a second pass. The packet is
+  (indexing, PID/PCR sampling) and unit-level demuxing without a second pass; `NextPacketTo`
+  hands the packet to the caller and runs no hook. The packet is
   valid only for the duration of the call.
 - **PSI dedup**: byte-identical repeats of PAT/PMT/… are neither parsed nor emitted (unless
   `WithPSIRepeats` is set, and even then repeats reuse the cached parse — no re-parse).
@@ -221,8 +222,9 @@ How:
   `EventError` carrying a typed `*ts.RecoverableError` (kind, PID, byte offset, bytes
   dropped — 0 for a violation that lost nothing) and continues. The offset of a unit-level
   error is the last packet of that unit, not the packet the reader happened to be on when
-  the unit was let go. A unit whose start was lost — after a tear, or when the reader joins a
-  PID mid-unit — is accumulated but never parsed: it is reported once as `ErrorKindTornUnit`
+  the unit was let go. `EventError` is yielded before the packet hook sees any packet past
+  the damage. A unit whose start was lost — after a tear, or when the reader joins a PID
+  mid-unit — is accumulated but never parsed: it is reported once as `ErrorKindTornUnit`
   with `ts.ErrHeadlessUnit` and its full byte count, so every accumulated byte of a damaged
   feed is charged either to the torn head or to the headless remainder, and
   `ErrorKindUnknownUnit` means what it says — a complete unit of an unrecognised type
@@ -235,8 +237,10 @@ How:
   differ from the original (`ts.ErrDuplicateMismatch`) is dropped and reported, and a
   third repeat in a row counts as a continuity gap. A unit start whose bytes differ from the
   open unit's last packet is no repeat at all: it ends the open unit and starts the next one
-  instead of being dropped. The third repeat and the unit size cap change what the silent
-  mode delivers too: both drop the unit they hit.
+  instead of being dropped; the tear — or the `Dropped` 0 continuity event, when the open
+  unit was a whole PES — names `ts.ErrDuplicateMismatch`, the one counter break a
+  consumer's own counter check cannot see. The third repeat and the unit size cap change
+  what the silent mode delivers too: both drop the unit they hit.
   A PSI unit is parsed section by section: a damaged section is one event (with its CRC32
   checked before its body, so damage counts as CRC_error) and the sections around it are
   still delivered (`psi.Data.Errors` lists them for direct users of `psi.Parse`); a

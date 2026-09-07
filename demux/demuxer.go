@@ -71,6 +71,8 @@ type Demuxer struct {
 	pendingFatal error
 	pending      *PES
 	claimed      bool
+	// The errors read with a packet must reach the consumer before the packet does.
+	held bool
 
 	pkt ts.Packet
 
@@ -259,7 +261,7 @@ func wrapReadError(err error) error {
 	return fmt.Errorf("astits: fetching next packet from buffer failed: %w", err)
 }
 
-func (dmx *Demuxer) nextPacket(p *ts.Packet) (err error) {
+func (dmx *Demuxer) readPacket(p *ts.Packet) (err error) {
 	if dmx.packetBuffer == nil {
 		if err = dmx.ensurePacketBuffer(); err != nil {
 			return
@@ -268,10 +270,14 @@ func (dmx *Demuxer) nextPacket(p *ts.Packet) (err error) {
 	if err = dmx.packetBuffer.Next(p); err != nil {
 		return wrapReadError(err)
 	}
+	return
+}
+
+func (dmx *Demuxer) deliver(p *ts.Packet) []unit {
 	if dmx.optPacketHook != nil {
 		dmx.optPacketHook(p)
 	}
-	return
+	return dmx.acc.add(p, dmx.unitsArr[:0])
 }
 
 // Stops after a packet that completes a unit or queues an error, so a later packet's events cannot overtake it, and before one that fails to parse, which Next handles under its damage budget.
@@ -316,8 +322,8 @@ func (dmx *Demuxer) NextPacket() (p *ts.Packet, err error) {
 	return
 }
 
-func (dmx *Demuxer) NextPacketTo(p *ts.Packet) (err error) {
-	return dmx.nextPacket(p)
+func (dmx *Demuxer) NextPacketTo(p *ts.Packet) error {
+	return dmx.readPacket(p)
 }
 
 // EOF is ts.ErrNoMorePackets; the unfinished unit tails are emitted before it, lowest PID first.
@@ -361,8 +367,15 @@ func (dmx *Demuxer) Next() (ev Event, err error) {
 			if err = dmx.ensurePacketBuffer(); err != nil {
 				return 0, err
 			}
+			if len(dmx.pendingErrs) > 0 {
+				continue
+			}
 		}
-		if w, err = dmx.packetBuffer.Window(); err == nil && w != nil {
+		held := dmx.held
+		dmx.held = false
+		if held {
+			units = dmx.deliver(&dmx.pkt)
+		} else if w, err = dmx.packetBuffer.Window(); err == nil && w != nil {
 			var n int
 			if units, n, err = dmx.walk(w, dmx.unitsArr[:0]); err != nil {
 				for _, u := range units {
@@ -376,9 +389,13 @@ func (dmx *Demuxer) Next() (ev Event, err error) {
 		}
 		if err != nil {
 			err = wrapReadError(err)
-		} else if len(w) == 0 {
-			if err = dmx.nextPacket(&dmx.pkt); err == nil {
-				units = dmx.acc.add(&dmx.pkt, dmx.unitsArr[:0])
+		} else if !held && len(w) == 0 {
+			if err = dmx.readPacket(&dmx.pkt); err == nil {
+				if len(dmx.pendingErrs) > 0 {
+					dmx.held = true
+					continue
+				}
+				units = dmx.deliver(&dmx.pkt)
 			}
 		}
 		if err != nil {
@@ -506,6 +523,7 @@ func (dmx *Demuxer) Rewind() (n int64, err error) {
 	dmx.tblQueue = dmx.tblArr[:0]
 	dmx.pendingErrs = dmx.errArr[:0]
 	dmx.pendingFatal = nil
+	dmx.held = false
 	dmx.patSeen = false
 	dmx.psiPrev = pidmap.Map[psiCache]{Keys: dmx.psiKeysArr[:0], Vals: dmx.psiValsArr[:0]}
 	dmx.acc.init(&dmx.programMap, dmx.optDVBTables, dmx.recoverHook(), dmx.optMaxPES, dmx.optMaxPSI)

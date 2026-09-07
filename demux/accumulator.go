@@ -148,7 +148,6 @@ func (a *accumulator) add(p *ts.Packet, out []unit) []unit {
 	discontinuity := p.Header.HasAdaptationField && p.AdaptationField.DiscontinuityIndicator
 	jumpAllowed := discontinuity && p.Header.PayloadUnitStartIndicator
 	if !jumpAllowed && slot.seenPacket && p.Header.ContinuityCounter == slot.lastCC {
-		// a start whose bytes differ is a lost counter cycle, not a repeat: dropping it would glue its unit onto the open one
 		if !p.Header.PayloadUnitStartIndicator || !slot.differsFromTail(p.Payload) {
 			// §2.4.3.3: one repeat at most; a further one is a counter discontinuity
 			if !slot.lastWasDup {
@@ -160,6 +159,8 @@ func (a *accumulator) add(p *ts.Packet, out []unit) []unit {
 			}
 			return out
 		}
+		// the fall-through would tear with ErrContinuityGap; the mismatch is the one counter break a consumer's own check cannot see
+		out = a.tear(slot, p.Header.PID, p.Offset, ts.ErrDuplicateMismatch, 0, out)
 	}
 	slot.lastWasDup = false
 	if slot.seenPacket && !jumpAllowed && p.Header.ContinuityCounter != (slot.lastCC+1)%16 {
