@@ -55,14 +55,15 @@ How:
 - **Full standard coverage** (parse + byte-exact serialize round-trip): every descriptor,
   PSI/SI table and PES-header field whose *syntax is defined in* ISO/IEC 13818-1 (H.222.0) or
   ETSI EN 300 468 (DVB-SI) — the complete descriptor sets of both (ISO Table 2-45 and DVB §6,
-  main plus extension), every table (PAT/CAT/PMT/TSDT, NIT/BAT/SDT/EIT/TDT/TOT/RST/ST/DIT/SIT,
+  main plus extension), every table (PAT/CAT/PMT/TSDT, NIT/BAT/SDT/EIT/TDT/TOT/RST/ST/DIT/SIT/SAT,
   ISO_IEC_14496 and metadata sections), and the full PES optional header (CRC and pack_header
   included). Structures those two documents defer to other specifications — payloads
   referencing ISO/IEC 14496, DSM-CC (13818-6) or IPMP (13818-11) — are carried verbatim
   rather than decoded; tags defined outside the two are surfaced as `Unknown`. The DVB
   baseline is EN 300 468 V1.19.1 (2025-02): `S2SatelliteDeliverySystem` follows its Table 42
-  (`NotTimesliceFlag`, `TSGSMode`, `TimesliceNumber`), `ServiceType` its Table 89, and the
-  extension tag list runs to 0x24.
+  (`NotTimesliceFlag`, `TSGSMode`, `TimesliceNumber`), `ServiceType` its Table 89, the
+  extension tag list runs to 0x24, and the SAT (§5.2.11, `psi.SAT`) types its five sub-tables
+  by `satellite_table_id`, keeping a reserved one raw.
 - **Descriptor body contract**: each body is parsed against its own `descriptor_length` and
   never borrows a neighbour's bytes — a body that needs more than it declares becomes a
   `*Malformed` carrying the declared bytes verbatim, so the loop stays aligned and `Append`
@@ -98,7 +99,8 @@ How:
   `PacketSpan` of the unit it came from, so a table can be located in the file or charged to
   the datagram that carried it; `PAT()`/`PMT()` hold the tables in effect. The full MPEG-2 systems + DVB-SI
   table set is parsed, each surfaced as its own typed event; everything beyond PAT/PMT is off
-  by default (`WithDVBTables`). `WithPSIRepeats` also emits byte-identical repeats
+  by default (`WithDVBTables`, which also claims PID 0x1B for the SAT, delivered as
+  `EventSAT`). `WithPSIRepeats` also emits byte-identical repeats
   (`TableChanged` distinguishes them) for stream-composition analysis. Under
   `WithRecoverableErrors`, `EventError` additionally surfaces skipped corruption (below).
 - **Per-PID byte accumulator**: each PID assembles its unit into one contiguous pooled
@@ -233,7 +235,9 @@ How:
   demuxing while the consumer counts damage (e.g. TR 101 290 error counters) and sums the
   loss. A unit the stream never closed (EOF) is still delivered, flagged `PES.Truncated`.
   Violations that lost nothing carry `Dropped` 0: a non-video PES with `PES_packet_length` 0
-  (`pes.ErrUnboundedNonVideo`) is delivered and reported; a repeated packet whose bytes
+  (`pes.ErrUnboundedNonVideo`) is delivered and reported; a bounded PES that is whole when the
+  sync is lost is delivered and reported (`ts.ErrSyncLoss`), while every other unit open at that
+  point is torn with the same cause, reported or not; a repeated packet whose bytes
   differ from the original (`ts.ErrDuplicateMismatch`) is dropped and reported, and a
   third repeat in a row counts as a continuity gap. A unit start whose bytes differ from the
   open unit's last packet is no repeat at all: it ends the open unit and starts the next one

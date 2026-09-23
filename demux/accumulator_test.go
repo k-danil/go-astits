@@ -49,8 +49,6 @@ func runAcc(t *testing.T, steps []accStep) (units []string, torn []ts.Recoverabl
 	return
 }
 
-// Only the unit start the indicator announces is exempt from the counter
-// checks; a run of indicator packets with a continuous counter is one unit.
 func TestAccumulatorDiscontinuityIndicator(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -106,16 +104,17 @@ func TestAccumulatorTransportError(t *testing.T) {
 				{cc: 7, pusi: true, payload: "new"}, {cc: 8, pusi: true, payload: "z"},
 			},
 			wantUnits: []string{"new"},
-			wantTorn:  []ts.RecoverableError{{Kind: ts.ErrorKindTornUnit, PID: 0x100, Dropped: 6, Err: ts.ErrTransportError}},
+			wantTorn:  []ts.RecoverableError{{Kind: ts.ErrorKindTornUnit, PID: 0x100, Dropped: 3, Err: ts.ErrTransportError}},
 		},
 		{
-			name: "at a unit start delivers the finished unit and starts none",
+			name: "its unit-start flag is not believed: the open unit is torn, the next packet starts headless",
 			steps: []accStep{
 				{cc: 0, pusi: true, payload: "abc"}, {cc: 1, payload: "def"},
 				{cc: 2, pusi: true, payload: "bad", tei: true}, {cc: 3, payload: "ghi"},
 				{cc: 4, pusi: true, payload: "z"},
 			},
-			wantUnits: []string{"abcdef", "ghi"},
+			wantUnits: []string{"ghi"},
+			wantTorn:  []ts.RecoverableError{{Kind: ts.ErrorKindTornUnit, PID: 0x100, Dropped: 6, Err: ts.ErrTransportError}},
 		},
 	}
 	for _, tt := range tests {
@@ -159,7 +158,7 @@ func TestIsPSIPID(t *testing.T) {
 			pids = append(pids, i)
 		}
 	}
-	assert.Equal(t, []int{0, 1, 2, 16, 17, 18, 19, 20, 30, 31}, pids)
+	assert.Equal(t, []int{0, 1, 2, 16, 17, 18, 19, 20, 27, 30, 31}, pids)
 
 	// CAT and TSDT are base tables, not DVB ones: they stand without the option and without a program map entry
 	a.init(&pm, false, nil, defaultMaxPESUnit, defaultMaxPSIUnit)
@@ -167,6 +166,7 @@ func TestIsPSIPID(t *testing.T) {
 	assert.True(t, a.isPSIPID(&slot, ts.PIDPAT))
 	assert.True(t, a.isPSIPID(&slot, ts.PIDCAT))
 	assert.True(t, a.isPSIPID(&slot, ts.PIDTSDT))
+	assert.False(t, a.isPSIPID(&slot, dvbSATPID), "the SAT PID stands only with WithDVBTables")
 }
 
 func TestIsPSIPIDNextPAT(t *testing.T) {
@@ -197,12 +197,6 @@ func TestAccumulatorTearAfterWholePES(t *testing.T) {
 			steps:     []accStep{{cc: 0, pusi: true, payload: whole}, {cc: 5, pusi: true, payload: whole}},
 			wantUnits: []string{whole},
 			wantErrs:  []ts.RecoverableError{{Kind: ts.ErrorKindContinuity, PID: 0x100, Err: ts.ErrContinuityGap}},
-		},
-		{
-			name:      "transport error",
-			steps:     []accStep{{cc: 0, pusi: true, payload: whole}, {cc: 1, tei: true, payload: "junk"}},
-			wantUnits: []string{whole},
-			wantErrs:  []ts.RecoverableError{{Kind: ts.ErrorKindPacketDrop, PID: 0x100, Dropped: 4, Err: ts.ErrTransportError}},
 		},
 		{
 			name:     "a PES short of its declared length is still torn",

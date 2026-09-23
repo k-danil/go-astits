@@ -263,3 +263,192 @@ func TestRoundtripPSIMetadata(t *testing.T) {
 		assert.Equal(t, sec.Header.DecoderConfigFlag, parsed.Sections[0].Header.DecoderConfigFlag)
 	}
 }
+
+func randSATNCR(r *rand.Rand) SATNCR {
+	return SATNCR{Base: r.Uint64N(1 << 33), Ext: uint16(r.UintN(1 << satNCRExtBits))}
+}
+
+func randSATYearDayTime(r *rand.Rand) SATYearDayTime {
+	return SATYearDayTime{Year: uint8(r.UintN(100)), Day: uint16(1 + r.UintN(366)), DayFraction: SATFloat32Bits(r.Uint32())}
+}
+
+func randSATPositionV2(r *rand.Rand) (d *SAT) {
+	d = &SAT{SatelliteTableID: SatelliteTableIDPositionV2}
+	for k := range 2 + r.UintN(3) {
+		s := SATSatellitePositionV2{SatelliteID: uint32(r.UintN(1 << 24)), PositionSystem: SATPositionSystem(k % 2)}
+		if s.PositionSystem == SATPositionSystemEarthOrbiting {
+			s.EpochYear = uint8(r.UintN(100))
+			s.DayOfTheYear = uint16(r.UintN(1 << 16))
+			for _, e := range s.tleElements() {
+				*e = SATFloat32Bits(r.Uint32())
+			}
+		} else {
+			s.OrbitalPosition = uint16(r.UintN(1 << 16))
+			s.WestEastFlag = r.UintN(2) == 1
+		}
+		d.SatellitePositionV2Info = append(d.SatellitePositionV2Info, s)
+	}
+	return
+}
+
+func randSATCellFragment(r *rand.Rand) (d *SAT) {
+	d = &SAT{SatelliteTableID: SatelliteTableIDCellFragment}
+	for k := range 2 + r.UintN(3) {
+		c := SATCellFragment{CellFragmentID: r.Uint32(), FirstOccurrence: k%2 == 0, LastOccurrence: r.UintN(2) == 1}
+		if c.FirstOccurrence {
+			c.CenterLatitude = int32(r.IntN(1<<satCenterLatitudeBits) - 1<<(satCenterLatitudeBits-1))
+			c.CenterLongitude = int32(r.IntN(1<<satCenterLongitudeBits) - 1<<(satCenterLongitudeBits-1))
+			c.MaxDistance = uint32(r.UintN(1 << 24))
+		}
+		for range r.UintN(4) {
+			c.DeliverySystemIDs = append(c.DeliverySystemIDs, r.Uint32())
+		}
+		for range r.UintN(3) {
+			c.NewDeliverySystems = append(c.NewDeliverySystems, SATNewDeliverySystem{NewDeliverySystemID: r.Uint32(), TimeOfApplication: randSATNCR(r)})
+		}
+		for range r.UintN(3) {
+			c.ObsolescentDeliverySystems = append(c.ObsolescentDeliverySystems, SATObsolescentDeliverySystem{ObsolescentDeliverySystemID: r.Uint32(), TimeOfObsolescence: randSATNCR(r)})
+		}
+		d.CellFragmentInfo = append(d.CellFragmentInfo, c)
+	}
+	return
+}
+
+func randSATTimeAssociation(r *rand.Rand) (d *SAT) {
+	t := SATTimeAssociation{
+		AssociationType:                 SATAssociationType(r.UintN(2)),
+		NCR:                             randSATNCR(r),
+		AssociationTimestampSeconds:     r.Uint64(),
+		AssociationTimestampNanoseconds: r.Uint32(),
+	}
+	if t.AssociationType == SATAssociationTypeUTCLeapSeconds {
+		t.Leap59, t.Leap61 = r.UintN(2) == 1, r.UintN(2) == 1
+		t.PastLeap59, t.PastLeap61 = r.UintN(2) == 1, r.UintN(2) == 1
+	}
+	d = &SAT{SatelliteTableID: SatelliteTableIDTimeAssociation, TimeAssociationInfo: t}
+	return
+}
+
+func randSATBeamhoppingTimePlan(r *rand.Rand) (d *SAT) {
+	d = &SAT{SatelliteTableID: SatelliteTableIDBeamhoppingTimePlan}
+	for k := range 4 {
+		p := SATBeamhoppingTimePlan{
+			BeamhoppingTimePlanID: r.Uint32(),
+			TimePlanMode:          SATTimePlanMode(k),
+			TimeOfApplication:     randSATNCR(r),
+			CycleDuration:         randSATNCR(r),
+		}
+		switch p.TimePlanMode {
+		case SATTimePlanModeDwell:
+			p.DwellDuration, p.OnTime = randSATNCR(r), randSATNCR(r)
+		case SATTimePlanModeBitMap:
+			p.CurrentSlot = uint16(r.UintN(1 << 15))
+			for range 1 + r.UintN(40) {
+				p.SlotTransmissionOn = append(p.SlotTransmissionOn, r.UintN(2) == 1)
+			}
+		case SATTimePlanModeGrid:
+			p.GridSize, p.RevisitDuration = randSATNCR(r), randSATNCR(r)
+			p.SleepTime, p.SleepDuration = randSATNCR(r), randSATNCR(r)
+		default:
+			for range 1 + r.UintN(5) {
+				p.Reserved = append(p.Reserved, uint8(r.UintN(256)))
+			}
+		}
+		d.BeamhoppingTimePlanInfo = append(d.BeamhoppingTimePlanInfo, p)
+	}
+	return
+}
+
+func randSATPositionV3(r *rand.Rand) (d *SAT) {
+	v3 := SATSatellitePositionV3{
+		OEMVersionMajor: uint8(r.UintN(16)),
+		OEMVersionMinor: uint8(r.UintN(16)),
+		CreationDate:    randSATYearDayTime(r),
+	}
+	for range 1 + r.UintN(3) {
+		s := SATSatelliteEphemeris{
+			SatelliteID:         uint32(r.UintN(1 << 24)),
+			MetadataFlag:        r.UintN(2) == 1,
+			UsableStartTimeFlag: r.UintN(2) == 1,
+			UsableStopTimeFlag:  r.UintN(2) == 1,
+			EphemerisAccelFlag:  r.UintN(2) == 1,
+			CovarianceFlag:      r.UintN(2) == 1,
+		}
+		if s.MetadataFlag {
+			s.Metadata = SATEphemerisMetadata{
+				TotalStartTime:      randSATYearDayTime(r),
+				TotalStopTime:       randSATYearDayTime(r),
+				InterpolationFlag:   r.UintN(2) == 1,
+				InterpolationType:   SATInterpolationType(r.UintN(8)),
+				InterpolationDegree: uint8(r.UintN(8)),
+			}
+			if s.UsableStartTimeFlag {
+				s.Metadata.UsableStartTime = randSATYearDayTime(r)
+			}
+			if s.UsableStopTimeFlag {
+				s.Metadata.UsableStopTime = randSATYearDayTime(r)
+			}
+		}
+		for range r.UintN(3) {
+			rec := SATEphemerisRecord{Epoch: randSATYearDayTime(r)}
+			for _, f := range rec.stateVector() {
+				*f = SATFloat32Bits(r.Uint32())
+			}
+			if s.EphemerisAccelFlag {
+				for _, f := range rec.acceleration() {
+					*f = SATFloat32Bits(r.Uint32())
+				}
+			}
+			s.EphemerisData = append(s.EphemerisData, rec)
+		}
+		if s.CovarianceFlag {
+			s.Covariance.CovarianceEpoch = randSATYearDayTime(r)
+			for k := range s.Covariance.CovarianceElements {
+				s.Covariance.CovarianceElements[k] = SATFloat32Bits(r.Uint32())
+			}
+		}
+		v3.Satellites = append(v3.Satellites, s)
+	}
+	d = &SAT{SatelliteTableID: SatelliteTableIDPositionV3, SatellitePositionV3Info: v3}
+	return
+}
+
+var satGenerators = []struct {
+	name string
+	gen  func(r *rand.Rand) *SAT
+}{
+	{"satellite_position_v2_info", randSATPositionV2},
+	{"cell_fragment_info", randSATCellFragment},
+	{"time_association_info", randSATTimeAssociation},
+	{"beamhopping_time_plan_info", randSATBeamhoppingTimePlan},
+	{"satellite_position_v3_info", randSATPositionV3},
+}
+
+func randSATData(r *rand.Rand, gen func(*rand.Rand) *SAT) (sat *SAT, d *Data) {
+	sat = gen(r)
+	sat.TableCount = uint16(r.UintN(1 << satTableCountBits))
+	sec := randSection(r, TableIDSAT, sat, sat.CalcSectionLength())
+	d = &Data{PointerField: int(r.UintN(5)), Sections: []Section{sec}}
+	return
+}
+
+func TestRoundtripPSISAT(t *testing.T) {
+	for _, tc := range satGenerators {
+		t.Run(tc.name, func(t *testing.T) {
+			r := rand.New(rand.NewPCG(41, 42))
+			for range 100 {
+				sat, d := randSATData(r, tc.gen)
+				b1, err := d.Append(nil)
+				require.NoError(t, err)
+				parsed, err := Parse(b1)
+				require.NoError(t, err)
+				require.Empty(t, parsed.Errors)
+				require.Len(t, parsed.Sections, 1)
+				b2, err := parsed.Append(nil)
+				require.NoError(t, err)
+				assert.Equal(t, b1, b2, "byte-stable")
+				assert.Equal(t, sat, parsed.Sections[0].Syntax.Data, "semantic")
+			}
+		})
+	}
+}

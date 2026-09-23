@@ -23,4 +23,5 @@ var (
 	ErrUnitTooLarge                   = errclass.New("astits: payload unit exceeds the size limit", ErrInvalidData)
 	ErrDuplicateMismatch              = errclass.New("astits: duplicate packet differs from the original", ErrInvalidData)
 	ErrHeadlessUnit                   = errclass.New("astits: payload unit without its start", ErrInvalidData)
+	ErrSyncLoss                       = errclass.New("astits: sync loss", ErrInvalidData)
 )

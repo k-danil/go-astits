@@ -31,6 +31,7 @@ const (
 	EventSIT
 	EventST
 	EventTSDT
+	EventSAT
 	EventError
 )
 
@@ -71,8 +72,11 @@ type Demuxer struct {
 	pendingFatal error
 	pending      *PES
 	claimed      bool
-	// The errors read with a packet must reach the consumer before the packet does.
-	held bool
+	// Errors and torn units a packet's read produced must reach the consumer before the packet does.
+	held          bool
+	syncLossUnits []unit
+	// Bound once: a method value taken per packet buffer is an allocation per Rewind.
+	bufferHook func(ts.RecoverableError)
 
 	pkt ts.Packet
 
@@ -111,6 +115,7 @@ func New(ctx context.Context, r io.Reader, opts ...func(*Demuxer)) (d *Demuxer) 
 		opt(d)
 	}
 
+	d.bufferHook = d.onBufferError
 	d.acc.init(&d.programMap, d.optDVBTables, d.recoverHook(), d.optMaxPES, d.optMaxPSI)
 
 	return
@@ -220,6 +225,15 @@ func (dmx *Demuxer) reportRecoverable(e ts.RecoverableError) {
 	dmx.pendingErrs = append(dmx.pendingErrs, &e)
 }
 
+func (dmx *Demuxer) onBufferError(e ts.RecoverableError) {
+	if dmx.optRecoverable {
+		dmx.reportRecoverable(e)
+	}
+	if e.Kind == ts.ErrorKindSyncLoss {
+		dmx.syncLossUnits = dmx.acc.tearAll(e.Offset, dmx.syncLossUnits[:0])
+	}
+}
+
 func (dmx *Demuxer) recoverHook() (hook func(ts.RecoverableError)) {
 	if dmx.optRecoverable {
 		hook = dmx.reportRecoverable
@@ -247,7 +261,7 @@ func (dmx *Demuxer) ensurePacketBuffer() (err error) {
 		ZeroCopyBatch: dmx.optZeroCopyBatch,
 		SyncLock:      dmx.optSyncLock,
 		ResyncLimit:   dmx.optResyncLimit,
-		OnRecover:     dmx.recoverHook(),
+		OnRecover:     dmx.bufferHook,
 	}); err != nil {
 		err = fmt.Errorf("astits: creating packet buffer failed: %w", err)
 	}
@@ -361,6 +375,17 @@ func (dmx *Demuxer) Next() (ev Event, err error) {
 			return e.ev, nil
 		}
 
+		if len(dmx.syncLossUnits) > 0 {
+			u := dmx.syncLossUnits[0]
+			dmx.syncLossUnits = dmx.syncLossUnits[1:]
+			if d, perr := dmx.processUnit(u); perr == nil && d != nil {
+				dmx.pending = d
+				dmx.claimed = false
+				return EventPES, nil
+			}
+			continue
+		}
+
 		var units []unit
 		var w []byte
 		if dmx.packetBuffer == nil {
@@ -391,7 +416,7 @@ func (dmx *Demuxer) Next() (ev Event, err error) {
 			err = wrapReadError(err)
 		} else if !held && len(w) == 0 {
 			if err = dmx.readPacket(&dmx.pkt); err == nil {
-				if len(dmx.pendingErrs) > 0 {
+				if len(dmx.pendingErrs) > 0 || len(dmx.syncLossUnits) > 0 {
 					dmx.held = true
 					continue
 				}
@@ -504,6 +529,10 @@ func (dmx *Demuxer) Close() {
 		dmx.pending.Close()
 	}
 	dmx.pending = nil
+	for _, u := range dmx.syncLossUnits {
+		poolOfPayload.put(u.buf)
+	}
+	dmx.syncLossUnits = nil
 	dmx.acc.close()
 	if dmx.packetBuffer != nil {
 		_ = dmx.packetBuffer.Close()

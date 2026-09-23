@@ -97,6 +97,8 @@ func tableEventKind(d psi.SectionSyntaxData) (ev Event, ok bool) {
 		return EventST, true
 	case *psi.TSDT:
 		return EventTSDT, true
+	case *psi.SAT:
+		return EventSAT, true
 	}
 	return 0, false
 }
@@ -139,8 +141,16 @@ func (dmx *Demuxer) processUnit(u unit) (emitted *PES, err error) {
 		d.PacketSpan = u.PacketSpan
 		if dmx.optRecoverable && d.Data.Header.PacketLength == 0 && !pes.AllowsUnboundedLength(d.Data.Header.StreamID) {
 			dmx.reportRecoverable(ts.RecoverableError{
-				Kind: ts.ErrorKindPES, PID: u.pid, Offset: u.LastPacketOffset, Err: pes.ErrUnboundedNonVideo,
+				Kind: ts.ErrorKindPES, PID: u.pid, Offset: u.LastPacketOffset, Err: &pes.UnboundedLengthError{StreamID: d.Data.Header.StreamID},
 			})
+		}
+		// §2.4.3.5: PES stuffing goes in the adaptation field only, so payload past the declared length is a violation.
+		if dmx.optRecoverable && !u.truncated && d.Data.Header.PacketLength != 0 {
+			if extra := len(u.buf.bs) - pes.HeaderSize - int(d.Data.Header.PacketLength); extra > 0 {
+				dmx.reportRecoverable(ts.RecoverableError{
+					Kind: ts.ErrorKindPES, PID: u.pid, Offset: u.LastPacketOffset, Dropped: int64(extra), Err: pes.ErrTrailingBytes,
+				})
+			}
 		}
 
 		if u.af != nil {
@@ -190,7 +200,11 @@ func (dmx *Demuxer) processPSI(u unit) {
 		return
 	}
 
-	psiData, err := psi.Parse(u.buf.bs)
+	parse := psi.Parse
+	if u.truncated {
+		parse = psi.ParseTruncated
+	}
+	psiData, err := parse(u.buf.bs)
 	if err != nil {
 		if dmx.optRecoverable {
 			dmx.reportPSIError(u.pid, u.LastPacketOffset, len(u.buf.bs), err)

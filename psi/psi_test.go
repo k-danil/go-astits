@@ -149,10 +149,9 @@ func psiSectionsBytes() []byte {
 	return buf.Bytes()
 }
 
-// psiBytes ends the sections with an unknown table_id: the stop marker Parse
-// reports as a section error.
+// the 254, 0, 0 trailer is an empty unknown table: a section error, not a stop
 func psiBytes() []byte {
-	return append(psiSectionsBytes(), 254, 0)
+	return append(psiSectionsBytes(), 254, 0, 0)
 }
 
 func TestParsePSIData(t *testing.T) {
@@ -174,13 +173,12 @@ func TestParsePSIData(t *testing.T) {
 	require.ErrorIs(t, d.Errors[0], ErrCRC32Mismatch)
 	require.ErrorIs(t, d.Errors[0], ts.ErrInvalidData)
 
-	// Valid, ending in an unknown table_id that is reported rather than swallowed
 	d, err = Parse(psiBytes())
 	require.NoError(t, err)
 	assert.Equal(t, psi.PointerField, d.PointerField)
 	assert.Equal(t, psi.Sections, d.Sections)
 	require.Len(t, d.Errors, 1)
-	assert.Equal(t, &SectionError{TableID: 254, Offset: 153, Len: 2, Err: ErrUnknownTable}, d.Errors[0])
+	assert.Equal(t, &SectionError{TableID: 254, Offset: 153, Len: 3, Err: ErrUnknownTable}, d.Errors[0])
 }
 
 func TestPSITableType(t *testing.T) {
@@ -302,8 +300,6 @@ func TestWritePSIData(t *testing.T) {
 }
 
 func BenchmarkParsePSIData(b *testing.B) {
-	// The successful path over the same sections as the reference number; the
-	// fixture's unknown-table trailer is a reported error, benchmarked nowhere
 	pb := psiSectionsBytes()
 	b.ReportAllocs()
 	for b.Loop() {

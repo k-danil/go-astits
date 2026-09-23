@@ -232,6 +232,12 @@ func (p *Packet) parse(bs []byte, s PacketSkipper, keep *PIDSet) (skip bool, err
 		return true, nil
 	}
 
+	if p.Header.TransportErrorIndicator {
+		p.AdaptationField.Reset()
+		p.Payload = nil
+		return
+	}
+
 	payloadAt := prefixLen + 1 + 3
 	end := prefixLen + PacketSize // excludes a trailing RS suffix
 

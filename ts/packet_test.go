@@ -79,6 +79,20 @@ func TestParsePacket(t *testing.T) {
 	assert.Equal(t, ep, p)
 }
 
+func TestParsePacketTransportError(t *testing.T) {
+	b, _ := packet([]byte("payload"), false)
+	p := new(Packet)
+	_, err := p.parse(b[:PacketSize], nil, nil)
+	require.NoError(t, err)
+	b[1] |= 0x80
+	_, err = p.parse(b[:PacketSize], nil, nil)
+	require.NoError(t, err)
+	assert.True(t, p.Header.TransportErrorIndicator)
+	assert.True(t, p.Header.HasAdaptationField, "header flags are still read")
+	assert.False(t, p.AdaptationField.HasPCR, "the adaptation field is not")
+	assert.Nil(t, p.Payload)
+}
+
 func TestWritePacket(t *testing.T) {
 	eb, ep := packet([]byte("payload"), false)
 	scratch := make([]byte, PacketSize)
@@ -111,9 +125,7 @@ func TestWritePacket_HeaderOnly(t *testing.T) {
 	assert.Equal(t, PacketSize, n)
 	buf := bytes.NewBuffer(scratch[:n])
 
-	// Header-only is adaptation_field_control '00': written as such, and on
-	// the way back discarded as reserved with the header still parsed.
-	assert.Equal(t, []byte{syncByte, 0xf5, 0x55, 0x8a}, buf.Bytes()[:HeaderSize])
+	assert.Equal(t, []byte{syncByte, 0x75, 0x55, 0x8a}, buf.Bytes()[:HeaderSize])
 	p := new(Packet)
 	var skip bool
 	skip, err = p.parse(buf.Bytes(), nil, nil)
@@ -128,7 +140,7 @@ var packetHeader = PacketHeader{
 	HasPayload:                 true,
 	PayloadUnitStartIndicator:  true,
 	PID:                        5461,
-	TransportErrorIndicator:    true,
+	TransportErrorIndicator:    false,
 	TransportPriority:          true,
 	TransportScramblingControl: ScramblingControlScrambledWithEvenKey,
 }

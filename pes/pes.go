@@ -22,7 +22,25 @@ var (
 	ErrHeaderTooLong         = errclass.New("astits: PES optional header exceeds its length field", ts.ErrInvalidData)
 	ErrMissingOptionalHeader = errclass.New("astits: stream_id requires a PES optional header", ts.ErrInvalidData)
 	ErrMissingExtension      = errclass.New("astits: PES_extension_flag set without an extension header", ts.ErrInvalidData)
+	ErrShortPayload          = errclass.New("astits: PES packet shorter than its PES_packet_length", ts.ErrInvalidData)
+	ErrTrailingBytes         = errclass.New("astits: payload bytes past the PES_packet_length", ts.ErrInvalidData)
 )
+
+type ShortPayloadError struct{ Have, Want int }
+
+func (e *ShortPayloadError) Error() string {
+	return fmt.Sprintf("astits: PES packet is %d of its %d bytes", e.Have, e.Want)
+}
+
+func (e *ShortPayloadError) Unwrap() error { return ErrShortPayload }
+
+type UnboundedLengthError struct{ StreamID StreamID }
+
+func (e *UnboundedLengthError) Error() string {
+	return fmt.Sprintf("astits: unbounded PES packet on non-video stream_id %s", e.StreamID)
+}
+
+func (e *UnboundedLengthError) Unwrap() error { return ErrUnboundedNonVideo }
 
 type PSTDBufferScale uint8
 
@@ -427,7 +445,7 @@ func (d *Data) parse(bs []byte, clamp bool) (err error) {
 	}
 	if dataEnd > len(bs) {
 		if !clamp {
-			return ts.ErrShortPacket
+			return &ShortPayloadError{Have: len(bs), Want: dataEnd}
 		}
 		dataEnd = len(bs)
 	}

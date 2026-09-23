@@ -58,6 +58,9 @@ func stSection() []byte {
 func TestParsePartialUnits(t *testing.T) {
 	brokenPAT := patSection()
 	brokenPAT[len(brokenPAT)-1] ^= 0x01
+	brokenSAT := sectionBytes(TableIDSAT, append(psiSectionSyntaxHeaderBytes(), 0, 0, 0, 0))
+	brokenSAT[len(brokenSAT)-1] ^= 0x01
+	const longST = 1500
 	damagedPMT := pmtOverrunSection()
 	damagedPMT[len(damagedPMT)-1] ^= 0x01
 
@@ -95,10 +98,40 @@ func TestParsePartialUnits(t *testing.T) {
 			wantErrs:   []sectionErr{{is: ErrCRC32Mismatch, id: TableIDPAT, len: len(brokenPAT)}},
 		},
 		{
-			name:       "unknown table_id is reported with the rest of the unit",
-			unit:       append(append([]byte{0}, patSection()...), 0x74, 0x00, 0x00),
+			name:       "an unknown table is skipped by its length and the next section still parses",
+			unit:       append([]byte{0, 0x74, 0x00, 0x02, 0xaa, 0xbb}, patSection()...),
 			wantTables: []TableID{TableIDPAT},
-			wantErrs:   []sectionErr{{is: ErrUnknownTable, id: 0x74, len: 3}},
+			wantErrs:   []sectionErr{{is: ErrUnknownTable, id: 0x74, len: 5}},
+		},
+		{
+			name:     "a PMT section_length past 1021 is a length error even when the unit holds it",
+			unit:     append([]byte{0, 0x02, 0xb4, 0x4c}, make([]byte, 1200)...),
+			wantErrs: []sectionErr{{is: ErrSectionLength, id: TableIDPMT, len: 1203}},
+		},
+		{
+			name:       "a stuffing table longer than 1024 bytes is legal",
+			unit:       append([]byte{0, byte(TableIDST), 0x70 | byte(longST>>8), byte(longST & 0xff)}, make([]byte, longST)...),
+			wantTables: []TableID{TableIDST},
+		},
+		{
+			name:     "a general-syntax section shorter than 9 bytes is a length error",
+			unit:     []byte{0, 0x00, 0xb0, 0x05, 0, 0, 0, 0, 0},
+			wantErrs: []sectionErr{{is: ErrSectionLength, id: TableIDPAT, len: 8}},
+		},
+		{
+			name:     "a TOT shorter than its CRC32 is a length error",
+			unit:     []byte{0, 0x73, 0x70, 0x02, 0, 0},
+			wantErrs: []sectionErr{{is: ErrSectionLength, id: TableIDTOT, len: 5}},
+		},
+		{
+			name:     "a SAT carries a CRC32",
+			unit:     append([]byte{0}, brokenSAT...),
+			wantErrs: []sectionErr{{is: ErrCRC32Mismatch, id: TableIDSAT, len: len(brokenSAT)}},
+		},
+		{
+			name:       "a SAT longer than 1024 bytes is legal",
+			unit:       satUnit(63, 0, make([]byte, longST)),
+			wantTables: []TableID{TableIDSAT},
 		},
 		{
 			name:       "descriptors never come from the next section",

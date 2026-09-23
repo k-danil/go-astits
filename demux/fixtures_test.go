@@ -16,7 +16,7 @@ const syncByte byte = '\x47'
 var m2tsPrefix = []byte("test")
 
 func padPayload(i []byte) []byte {
-	return append(i, bytes.Repeat([]byte{0}, 147-len(i))...)
+	return append(i, bytes.Repeat([]byte{0xff}, 147-len(i))...)
 }
 
 // Bytes only: an expected *Packet built here could not honour a caller-supplied
@@ -179,11 +179,9 @@ func pcrBytes() []byte {
 	return buf.Bytes()
 }
 
-// Frozen outputs of the former in-package fixture builders (now in psi/pes
-// package tests): parse correctness is covered there, root tests only need
-// the bytes.
+// Frozen: regenerate from the psi/pes package fixtures when those change.
 const (
-	psiBytesHex           = "04746573744ef01e0001eb02030002000304050006c079124500014530f0035201077ffc610240f0190001eb020300035201070009000200030003520107febaa94100f0110001eb02030002e0030004e00560739f6102f0180001eb0203f555f00352010703eaaaf003520107c68442e842f0140001eb0203000200000303b003520107ef3751d673f00ec079124500000352010706969b13fe00"
+	psiBytesHex           = "04746573744ef01e0001eb02030002000304050006c079124500014530f0035201077ffc610240f0190001eb020300035201070009000200030003520107febaa94100f0110001eb02030002e0030004e00560739f6102f0180001eb0203f555f00352010703eaaaf003520107c68442e842f0140001eb0203000200000303b003520107ef3751d673f00ec079124500000352010706969b13fe0000"
 	pesWithHeaderBytesHex = "0000010100439fff3c3b5555aaab1b5555aaa9dc2f842e7c75aaaaab35ff0004bf31323334353637383930313233343536d5d575558a657874656e73696f6e327374756666646174617374756666"
 )
 

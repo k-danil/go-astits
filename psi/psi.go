@@ -24,6 +24,7 @@ const (
 	TableTypePAT      = "PAT"
 	TableTypePMT      = "PMT"
 	TableTypeRST      = "RST"
+	TableTypeSAT      = "SAT"
 	TableTypeSDT      = "SDT"
 	TableTypeSIT      = "SIT"
 	TableTypeST       = "ST"
@@ -36,9 +37,10 @@ const (
 var ErrCRC32Mismatch = errclass.New("astits: CRC32 mismatch", ts.ErrInvalidData)
 
 var (
-	ErrPointerField = errclass.New("astits: invalid pointer_field", ts.ErrInvalidData)
-	ErrNoSections   = errclass.New("astits: unit carries no section", ts.ErrInvalidData)
-	ErrUnknownTable = errclass.New("astits: unknown table_id", ts.ErrInvalidData)
+	ErrPointerField  = errclass.New("astits: invalid pointer_field", ts.ErrInvalidData)
+	ErrNoSections    = errclass.New("astits: unit carries no section", ts.ErrInvalidData)
+	ErrUnknownTable  = errclass.New("astits: unknown table_id", ts.ErrInvalidData)
+	ErrSectionLength = errclass.New("astits: section_length outside the table's bounds", ts.ErrInvalidData)
 )
 
 var ErrTableNotImplemented = errors.New("astits: table serialization is not implemented")
@@ -79,6 +81,8 @@ const (
 	TableIDEITStart TableID = 0x4e
 	TableIDEITEnd   TableID = 0x6f
 
+	TableIDSAT TableID = 0x4d
+
 	TableIDTDT TableID = 0x70
 	TableIDRST TableID = 0x71
 	TableIDST  TableID = 0x72
@@ -111,6 +115,7 @@ var tableIDNames = map[TableID]string{
 	TableIDSDTVariant1:              "service_description_section - actual_transport_stream",
 	TableIDSDTVariant2:              "service_description_section - other_transport_stream",
 	TableIDBAT:                      "bouquet_association_section",
+	TableIDSAT:                      "satellite_access_section",
 	TableIDEITStart:                 "event_information_section - actual_transport_stream, present/following",
 	tableIDEITOtherPresentFollowing: "event_information_section - other_transport_stream, present/following",
 	TableIDTDT:                      "time_date_section",
@@ -234,34 +239,49 @@ func Parse(bs []byte) (d *Data, err error) {
 	return
 }
 
-// stop: nothing more to parse — stuffing, an unknown table, or a length too damaged to skip over.
+// Parse, but the section the input cut through is the cut, not an error.
+func ParseTruncated(bs []byte) (d *Data, err error) {
+	if d, err = Parse(bs); err != nil || len(d.Errors) == 0 {
+		return
+	}
+	if last := d.Errors[len(d.Errors)-1]; errors.Is(last, ErrSectionLength) && last.Offset+last.Len == len(bs) {
+		d.Errors = d.Errors[:len(d.Errors)-1]
+	}
+	return
+}
+
 func parsePSISection(i *bytesiter.Iterator) (s Section, serr *SectionError, stop bool) {
 	start := i.Offset()
 
 	var offsets psiOffsets
 	var err error
 	if offsets, stop, err = s.Header.parsePSISectionHeader(i); err != nil {
+		// ParseTruncated recognizes the cut only by ErrSectionLength.
+		if !errors.Is(err, ErrSectionLength) {
+			err = fmt.Errorf("%w: %w", ErrSectionLength, err)
+		}
 		serr = &SectionError{TableID: s.Header.TableID, Offset: start, Len: i.Len() - start, Err: fmt.Errorf("astits: parsing PSI section header failed: %w", err)}
 		stop = true
 		return
 	}
 	if stop {
-		if s.Header.TableID != TableIDNull {
-			serr = &SectionError{TableID: s.Header.TableID, Offset: start, Len: i.Len() - start, Err: ErrUnknownTable}
-		}
 		return
 	}
 	if offsets.end > i.Len() {
-		err = fmt.Errorf("astits: section length %d exceeds the %d bytes left: %w", s.Header.SectionLength, i.Len()-offsets.sectionsStart, bytesiter.ErrNoBytesLeft)
+		err = fmt.Errorf("astits: section length %d exceeds the %d bytes left: %w", s.Header.SectionLength, i.Len()-offsets.sectionsStart, ErrSectionLength)
 		serr = &SectionError{TableID: s.Header.TableID, Offset: start, Len: i.Len() - start, Err: err}
 		stop = true
 		return
 	}
+	// every table_id carries the private_section length field (§2.4.4.10), parser or not
+	if s.Header.TableID.IsUnknown() {
+		serr = &SectionError{TableID: s.Header.TableID, Offset: start, Len: offsets.end - start, Err: ErrUnknownTable}
+		i.Seek(offsets.end)
+		return
+	}
 
-	if s.Header.SectionLength > 0 {
-		if err = s.parseBody(i, offsets); err != nil {
-			serr = &SectionError{TableID: s.Header.TableID, Offset: start, Len: offsets.end - start, Err: err}
-		}
+	if err = s.parseBody(i, offsets); err != nil {
+		serr = &SectionError{TableID: s.Header.TableID, Offset: start, Len: offsets.end - start, Err: err}
 	}
 
 	i.Seek(offsets.end)
@@ -307,9 +327,9 @@ func parseCRC32(i *bytesiter.Iterator) (c uint32, err error) {
 	return
 }
 
-// An unknown table_id is treated as end-of-data: stopping avoids reading padding or a torn tail as a section.
+// §2.4.4: 0xFF after the last section is stuffing to the end of the packet
 func (t TableID) StopsParsing() bool {
-	return t == TableIDNull || t.IsUnknown()
+	return t == TableIDNull
 }
 
 type psiOffsets struct {
@@ -350,16 +370,28 @@ func (h *SectionHeader) parsePSISectionHeader(i *bytesiter.Iterator) (offsets ps
 
 	h.SectionLength = val & 0xfff
 
+	if n := int(h.SectionLength); n > h.TableID.MaxSectionLength() || n < h.TableID.minSectionLength() {
+		err = fmt.Errorf("astits: section_length %d of table_id 0x%02x is outside %d..%d: %w",
+			n, byte(h.TableID), h.TableID.minSectionLength(), h.TableID.MaxSectionLength(), ErrSectionLength)
+		return
+	}
 	offsets.sectionsStart = i.Offset()
 	offsets.end = offsets.sectionsStart + int(h.SectionLength)
 	offsets.sectionsEnd = offsets.end
 	if h.TableID.hasCRC32() {
 		offsets.sectionsEnd -= crc32Len
 	}
-	if offsets.sectionsEnd < offsets.sectionsStart {
-		err = fmt.Errorf("astits: section length %d is too short: %w", h.SectionLength, ts.ErrInvalidData)
-	}
 	return
+}
+
+func (t TableID) minSectionLength() int {
+	switch {
+	case t.hasPSISyntaxHeader():
+		return psiSyntaxHeaderLen + crc32Len
+	case t.hasCRC32():
+		return crc32Len
+	}
+	return 0
 }
 
 func (t TableID) Type() string {
@@ -388,6 +420,8 @@ func (t TableID) Type() string {
 		return TableTypeMetadata
 	case t == TableIDRST:
 		return TableTypeRST
+	case t == TableIDSAT:
+		return TableTypeSAT
 	case t == TableIDSDTVariant1, t == TableIDSDTVariant2:
 		return TableTypeSDT
 	case t == TableIDSIT:
@@ -411,15 +445,14 @@ func (t TableID) hasPSISyntaxHeader() bool {
 		t == TableIDBAT ||
 		t == TableIDNITVariant1 || t == TableIDNITVariant2 ||
 		t == TableIDSDTVariant1 || t == TableIDSDTVariant2 ||
-		t == TableIDSIT ||
+		t == TableIDSIT || t == TableIDSAT ||
 		t == TableIDISO14496Scene || t == TableIDISO14496Object || t == TableIDISO14496 ||
 		(t >= TableIDEITStart && t <= TableIDEITEnd)
 }
 
-// Write side only: the parser accepts whatever the 12-bit field holds.
 func (t TableID) MaxSectionLength() int {
 	switch {
-	case t == TableIDST, t == TableIDSIT, t == TableIDMetadata,
+	case t == TableIDST, t == TableIDSIT, t == TableIDSAT, t == TableIDMetadata,
 		t == TableIDISO14496Scene, t == TableIDISO14496Object, t == TableIDISO14496,
 		t >= TableIDEITStart && t <= TableIDEITEnd,
 		t.IsUnknown():
@@ -445,6 +478,7 @@ func (t TableID) IsUnknown() bool {
 		TableIDISO14496Scene, TableIDISO14496Object, TableIDISO14496,
 		TableIDMetadata,
 		TableIDRST,
+		TableIDSAT,
 		TableIDSDTVariant1, TableIDSDTVariant2,
 		TableIDSIT,
 		TableIDST,
@@ -562,9 +596,14 @@ func parsePSISectionSyntaxData(i *bytesiter.Iterator, h *SectionHeader, sh *Sect
 			err = fmt.Errorf("astits: parsing RST section failed: %w", err)
 			return
 		}
+	case TableIDSAT:
+		if d, err = parseSATSection(i, offsetSectionsEnd, sh.TableIDExtension); err != nil {
+			err = fmt.Errorf("astits: parsing SAT section failed: %w", err)
+			return
+		}
 	case TableIDSDTVariant1, TableIDSDTVariant2:
 		if d, err = parseSDTSection(i, offsetSectionsEnd, sh.TableIDExtension); err != nil {
-			err = fmt.Errorf("astits: parsing PMT section failed: %w", err)
+			err = fmt.Errorf("astits: parsing SDT section failed: %w", err)
 			return
 		}
 	case TableIDSIT:
@@ -620,6 +659,10 @@ type sectionBody interface {
 	appendSection(dst []byte) []byte
 }
 
+type tableIDExtensionBody interface {
+	tableIDExtension() uint16
+}
+
 func (s *Section) calcPSISectionLength(body sectionBody) (ret int) {
 	if s.Header.TableID.hasPSISyntaxHeader() {
 		ret += psiSyntaxHeaderLen
@@ -661,7 +704,11 @@ func (s *Section) appendSection(dst []byte) ([]byte, error) {
 	// body is nil exactly when sectionLength is 0 (a stuffing table): dropping this guard dereferences it.
 	if sectionLength > 0 {
 		if s.Header.TableID.hasPSISyntaxHeader() {
-			dst = s.Syntax.Header.appendSectionSyntaxHeader(dst)
+			tableIDExtension := s.Syntax.Header.TableIDExtension
+			if owner, ok := body.(tableIDExtensionBody); ok {
+				tableIDExtension = owner.tableIDExtension()
+			}
+			dst = s.Syntax.Header.appendSectionSyntaxHeader(dst, tableIDExtension)
 		}
 		dst = body.appendSection(dst)
 
@@ -674,9 +721,9 @@ func (s *Section) appendSection(dst []byte) ([]byte, error) {
 	return dst, nil
 }
 
-func (h *SectionSyntaxHeader) appendSectionSyntaxHeader(dst []byte) []byte {
+func (h *SectionSyntaxHeader) appendSectionSyntaxHeader(dst []byte, tableIDExtension uint16) []byte {
 	return append(dst,
-		byte(h.TableIDExtension>>8), byte(h.TableIDExtension),
+		byte(tableIDExtension>>8), byte(tableIDExtension),
 		0xc0|h.VersionNumber&0x1f<<1|util.B2U(h.CurrentNextIndicator),
 		h.SectionNumber,
 		h.LastSectionNumber)

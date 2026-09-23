@@ -93,6 +93,7 @@ type unit struct {
 const (
 	dvbSIFirstPID = 0x10
 	dvbSILastPID  = 0x14
+	dvbSATPID     = 0x1b
 	dvbDITPID     = 0x1e
 	dvbSITPID     = 0x1f
 )
@@ -101,7 +102,7 @@ const (
 func (a *accumulator) isPSIPID(slot *pidSlot, pid uint16) bool {
 	return pid <= ts.PIDTSDT ||
 		a.programMap.Has(pid) ||
-		(a.dvbTables && ((pid >= dvbSIFirstPID && pid <= dvbSILastPID) || pid == dvbDITPID || pid == dvbSITPID)) ||
+		(a.dvbTables && ((pid >= dvbSIFirstPID && pid <= dvbSILastPID) || pid == dvbSATPID || pid == dvbDITPID || pid == dvbSITPID)) ||
 		(!slot.sawPES && a.nextMap.Has(pid))
 }
 
@@ -121,19 +122,22 @@ func (a *accumulator) add(p *ts.Packet, out []unit) []unit {
 	}
 	slot.packets++
 
+	// TR 101 290 §5.2.2: no further indication comes off an errored packet, its unit-start flag included.
+	if p.Header.TransportErrorIndicator {
+		out = a.tear(slot, p.Header.PID, p.Offset, ts.ErrTransportError, 0, out)
+		slot.seenPacket = false
+		return out
+	}
+
 	// A null packet's payload and counter are undefined (§2.4.3.3): counted,
 	// never accumulated
 	if !p.Header.HasPayload || p.Header.PID == ts.PIDNull {
 		return out
 	}
 
-	if p.Header.TransportErrorIndicator || p.Header.TransportScramblingControl != ts.ScramblingControlNotScrambled {
+	if p.Header.TransportScramblingControl != ts.ScramblingControlNotScrambled {
 		if !p.Header.PayloadUnitStartIndicator {
-			reason := ts.ErrScrambled
-			if p.Header.TransportErrorIndicator {
-				reason = ts.ErrTransportError
-			}
-			return a.tear(slot, p.Header.PID, p.Offset, reason, len(p.Payload), out)
+			return a.tear(slot, p.Header.PID, p.Offset, ts.ErrScrambled, len(p.Payload), out)
 		}
 		if slot.started {
 			if u, ok := a.finish(slot, p.Header.PID, p.Offset); ok {
@@ -144,7 +148,7 @@ func (a *accumulator) add(p *ts.Packet, out []unit) []unit {
 		return out
 	}
 
-	// §2.4.3.4: the indicator may stay set on every PCR-PID packet, so only the unit start it announces skips the counter checks.
+	// §2.4.3.5: the indicator may stay set on every PCR-PID packet, so only the unit start it announces skips the counter checks.
 	discontinuity := p.Header.HasAdaptationField && p.AdaptationField.DiscontinuityIndicator
 	jumpAllowed := discontinuity && p.Header.PayloadUnitStartIndicator
 	if !jumpAllowed && slot.seenPacket && p.Header.ContinuityCounter == slot.lastCC {
@@ -274,6 +278,7 @@ func (a *accumulator) finish(slot *pidSlot, pid uint16, offset int64) (u unit, o
 }
 
 func (a *accumulator) tear(slot *pidSlot, pid uint16, offset int64, reason error, lost int, out []unit) []unit {
+	// an idle slot keeps its counter: callers that must forget it clear seenPacket themselves
 	if !slot.started {
 		return out
 	}
@@ -379,6 +384,15 @@ func (s *pidSlot) pesWhole() bool {
 	}
 	n := int(binary.BigEndian.Uint16(b[pesLengthOffset : pesLengthOffset+2]))
 	return n != 0 && len(b) >= pes.HeaderSize+n
+}
+
+func (a *accumulator) tearAll(offset int64, out []unit) []unit {
+	for i := range a.slots.Vals {
+		s := &a.slots.Vals[i]
+		out = a.tear(s, a.slots.Keys[i], offset, ts.ErrSyncLoss, 0, out)
+		s.seenPacket = false
+	}
+	return out
 }
 
 func (s *pidSlot) release() {
